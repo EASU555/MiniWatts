@@ -1,0 +1,122 @@
+name: Build
+
+# Pushing to master no longer builds. Two things do:
+#   - a `v*` tag, which builds and publishes a GitHub release
+#   - a pull request, or a manual run, which builds and checks but publishes nothing
+#
+# The cost of dropping master builds is that a broken commit is not noticed until you
+# tag. Run this workflow by hand (Actions -> Build -> Run workflow) before tagging, or
+# just build locally with ./scripts/build-ipa.sh, which runs the same steps.
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ipa:
+    name: Unsigned ipa
+    runs-on: macos-latest
+    permissions:
+      # Only the release step at the bottom uses this, and only on a tag.
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          ls -d /Applications/Xcode*.app || true
+          newest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$newest"
+          xcodebuild -version
+          swift --version
+
+      # MiniWatts uses `nonisolated` on type and extension declarations and
+      # SWIFT_DEFAULT_ACTOR_ISOLATION, so an older toolchain fails deep in the
+      # compile with errors that do not name the real cause. Say it up front.
+      - name: Check toolchain
+        run: |
+          required=6.2
+          found=$(swift -version 2>&1 | sed -n 's/.*Swift version \([0-9][0-9.]*\).*/\1/p' | head -1)
+          echo "Swift $found (need $required or newer)"
+          if [ "$(printf '%s\n%s\n' "$required" "$found" | sort -V | head -1)" != "$required" ]; then
+            echo "::error::Swift $found is too old. This project needs Swift $required or newer; pin a runner image that ships it."
+            exit 1
+          fi
+
+      # Xcode 27 beta writes `objectVersion = 110` on save, and no released Xcode —
+      # so no runner — can open that. The failure from xcodebuild is "a future Xcode
+      # project file format", which does not say what to do about it. Say it here.
+      - name: Check project format
+        run: |
+          max=77
+          found=$(sed -n 's/^[[:space:]]*objectVersion = \([0-9]*\);/\1/p' MiniWatts.xcodeproj/project.pbxproj)
+          echo "project objectVersion $found (max readable by a released Xcode: $max)"
+          if [ "$found" -gt "$max" ]; then
+            echo "::error::project.pbxproj is at objectVersion $found, which only an Xcode beta can read. Xcode re-upgraded the project format on save. In Xcode: select the project, File inspector, Project Format -> Xcode 16.0-compatible; or set objectVersion back to $max by hand. Nothing in this project needs a format newer than $max."
+            exit 1
+          fi
+
+      # The tag names the release; MARKETING_VERSION is what the installed app reports
+      # in Settings and what verify-clean.sh prints. Nothing keeps them in step on its
+      # own, so a v1.1 release shipping a binary that still says 1.0 is a mistake you
+      # only find after publishing. The tag must be "v" + MARKETING_VERSION exactly.
+      - name: Check the tag matches the project version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          count=$(sed -n 's/^[[:space:]]*MARKETING_VERSION = \(.*\);/\1/p' MiniWatts.xcodeproj/project.pbxproj | sort -u | wc -l | tr -d ' ')
+          project=$(sed -n 's/^[[:space:]]*MARKETING_VERSION = \(.*\);/\1/p' MiniWatts.xcodeproj/project.pbxproj | sort -u | head -1)
+          if [ "$count" != "1" ]; then
+            echo "::error::Debug and Release disagree on MARKETING_VERSION. Set both to the same value."
+            exit 1
+          fi
+          echo "tag $GITHUB_REF_NAME -> $tag, project MARKETING_VERSION $project"
+          if [ "$tag" != "$project" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match MARKETING_VERSION $project. Either bump MARKETING_VERSION to $tag in Xcode (target -> General -> Version) and re-tag, or tag v$project instead."
+            exit 1
+          fi
+
+      - name: Build unsigned ipa
+        run: ./scripts/build-ipa.sh
+
+      # Nothing about the machine that produced the build may reach the artifact.
+      - name: Verify the ipa carries no identifying data
+        run: ./scripts/verify-clean.sh build/export/MiniWatts-unsigned.ipa
+
+      - name: Upload ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiniWatts-unsigned-ipa
+          path: build/export/MiniWatts-unsigned.ipa
+          if-no-files-found: error
+
+      # Kept separately: the ipa is stripped, so a crash report needs this to
+      # symbolicate. It is not attached to releases — it is a build-time asset.
+      - name: Upload dSYM
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiniWatts-dSYM
+          path: build/DerivedData/Build/Products/Release-iphoneos/*.dSYM
+          if-no-files-found: warn
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/export/MiniWatts-unsigned.ipa
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          # A tag with a hyphen in it — v1.1.0-beta1 — publishes as a pre-release.
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          # Pre-pended to the generated notes. One line, pointing at the README
+          # rather than repeating it: a release body is frozen at publish time, so
+          # anything copied in here goes stale the moment the README changes, on
+          # every release already published.
+          body: |
+            Unsigned build — sign it with your own Apple ID before installing.
+            ${{ github.server_url }}/${{ github.repository }}#install
