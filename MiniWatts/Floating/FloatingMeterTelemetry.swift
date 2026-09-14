@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 nonisolated enum FloatingMeterLayout: String, CaseIterable, Identifiable {
     case together
@@ -387,6 +388,32 @@ struct FloatingMeterTelemetryFrame: View {
         case .serious: return .orange
         case .critical: return .red
         case nil: return .secondary
+        }
+    }
+}
+
+/// Hosts the sample-buffer layer that Picture in Picture reads from. The stage is
+/// deliberately kept in the root view hierarchy; the Settings preview above is a
+/// separate SwiftUI rendering and never moves the active PiP source layer.
+struct FloatingMeterStage: UIViewRepresentable {
+    let controller: FloatingMeterController
+
+    func makeUIView(context: Context) -> UIView {
+        let host = LayerHost()
+        host.isUserInteractionEnabled = false
+        host.layer.addSublayer(controller.layer)
+        return host
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
+
+    final class LayerHost: UIView {
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer.sublayers?.forEach { $0.frame = bounds }
+            CATransaction.commit()
         }
     }
 }
