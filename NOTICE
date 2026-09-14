@@ -5,6 +5,19 @@ This product includes software developed as part of the following projects.
 
 
 ================================================================================
+EASU555 personal Build 19 modifications
+https://github.com/EASU555/MiniWatts
+================================================================================
+
+This fork retains the original MiniWatts attribution and adds independently
+maintained Live Activity metrics, selectable component temperatures, system thermal
+state, a Picture in Picture floating monitor, Chinese localisation improvements and
+background-refresh recovery. These modifications are not endorsed or supported by
+the upstream MiniWatts author. The repository commit history identifies the files and
+individual changes in detail.
+
+
+================================================================================
 ios-charging-monitor (ChargeSpeed) — MIT License
 https://github.com/gregsramblings/ios-charging-monitor
 ================================================================================
