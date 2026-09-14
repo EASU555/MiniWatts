@@ -107,7 +107,7 @@ def main():
         "apps": [{
             "name": "MiniWatts",
             "bundleIdentifier": BUNDLE_ID,
-            "developerName": "ZhaoHe",
+            "developerName": "ResistanceTo",
             "subtitle": "Live charge power, battery and thermal sensors.",
             "localizedDescription": DESCRIPTION,
             "iconURL": f"{RAW}/docs/icon.png",
