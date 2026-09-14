@@ -3,16 +3,23 @@ import Foundation
 
 /// Owns the charging Live Activity without leaking ActivityKit into the sensor model.
 /// A manually enabled activity owns a local background-refresh session until the
-/// user turns it off. Every update still carries a short `staleDate`, so WidgetKit
-/// clearly marks the value as paused if iOS interrupts that session.
+/// user turns it off. Updates are coalesced through one task: ActivityKit can take
+/// longer than a sensor tick to accept an update, and launching a detached task per
+/// second eventually leaves a queue of old values competing with the newest one.
 @MainActor
 final class ChargingLiveActivityController {
     private static let updateInterval: TimeInterval = 1
-    private static let staleInterval: TimeInterval = 4
+    /// `staleDate` is a presentation deadline, not an update timer. Four seconds was
+    /// too close to the one-second sampling cadence and turned ordinary ActivityKit
+    /// scheduling jitter into a false "paused" state. Updates remain once per second;
+    /// this only gives the system enough grace before declaring the reading stale.
+    private static let staleInterval: TimeInterval = 30
 
     private var activity: Activity<MiniWattsActivityAttributes>?
     private var lastUpdate = Date.distantPast
     private var lastMetric: LiveActivityMetric?
+    private var pendingUpdate: ActivityContent<MiniWattsActivityAttributes.ContentState>?
+    private var updateTask: Task<Void, Never>?
 
     init() {
         activity = Activity<MiniWattsActivityAttributes>.activities.first
@@ -31,6 +38,13 @@ final class ChargingLiveActivityController {
         guard enabled else {
             endIfNeeded()
             return
+        }
+
+        if let activity,
+           activity.activityState == .ended || activity.activityState == .dismissed {
+            self.activity = nil
+            lastUpdate = .distantPast
+            lastMetric = nil
         }
 
         let state = Self.contentState(from: snapshot, selectedMetric: selectedMetric)
@@ -60,14 +74,8 @@ final class ChargingLiveActivityController {
 
         lastUpdate = now
         lastMetric = selectedMetric
-        let update = content(for: state, at: now)
-        guard let activity else { return }
-        let activityID = activity.id
-        Task.detached {
-            guard let current = Activity<MiniWattsActivityAttributes>.activities
-                .first(where: { $0.id == activityID }) else { return }
-            await current.update(update)
-        }
+        pendingUpdate = content(for: state, at: now)
+        beginUpdatingIfNeeded()
     }
 
     func endIfNeeded() {
@@ -77,11 +85,50 @@ final class ChargingLiveActivityController {
         activity = nil
         lastUpdate = .distantPast
         lastMetric = nil
-        let activityID = active.id
-        Task.detached {
-            guard let current = Activity<MiniWattsActivityAttributes>.activities
-                .first(where: { $0.id == activityID }) else { return }
-            await current.end(nil, dismissalPolicy: .immediate)
+        pendingUpdate = nil
+        updateTask?.cancel()
+        updateTask = nil
+        Task {
+            await active.end(nil, dismissalPolicy: .immediate)
+        }
+    }
+
+    private func beginUpdatingIfNeeded() {
+        guard updateTask == nil else { return }
+        updateTask = Task { @MainActor [weak self] in
+            await self?.drainPendingUpdates()
+        }
+    }
+
+    /// Sends at most one update at a time and skips directly to the newest snapshot
+    /// when more sensor ticks arrive while ActivityKit is busy.
+    private func drainPendingUpdates() async {
+        while !Task.isCancelled, let content = pendingUpdate {
+            pendingUpdate = nil
+            guard let activity else { break }
+
+            switch activity.activityState {
+            case .active, .stale:
+                await activity.update(content)
+            case .pending:
+                // Keep the latest value ready until the system finishes presenting
+                // the newly requested activity.
+                pendingUpdate = content
+                try? await Task.sleep(for: .milliseconds(250))
+            case .ended, .dismissed:
+                self.activity = nil
+                lastUpdate = .distantPast
+                lastMetric = nil
+                pendingUpdate = nil
+            @unknown default:
+                pendingUpdate = nil
+            }
+        }
+        updateTask = nil
+
+        // A sensor tick can enqueue a value during the final suspension point.
+        if pendingUpdate != nil {
+            beginUpdatingIfNeeded()
         }
     }
 

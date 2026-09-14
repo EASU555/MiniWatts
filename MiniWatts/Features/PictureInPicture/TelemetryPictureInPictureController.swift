@@ -520,6 +520,10 @@ extension TelemetryPictureInPictureController: AVPictureInPictureSampleBufferPla
     func pictureInPictureControllerShouldProhibitBackgroundAudioPlayback(
         _ pictureInPictureController: AVPictureInPictureController
     ) -> Bool {
-        true
+        // MiniWatts' manually enabled Live Activity uses an inaudible audio engine
+        // to keep local PMU reads eligible in the background. Prohibiting background
+        // audio here let PiP remain visible while silently suspending that engine,
+        // so the Dynamic Island became stale until the app returned to the front.
+        false
     }
 }
