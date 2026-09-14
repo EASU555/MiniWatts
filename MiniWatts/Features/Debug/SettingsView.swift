@@ -19,7 +19,8 @@ struct SettingsView: View {
                         pictureInPicturePanel(
                             showPower: $pictureInPicture.showPower,
                             showTemperatures: $pictureInPicture.showTemperatures,
-                            layout: $pictureInPicture.layout
+                            layout: $pictureInPicture.layout,
+                            temperatureSelection: $pictureInPicture.temperatureSelection
                         )
                         capacityPanel(capacity: $monitor.configuredBatteryWattHours)
                         devicePanel
@@ -51,7 +52,8 @@ struct SettingsView: View {
     private func pictureInPicturePanel(
         showPower: Binding<Bool>,
         showTemperatures: Binding<Bool>,
-        layout: Binding<TelemetryPictureInPictureLayout>
+        layout: Binding<TelemetryPictureInPictureLayout>,
+        temperatureSelection: Binding<TelemetryTemperatureSelection>
     ) -> some View {
         Panel("Floating monitor", systemImage: "pip") {
             VStack(alignment: .leading, spacing: 12) {
@@ -68,6 +70,23 @@ struct SettingsView: View {
                     .tint(.mwAccent)
                 Toggle("Component temperatures", isOn: showTemperatures)
                     .tint(.mwAccent)
+
+                if showTemperatures.wrappedValue {
+                    HStack {
+                        Text("Temperature display")
+                            .font(.subheadline)
+                        Spacer()
+                        Picker("Temperature display", selection: temperatureSelection) {
+                            Text("All components").tag(TelemetryTemperatureSelection.all)
+                            Text("SoC temperature").tag(TelemetryTemperatureSelection.soc)
+                            Text("Battery temperature").tag(TelemetryTemperatureSelection.battery)
+                            Text("Charger temperature").tag(TelemetryTemperatureSelection.charger)
+                            Text("Hottest component").tag(TelemetryTemperatureSelection.hottest)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                    }
+                }
 
                 if showPower.wrappedValue && showTemperatures.wrappedValue {
                     Picker("Layout", selection: layout) {
@@ -117,7 +136,7 @@ struct SettingsView: View {
                     EmptyNote(text: errorMessage, systemImage: "exclamationmark.circle")
                 }
 
-                Text("The floating monitor redraws once per second. Together shows power and temperatures at the same time; Separate pages alternates between them every four seconds.")
+                Text("The floating monitor redraws once per second. Choose all temperatures or one component; the iOS system thermal state is always shown. Together shows power and temperatures at the same time; Separate pages alternates between them every four seconds.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)

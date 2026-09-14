@@ -21,7 +21,10 @@ struct RootView: View {
         }
         .tint(.mwAccent)
         .onChange(of: monitor.snapshot.date, initial: true) { _, _ in
-            pictureInPicture.update(snapshot: monitor.snapshot)
+            pictureInPicture.update(
+                snapshot: monitor.snapshot,
+                thermalState: monitor.thermal.state
+            )
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {

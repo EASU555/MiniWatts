@@ -13,6 +13,33 @@ nonisolated enum TelemetryPictureInPictureLayout: String, CaseIterable, Identifi
     var id: Self { self }
 }
 
+nonisolated enum TelemetryTemperatureSelection: String, CaseIterable, Identifiable {
+    case all
+    case soc
+    case battery
+    case charger
+    case hottest
+
+    var id: Self { self }
+}
+
+nonisolated enum TelemetrySystemThermalState: Int, Hashable {
+    case nominal
+    case fair
+    case serious
+    case critical
+
+    init(_ state: ProcessInfo.ThermalState) {
+        switch state {
+        case .nominal: self = .nominal
+        case .fair: self = .fair
+        case .serious: self = .serious
+        case .critical: self = .critical
+        @unknown default: self = .nominal
+        }
+    }
+}
+
 nonisolated struct TelemetryFrameData: Hashable {
     let date: Date
     let externalConnected: Bool
@@ -25,8 +52,9 @@ nonisolated struct TelemetryFrameData: Hashable {
     let chargerTemperature: Double?
     let hottestTemperature: Double?
     let hottestSensorName: String?
+    let systemThermalState: TelemetrySystemThermalState
 
-    init(snapshot: PowerSnapshot) {
+    init(snapshot: PowerSnapshot, thermalState: ProcessInfo.ThermalState) {
         let power = snapshot.chargingPower
         date = snapshot.date
         externalConnected = snapshot.externalConnected
@@ -39,6 +67,7 @@ nonisolated struct TelemetryFrameData: Hashable {
         chargerTemperature = snapshot.chargerTemperature
         hottestTemperature = snapshot.hottestSensor?.value
         hottestSensorName = snapshot.hottestSensor?.name
+        systemThermalState = TelemetrySystemThermalState(thermalState)
     }
 }
 
@@ -51,6 +80,7 @@ final class TelemetryPictureInPictureController: NSObject {
     private static let showPowerKey = "pictureInPictureShowPower"
     private static let showTemperaturesKey = "pictureInPictureShowTemperatures"
     private static let layoutKey = "pictureInPictureLayout"
+    private static let temperatureSelectionKey = "pictureInPictureTemperatureSelection"
     private static let frameSize = CGSize(width: 640, height: 360)
 
     var showPower: Bool {
@@ -74,6 +104,16 @@ final class TelemetryPictureInPictureController: NSObject {
         }
     }
 
+    var temperatureSelection: TelemetryTemperatureSelection {
+        didSet {
+            UserDefaults.standard.set(
+                temperatureSelection.rawValue,
+                forKey: Self.temperatureSelectionKey
+            )
+            renderLatest()
+        }
+    }
+
     private(set) var isActive = false
     private(set) var isStarting = false
     private(set) var isPossible = false
@@ -92,6 +132,8 @@ final class TelemetryPictureInPictureController: NSObject {
         showTemperatures = defaults.object(forKey: Self.showTemperaturesKey) as? Bool ?? true
         layout = defaults.string(forKey: Self.layoutKey)
             .flatMap(TelemetryPictureInPictureLayout.init(rawValue:)) ?? .together
+        temperatureSelection = defaults.string(forKey: Self.temperatureSelectionKey)
+            .flatMap(TelemetryTemperatureSelection.init(rawValue:)) ?? .all
         super.init()
 
         configure(displayLayer)
@@ -130,8 +172,8 @@ final class TelemetryPictureInPictureController: NSObject {
         isPossible = false
     }
 
-    func update(snapshot: PowerSnapshot) {
-        latestData = TelemetryFrameData(snapshot: snapshot)
+    func update(snapshot: PowerSnapshot, thermalState: ProcessInfo.ThermalState) {
+        latestData = TelemetryFrameData(snapshot: snapshot, thermalState: thermalState)
         guard sourceView != nil || keepsSensorSamplingActive else { return }
         renderLatest()
     }
@@ -255,7 +297,8 @@ final class TelemetryPictureInPictureController: NSObject {
             data: latestData,
             showPower: showPower,
             showTemperatures: showTemperatures,
-            layout: layout
+            layout: layout,
+            temperatureSelection: temperatureSelection
         )
         .frame(width: Self.frameSize.width, height: Self.frameSize.height)
         .environment(\.colorScheme, .dark)

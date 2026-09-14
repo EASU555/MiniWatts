@@ -53,6 +53,7 @@ struct TelemetryVideoFrameView: View {
     let showPower: Bool
     let showTemperatures: Bool
     let layout: TelemetryPictureInPictureLayout
+    let temperatureSelection: TelemetryTemperatureSelection
 
     private var displaysPowerPage: Bool {
         guard showPower else { return false }
@@ -110,7 +111,7 @@ struct TelemetryVideoFrameView: View {
     }
 
     private var footer: some View {
-        HStack {
+        HStack(spacing: 10) {
             Circle()
                 .fill(data == nil ? Color.secondary : Color.green)
                 .frame(width: 8, height: 8)
@@ -118,12 +119,25 @@ struct TelemetryVideoFrameView: View {
                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                 .foregroundStyle(.secondary)
             Spacer()
+            systemThermalStatus
+            Spacer()
             if let date = data?.date {
                 Text(date, format: .dateTime.hour().minute().second())
                     .font(.system(size: 13, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var systemThermalStatus: some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemThermalSymbol)
+            Text("System thermal state")
+            Text(systemThermalTitle)
+        }
+        .font(.system(size: 13, weight: .semibold, design: .rounded))
+        .foregroundStyle(systemThermalColor)
+        .lineLimit(1)
     }
 
     private var noSelection: some View {
@@ -141,7 +155,7 @@ struct TelemetryVideoFrameView: View {
         HStack(spacing: 16) {
             powerReadout(compact: true)
                 .frame(maxWidth: 220)
-            temperatureGrid
+            temperatureContent(compact: true)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -183,9 +197,31 @@ struct TelemetryVideoFrameView: View {
             Label("Component temperatures", systemImage: "thermometer.medium")
                 .font(.system(size: 19, weight: .semibold, design: .rounded))
                 .foregroundStyle(.orange)
-            temperatureGrid
+            temperatureContent(compact: false)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func temperatureContent(compact: Bool) -> some View {
+        switch temperatureSelection {
+        case .all:
+            temperatureGrid
+        case .soc:
+            temperatureFocus("SoC", value: data?.socTemperature,
+                             symbol: "cpu", compact: compact)
+        case .battery:
+            temperatureFocus("Battery", value: data?.batteryTemperature,
+                             symbol: "battery.75percent", compact: compact)
+        case .charger:
+            temperatureFocus("Charger", value: data?.chargerTemperature,
+                             symbol: "powerplug.fill", compact: compact)
+        case .hottest:
+            temperatureFocus("Hottest", value: data?.hottestTemperature,
+                             symbol: "thermometer.high",
+                             detail: data?.hottestSensorName,
+                             compact: compact)
+        }
     }
 
     private var temperatureGrid: some View {
@@ -238,6 +274,45 @@ struct TelemetryVideoFrameView: View {
         }
     }
 
+    private func temperatureFocus(
+        _ title: LocalizedStringKey,
+        value: Double?,
+        symbol: String,
+        detail: String? = nil,
+        compact: Bool
+    ) -> some View {
+        VStack(spacing: compact ? 8 : 10) {
+            Label(title, systemImage: symbol)
+                .font(.system(size: compact ? 17 : 20,
+                              weight: .semibold,
+                              design: .rounded))
+                .foregroundStyle(temperatureColor(value))
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(verbatim: formatted(value))
+                    .font(.system(size: compact ? 62 : 88,
+                                  weight: .bold,
+                                  design: .rounded))
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.7)
+                Text(verbatim: "°C")
+                    .font(.system(size: compact ? 19 : 26,
+                                  weight: .semibold,
+                                  design: .rounded))
+                    .foregroundStyle(.secondary)
+            }
+            if let detail {
+                Text(verbatim: detail)
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 12)
+        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
+    }
+
     private var powerSourceText: LocalizedStringKey {
         guard data?.externalConnected == true else { return "Not charging" }
         if data?.powerIsBatterySide == true { return "Into battery" }
@@ -255,6 +330,36 @@ struct TelemetryVideoFrameView: View {
         case ..<39: return .yellow
         case ..<44: return .orange
         default: return .red
+        }
+    }
+
+    private var systemThermalTitle: LocalizedStringKey {
+        switch data?.systemThermalState {
+        case .nominal: return "Nominal"
+        case .fair: return "Fair"
+        case .serious: return "Serious"
+        case .critical: return "Critical"
+        case nil: return "—"
+        }
+    }
+
+    private var systemThermalSymbol: String {
+        switch data?.systemThermalState {
+        case .nominal: return "checkmark.circle.fill"
+        case .fair: return "thermometer.medium"
+        case .serious: return "thermometer.high"
+        case .critical: return "exclamationmark.triangle.fill"
+        case nil: return "thermometer.medium"
+        }
+    }
+
+    private var systemThermalColor: Color {
+        switch data?.systemThermalState {
+        case .nominal: return .green
+        case .fair: return .yellow
+        case .serious: return .orange
+        case .critical: return .red
+        case nil: return .secondary
         }
     }
 }
