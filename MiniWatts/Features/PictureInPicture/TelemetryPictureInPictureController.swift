@@ -81,6 +81,8 @@ final class TelemetryPictureInPictureController: NSObject {
 
     @ObservationIgnored let displayLayer = AVSampleBufferDisplayLayer()
     @ObservationIgnored private var pictureInPictureController: AVPictureInPictureController?
+    @ObservationIgnored private var pictureInPicturePossibleObservation: NSKeyValueObservation?
+    @ObservationIgnored private var playbackTimebase: CMTimebase?
     @ObservationIgnored private weak var sourceView: UIView?
     @ObservationIgnored private var latestData: TelemetryFrameData?
 
@@ -95,6 +97,7 @@ final class TelemetryPictureInPictureController: NSObject {
         displayLayer.videoGravity = .resizeAspect
         displayLayer.backgroundColor = UIColor.black.cgColor
         displayLayer.preventsDisplaySleepDuringVideoPlayback = false
+        configurePlaybackTimebase()
     }
 
     var isSupported: Bool {
@@ -138,8 +141,6 @@ final class TelemetryPictureInPictureController: NSObject {
     func start() {
         guard isSupported, hasSelectedContent, !keepsSensorSamplingActive else { return }
         errorMessage = nil
-        ensurePictureInPictureController()
-        renderLatest()
 
         do {
             let session = AVAudioSession.sharedInstance()
@@ -150,13 +151,22 @@ final class TelemetryPictureInPictureController: NSObject {
             return
         }
 
+        // Recreate the controller only after the media audio session is active and
+        // the source layer is attached to a visible view. A controller created by
+        // SwiftUI's early makeUIView pass can otherwise remain permanently unable
+        // to enter PiP even after the preview begins displaying frames.
+        configurePlaybackTimebase()
+        sourceView?.layoutIfNeeded()
+        renderLatest()
+        rebuildPictureInPictureController()
+
         isStarting = true
         Task { @MainActor [weak self] in
             guard let self else { return }
-            // AVKit needs one displayed frame and a layout pass before PiP becomes
-            // possible. Give the system up to one second rather than making the user
-            // tap twice immediately after opening Settings.
-            for _ in 0..<10 {
+            // AVKit needs a committed, displayed frame before PiP becomes possible.
+            // KVO normally updates the state immediately; the bounded poll also
+            // covers devices that deliver the initial observation late.
+            for _ in 0..<20 {
                 refreshPossibleState()
                 if isPossible { break }
                 try? await Task.sleep(for: .milliseconds(100))
@@ -187,6 +197,39 @@ final class TelemetryPictureInPictureController: NSObject {
         controller.requiresLinearPlayback = true
         controller.canStartPictureInPictureAutomaticallyFromInline = false
         pictureInPictureController = controller
+        pictureInPicturePossibleObservation = controller.observe(
+            \.isPictureInPicturePossible,
+            options: [.initial, .new]
+        ) { [weak self] _, change in
+            let possible = change.newValue ?? false
+            Task { @MainActor [weak self] in
+                self?.isPossible = possible
+            }
+        }
+    }
+
+    private func rebuildPictureInPictureController() {
+        pictureInPicturePossibleObservation = nil
+        pictureInPictureController = nil
+        isPossible = false
+        ensurePictureInPictureController()
+    }
+
+    private func configurePlaybackTimebase() {
+        guard playbackTimebase == nil else { return }
+        let clock = CMClockGetHostTimeClock()
+        var optionalTimebase: CMTimebase?
+        guard CMTimebaseCreateWithSourceClock(
+            allocator: kCFAllocatorDefault,
+            sourceClock: clock,
+            timebaseOut: &optionalTimebase
+        ) == noErr, let timebase = optionalTimebase else { return }
+
+        let now = CMClockGetTime(clock)
+        guard CMTimebaseSetTime(timebase, time: now) == noErr,
+              CMTimebaseSetRate(timebase, rate: 1) == noErr else { return }
+        playbackTimebase = timebase
+        displayLayer.controlTimebase = timebase
     }
 
     private func refreshPossibleState() {
@@ -251,8 +294,9 @@ final class TelemetryPictureInPictureController: NSObject {
                     | CGImageAlphaInfo.premultipliedFirst.rawValue
               ) else { return nil }
 
-        context.translateBy(x: 0, y: CGFloat(height))
-        context.scaleBy(x: 1, y: -1)
+        // ImageRenderer's CGImage is already in the bitmap context's row order.
+        // Applying an additional UIKit-style Y flip here turns the entire monitor
+        // upside down in both the inline preview and the PiP window.
         context.draw(image, in: CGRect(origin: .zero, size: size))
 
         var optionalFormat: CMVideoFormatDescription?
@@ -262,8 +306,7 @@ final class TelemetryPictureInPictureController: NSObject {
             formatDescriptionOut: &optionalFormat
         ) == noErr, let format = optionalFormat else { return nil }
 
-        let timestamp = CMTime(seconds: ProcessInfo.processInfo.systemUptime,
-                               preferredTimescale: 600)
+        let timestamp = CMClockGetTime(CMClockGetHostTimeClock())
         var timing = CMSampleTimingInfo(duration: CMTime(value: 1, timescale: 1),
                                         presentationTimeStamp: timestamp,
                                         decodeTimeStamp: .invalid)
