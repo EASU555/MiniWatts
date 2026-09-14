@@ -116,11 +116,23 @@ jobs:
           path: build/DerivedData/Build/Products/Release-iphoneos/*.dSYM
           if-no-files-found: warn
 
+      # The AltStore / SideStore source, published next to the ipa. Its address never
+      # changes — releases/latest/download/apps.json follows the newest release that is
+      # not a pre-release, so a beta tag never reaches people who added the source, and
+      # nothing is committed back to the repository. The script reads version, build,
+      # size and permissions from the ipa itself: AltStore refuses an app whose ipa
+      # disagrees with its source on any of them.
+      - name: Write the app source
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: python3 scripts/make-source.py build/export/MiniWatts-unsigned.ipa "$GITHUB_REF_NAME" > build/export/apps.json
+
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: build/export/MiniWatts-unsigned.ipa
+          files: |
+            build/export/MiniWatts-unsigned.ipa
+            build/export/apps.json
           fail_on_unmatched_files: true
           generate_release_notes: true
           # A tag with a hyphen in it — v1.1.0-beta1 — publishes as a pre-release.

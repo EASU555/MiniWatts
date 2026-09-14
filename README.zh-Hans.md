@@ -21,6 +21,14 @@
 
 运行要求：iPhone，iOS 17 或更高版本。
 
+也可以在 SideStore 或 AltStore（包括 LiveContainer 自带的 SideStore）里添加这个源，从源里安装，之后新版本会作为更新出现：
+
+```
+https://github.com/ResistanceTo/MiniWatts/releases/latest/download/apps.json
+```
+
+LiveContainer 无法运行 App 扩展，所以装在 LiveContainer 里的 MiniWatts 没有小组件，也没有实时活动。
+
 MiniWatts 带有主屏幕与锁定屏幕小组件，以及充电时的实时活动。签名时小组件扩展会多占用一个 App ID——免费 Apple ID 每周只能注册 10 个；如果签名工具提示移除扩展，移除后就没有小组件了。
 
 ## 它做不到的事

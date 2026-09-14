@@ -319,6 +319,19 @@ Releases ship an **unsigned** ipa. A signed one carries a provisioning profile, 
 that profile contains the team ID, every developer certificate and **the UDID of
 every registered device** — five of them, in the build checked. Never publish one.
 
+**The app source** (SideStore, AltStore, LiveContainer's bundled SideStore) is
+`apps.json`, written by `scripts/make-source.py` from the release's ipa and attached to
+the release by CI. Users add
+`https://github.com/ResistanceTo/MiniWatts/releases/latest/download/apps.json`, which
+GitHub redirects to the newest non-prerelease's copy — so the address never changes, beta
+tags never reach it, and no bot commits back to master. Version, build, size and privacy
+keys are read from the ipa, never typed: AltStore compares them with what it downloads and
+refuses to install on any difference. Entitlements are declared empty because the ipa is
+unsigned, and the script refuses a signed ipa rather than describe it wrongly. Never add
+`marketplaceID`: SideStore takes it for a notarized AltStore PAL source and rejects the
+whole source. Icon and screenshots are served from master (`docs/icon.png`, exported
+from `MiniWatts/AppIcon.icon` with Icon Composer's `ictool`).
+
 Two things leak build paths into the binary and need two different fixes:
 
 1. Swift writes absolute source paths through debug info and `#file` metadata →

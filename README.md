@@ -27,6 +27,16 @@ then expires after seven days and you re-sign it.
 
 Requires iPhone, iOS 17 or later.
 
+Or add the source to SideStore or AltStore — including the SideStore bundled with
+LiveContainer — and install from there, so new versions show up as updates:
+
+```
+https://github.com/ResistanceTo/MiniWatts/releases/latest/download/apps.json
+```
+
+LiveContainer cannot run app extensions, so installed inside it MiniWatts has no widget
+and no Live Activity.
+
 MiniWatts includes a Home Screen and Lock Screen widget, and a Live Activity while
 charging. The widget extension is one more App ID when you sign — a free Apple ID gets
 ten a week — and if your signing tool offers to remove extensions, doing so removes the
