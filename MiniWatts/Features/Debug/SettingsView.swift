@@ -159,13 +159,17 @@ struct SettingsView: View {
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("MiniWatts starts the Live Activity when a charger connects. Unless the floating monitor is running, sensor access pauses when the app is suspended, so an old reading is clearly marked as paused instead of continuing to look live.")
+                Text("Turning this on starts the Live Activity immediately. It stays visible across charger changes and keeps refreshing once per second in the background until you turn it off.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if !monitor.liveActivitiesAvailable {
                     EmptyNote(text: "Live Activities are disabled in iOS Settings.",
+                              systemImage: "exclamationmark.circle")
+                } else if enabled.wrappedValue
+                            && !monitor.liveActivityBackgroundRefreshActive {
+                    EmptyNote(text: "Background refresh could not start. The reading may pause after you leave MiniWatts.",
                               systemImage: "exclamationmark.circle")
                 }
             }
@@ -180,7 +184,7 @@ struct SettingsView: View {
                         .font(.system(size: 14, weight: .medium))
                 }
                 .tint(.mwAccent)
-                Text("Sensors are normally read only while MiniWatts is on screen. With this on, the screen is held awake while a charger is connected, never on battery. A running floating monitor is the only background exception.")
+                Text("With this on, the screen stays awake while charging. Live Activity and floating-monitor background refresh work independently of this setting.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)

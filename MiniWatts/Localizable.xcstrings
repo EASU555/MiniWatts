@@ -7,6 +7,16 @@
     "—" : {
       "shouldTranslate" : false
     },
+    "Background refresh could not start. The reading may pause after you leave MiniWatts." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "后台刷新无法启动，离开 MiniWatts 后读数可能会暂停。"
+          }
+        }
+      }
+    },
     "%@ · %@" : {
       "localizations" : {
         "en" : {
@@ -1535,12 +1545,12 @@
         }
       }
     },
-    "Sensors are normally read only while MiniWatts is on screen. With this on, the screen is held awake while a charger is connected, never on battery. A running floating monitor is the only background exception." : {
+    "With this on, the screen stays awake while charging. Live Activity and floating-monitor background refresh work independently of this setting." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "传感器通常只在 MiniWatts 位于前台时读取。打开后会在连接充电器时保持屏幕常亮，用电池时绝不会；正在运行的悬浮监视器是唯一的后台例外。"
+            "value" : "打开后会在充电时保持屏幕常亮。实时活动和悬浮监视器的后台刷新不受此设置影响。"
           }
         }
       }
@@ -2105,12 +2115,12 @@
         }
       }
     },
-    "MiniWatts starts the Live Activity when a charger connects. Unless the floating monitor is running, sensor access pauses when the app is suspended, so an old reading is clearly marked as paused instead of continuing to look live." : {
+    "Turning this on starts the Live Activity immediately. It stays visible across charger changes and keeps refreshing once per second in the background until you turn it off." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "连接充电器时，MiniWatts 会自动启动实时活动。除非悬浮监视器正在运行，否则 App 挂起后传感器读取会暂停，旧读数将明确标记为已暂停，不会伪装成实时数据。"
+            "value" : "打开后会立即启动实时活动。无论是否连接充电器，它都会持续显示并在后台每秒刷新，直到你手动关闭。"
           }
         }
       }

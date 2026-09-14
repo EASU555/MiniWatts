@@ -16,8 +16,13 @@ struct MiniWattsChargingLiveActivity: Widget {
                         Image(systemName: context.state.isWireless
                               ? "bolt.horizontal.circle.fill" : "bolt.circle.fill")
                             .foregroundStyle(.yellow)
-                        Text("Charging")
-                            .font(.caption.weight(.semibold))
+                        if context.state.externalConnected != false {
+                            Text("Charging")
+                                .font(.caption.weight(.semibold))
+                        } else {
+                            Text("On battery")
+                                .font(.caption.weight(.semibold))
+                        }
                     }
                 }
 
@@ -131,7 +136,11 @@ private struct PrimaryMetricView: View {
             .foregroundStyle(isStale ? Color.secondary : color(for: state.selectedMetric))
 
             if state.selectedMetric == .chargingPower {
-                if state.powerIsBatterySide {
+                if state.externalConnected == false {
+                    Text("Battery draw")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else if state.powerIsBatterySide {
                     Text("Into battery")
                         .font(.caption2)
                         .foregroundStyle(.secondary)

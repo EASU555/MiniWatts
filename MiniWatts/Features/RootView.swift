@@ -28,10 +28,9 @@ struct RootView: View {
             case .active:
                 monitor.start()
             case .background:
-                // A running PiP surface is the one deliberate background sampling
-                // mode. Otherwise the tick stops, while an open charge session stays
-                // open until the charger is removed.
-                if !pictureInPicture.keepsSensorSamplingActive {
+                // PiP and a manually enabled Live Activity are deliberate local
+                // background-sampling modes. Otherwise the tick stops.
+                if !keepsBackgroundSamplingActive {
                     monitor.pause()
                 }
             default:
@@ -41,7 +40,7 @@ struct RootView: View {
                 break
             }
         }
-        .onChange(of: pictureInPicture.keepsSensorSamplingActive) { _, keepSampling in
+        .onChange(of: keepsBackgroundSamplingActive) { _, keepSampling in
             guard scenePhase == .background else { return }
             if keepSampling {
                 monitor.start()
@@ -61,6 +60,11 @@ struct RootView: View {
         monitor.keepScreenAwakeWhileCharging
             && monitor.snapshot.externalConnected
             && scenePhase == .active
+    }
+
+    private var keepsBackgroundSamplingActive: Bool {
+        pictureInPicture.keepsSensorSamplingActive
+            || monitor.liveActivityBackgroundRefreshActive
     }
 }
 

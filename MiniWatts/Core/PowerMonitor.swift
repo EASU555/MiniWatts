@@ -32,6 +32,9 @@ final class PowerMonitor {
     /// and registers for power-source change notifications — so if accessories are
     /// reachable at all from a sandboxed app, they show up here.
     private(set) var powerSources: [[String: Any]] = []
+    /// True only while the inaudible media session that permits local Live
+    /// Activity sensor updates in the background is actually running.
+    private(set) var liveActivityBackgroundRefreshActive = false
     /// False until the session file has been read. Nothing is written before then:
     /// the load is asynchronous now, and a save that landed first would overwrite
     /// the whole history with an empty array.
@@ -46,9 +49,9 @@ final class PowerMonitor {
         didSet { UserDefaults.standard.set(keepScreenAwakeWhileCharging, forKey: Self.keepAwakeKey) }
     }
 
-    /// Automatically presents the current charge as a Live Activity. ActivityKit
-    /// owns the Lock Screen / Dynamic Island surface; the sensor tick remains the
-    /// single source of truth for its content.
+    /// Manually controls the persistent Live Activity. It stays up across charger
+    /// changes until the user turns it off; ActivityKit owns the surface while the
+    /// sensor tick remains the single source of truth for its content.
     var liveActivityEnabled: Bool {
         didSet {
             UserDefaults.standard.set(liveActivityEnabled, forKey: Self.liveActivityEnabledKey)
@@ -56,6 +59,7 @@ final class PowerMonitor {
                                              selectedMetric: liveActivityMetric,
                                              enabled: liveActivityEnabled,
                                              forceUpdate: true)
+            refreshLiveActivityBackgroundExecution()
         }
     }
 
@@ -98,7 +102,9 @@ final class PowerMonitor {
     private static let nominalCellVoltage = 3.87
     private static let wattHoursKey = "batteryWattHours"
     private static let keepAwakeKey = "keepScreenAwakeWhileCharging"
-    private static let liveActivityEnabledKey = "liveActivityEnabled"
+    // A new key deliberately does not inherit the old "automatic while charging"
+    // preference. Build 12 changes this to an explicit persistent user action.
+    private static let liveActivityEnabledKey = "liveActivityManualEnabled"
     private static let liveActivityMetricKey = "liveActivityMetric"
     private static let liveWindow = 180
 
@@ -108,6 +114,7 @@ final class PowerMonitor {
     private let energy = EnergyAccumulator()
     private let store = SessionStore()
     private let liveActivityController = ChargingLiveActivityController()
+    private let liveActivityBackgroundKeeper = LiveActivityBackgroundRefreshKeeper()
 
     private var task: Task<Void, Never>?
     private var tick = 0
@@ -132,7 +139,7 @@ final class PowerMonitor {
         // Defaults to on: recording a whole charge is the point of the History tab,
         // and it cannot happen if the screen locks after thirty seconds.
         keepScreenAwakeWhileCharging = defaults.object(forKey: Self.keepAwakeKey) as? Bool ?? true
-        liveActivityEnabled = defaults.object(forKey: Self.liveActivityEnabledKey) as? Bool ?? true
+        liveActivityEnabled = defaults.object(forKey: Self.liveActivityEnabledKey) as? Bool ?? false
         liveActivityMetric = defaults.string(forKey: Self.liveActivityMetricKey)
             .flatMap(LiveActivityMetric.init(rawValue:)) ?? .chargingPower
         collectDiagnostics()
@@ -188,6 +195,7 @@ final class PowerMonitor {
     /// resumed session reports honest totals and `integratedSeconds` records how much of
     /// the wall clock was actually watched.
     func pause() {
+        guard !liveActivityBackgroundRefreshActive else { return }
         task?.cancel()
         task = nil
         persist()
@@ -231,7 +239,14 @@ final class PowerMonitor {
         liveActivityController.reconcile(snapshot: current,
                                          selectedMetric: liveActivityMetric,
                                          enabled: liveActivityEnabled)
+        refreshLiveActivityBackgroundExecution()
         lastExternalConnected = current.externalConnected
+    }
+
+    private func refreshLiveActivityBackgroundExecution() {
+        liveActivityBackgroundRefreshActive = liveActivityBackgroundKeeper.setActive(
+            liveActivityEnabled && liveActivityController.isRunning
+        )
     }
 
     private func appendLive(_ snapshot: PowerSnapshot) {
@@ -393,7 +408,8 @@ final class PowerMonitor {
     /// answer, in the layer that can actually give it.
     var headline: (watts: Double, caption: LocalizedStringResource)? {
         if snapshot.externalConnected {
-            if let watts = snapshot.inputWatts {
+            let power = snapshot.chargingPower
+            if let watts = power.watts, !power.isBatterySide {
                 // Written out rather than as a ternary in the tuple. The string
                 // extractor took only the first branch there — "from charger" never
                 // reached the catalog and the dial's caption fell back to English on
@@ -407,7 +423,7 @@ final class PowerMonitor {
             // "no reading" while the phone is visibly charging, the dial drops to
             // the battery side and says so. A measured zero is still a reading: a
             // phone sitting at 100 % on a charger is genuinely taking nothing.
-            if let watts = snapshot.batteryWatts { return (max(watts, 0), "into battery") }
+            if let watts = power.watts { return (watts, "into battery") }
             return nil
         }
         if let watts = snapshot.batteryWatts, watts != 0 { return (abs(watts), "drawn from battery") }

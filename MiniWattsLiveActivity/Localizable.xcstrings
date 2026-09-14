@@ -11,6 +11,11 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "电池温度" } }
       }
     },
+    "Battery draw" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "电池输出" } }
+      }
+    },
     "Charging" : {
       "localizations" : {
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "充电中" } }
@@ -44,6 +49,11 @@
     "No reading" : {
       "localizations" : {
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无读数" } }
+      }
+    },
+    "On battery" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用电池" } }
       }
     },
     "Power" : {

@@ -2,13 +2,13 @@ import ActivityKit
 import Foundation
 
 /// Owns the charging Live Activity without leaking ActivityKit into the sensor model.
-/// Sensor reads normally stop when the app is suspended (a running floating PiP is
-/// the exception), so every update carries a short `staleDate`; WidgetKit can then
-/// label the last value as paused instead of pretending it is still live.
+/// A manually enabled activity owns a local background-refresh session until the
+/// user turns it off. Every update still carries a short `staleDate`, so WidgetKit
+/// clearly marks the value as paused if iOS interrupts that session.
 @MainActor
 final class ChargingLiveActivityController {
-    private static let updateInterval: TimeInterval = 5
-    private static let staleInterval: TimeInterval = 15
+    private static let updateInterval: TimeInterval = 1
+    private static let staleInterval: TimeInterval = 4
 
     private var activity: Activity<MiniWattsActivityAttributes>?
     private var lastUpdate = Date.distantPast
@@ -28,7 +28,7 @@ final class ChargingLiveActivityController {
                    selectedMetric: LiveActivityMetric,
                    enabled: Bool,
                    forceUpdate: Bool = false) {
-        guard enabled, snapshot.externalConnected else {
+        guard enabled else {
             endIfNeeded()
             return
         }
@@ -98,11 +98,13 @@ final class ChargingLiveActivityController {
         from snapshot: PowerSnapshot,
         selectedMetric: LiveActivityMetric
     ) -> MiniWattsActivityAttributes.ContentState {
-        let measuredInput = snapshot.inputWatts
-        let batterySide = snapshot.batteryWatts.map { max($0, 0) }
+        let power: (watts: Double?, isBatterySide: Bool) = snapshot.externalConnected
+            ? snapshot.chargingPower
+            : (snapshot.batteryWatts.map(abs), true)
         return MiniWattsActivityAttributes.ContentState(
-            chargeWatts: measuredInput ?? batterySide,
-            powerIsBatterySide: measuredInput == nil,
+            chargeWatts: power.watts,
+            powerIsBatterySide: power.isBatterySide,
+            externalConnected: snapshot.externalConnected,
             batteryPercent: snapshot.percent,
             socTemperature: snapshot.socTemperature,
             batteryTemperature: snapshot.batteryTemperature,

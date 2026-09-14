@@ -18,6 +18,10 @@ nonisolated struct MiniWattsActivityAttributes: ActivityAttributes {
     nonisolated struct ContentState: Codable, Hashable, Sendable {
         let chargeWatts: Double?
         let powerIsBatterySide: Bool
+        /// Optional for compatibility with an activity created by build 11, whose
+        /// persisted content state predates this field. Nil means the old charging
+        /// presentation until the first new update arrives.
+        let externalConnected: Bool?
         let batteryPercent: Int?
         let socTemperature: Double?
         let batteryTemperature: Double?

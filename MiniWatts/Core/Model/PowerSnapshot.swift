@@ -127,9 +127,12 @@ nonisolated struct PowerSnapshot {
         batteryRailCurrent = cellCurrent
 
         if let voltage = usbVoltage, let current = usbCurrent, voltage > 0.5 {
-            inputWatts = voltage * current
+            // Input rails describe draw magnitude. Some PMU revisions expose the
+            // current with the opposite sign, which used to turn charging power
+            // negative even though the underlying measurement was valid.
+            inputWatts = voltage * abs(current)
         } else if let voltage = coilVoltage, let current = coilCurrent, voltage > 0.5 {
-            inputWatts = voltage * current
+            inputWatts = voltage * abs(current)
         } else {
             inputWatts = nil
         }
@@ -280,6 +283,23 @@ nonisolated struct PowerSnapshot {
 
     var batteryVoltage: Double? { registryVoltage ?? batteryRailVoltage }
     var batteryCurrent: Double? { registryCurrent ?? batteryRailCurrent }
+
+    /// The best honest charging-power reading for compact, live presentations.
+    /// Prefer the charger-side rail, but treat a near-zero input sample during an
+    /// active charge as a dropped HID event when the battery rail simultaneously
+    /// reports meaningful incoming power. A real hold/full state still reports 0.
+    var chargingPower: (watts: Double?, isBatterySide: Bool) {
+        let batterySide = batteryWatts.map { max($0, 0) }
+        if isCharging,
+           let inputWatts,
+           inputWatts < 0.05,
+           let batterySide,
+           batterySide > inputWatts {
+            return (batterySide, true)
+        }
+        if let inputWatts { return (max(inputWatts, 0), false) }
+        return (batterySide, true)
+    }
 
     /// Share of the adapter's power that actually reaches the cell. The remainder
     /// leaves as heat in the cable, the charge IC and the coil.

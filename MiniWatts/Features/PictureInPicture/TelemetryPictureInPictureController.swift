@@ -27,12 +27,12 @@ nonisolated struct TelemetryFrameData: Hashable {
     let hottestSensorName: String?
 
     init(snapshot: PowerSnapshot) {
-        let input = snapshot.inputWatts
+        let power = snapshot.chargingPower
         date = snapshot.date
         externalConnected = snapshot.externalConnected
         isWireless = snapshot.isWirelessInput
-        chargeWatts = input ?? snapshot.batteryWatts.map { max($0, 0) }
-        powerIsBatterySide = input == nil
+        chargeWatts = power.watts
+        powerIsBatterySide = power.isBatterySide
         batteryPercent = snapshot.percent
         socTemperature = snapshot.socTemperature
         batteryTemperature = snapshot.batteryTemperature
@@ -79,7 +79,7 @@ final class TelemetryPictureInPictureController: NSObject {
     private(set) var isPossible = false
     private(set) var errorMessage: LocalizedStringResource?
 
-    @ObservationIgnored let displayLayer = AVSampleBufferDisplayLayer()
+    @ObservationIgnored private(set) var displayLayer = AVSampleBufferDisplayLayer()
     @ObservationIgnored private var pictureInPictureController: AVPictureInPictureController?
     @ObservationIgnored private var pictureInPicturePossibleObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimebase: CMTimebase?
@@ -94,9 +94,7 @@ final class TelemetryPictureInPictureController: NSObject {
             .flatMap(TelemetryPictureInPictureLayout.init(rawValue:)) ?? .together
         super.init()
 
-        displayLayer.videoGravity = .resizeAspect
-        displayLayer.backgroundColor = UIColor.black.cgColor
-        displayLayer.preventsDisplaySleepDuringVideoPlayback = false
+        configure(displayLayer)
         configurePlaybackTimebase()
     }
 
@@ -155,10 +153,10 @@ final class TelemetryPictureInPictureController: NSObject {
         // the source layer is attached to a visible view. A controller created by
         // SwiftUI's early makeUIView pass can otherwise remain permanently unable
         // to enter PiP even after the preview begins displaying frames.
-        configurePlaybackTimebase()
         sourceView?.layoutIfNeeded()
+        rebuildRenderingPipeline()
         renderLatest()
-        rebuildPictureInPictureController()
+        ensurePictureInPictureController()
 
         isStarting = true
         Task { @MainActor [weak self] in
@@ -175,7 +173,6 @@ final class TelemetryPictureInPictureController: NSObject {
                   controller.isPictureInPicturePossible else {
                 isStarting = false
                 errorMessage = "Picture in Picture is not ready. Keep the preview visible and try again."
-                deactivateAudioSession()
                 return
             }
             controller.startPictureInPicture()
@@ -208,11 +205,28 @@ final class TelemetryPictureInPictureController: NSObject {
         }
     }
 
-    private func rebuildPictureInPictureController() {
+    private func rebuildRenderingPipeline() {
         pictureInPicturePossibleObservation = nil
         pictureInPictureController = nil
         isPossible = false
-        ensurePictureInPictureController()
+
+        displayLayer.removeFromSuperlayer()
+        let replacement = AVSampleBufferDisplayLayer()
+        configure(replacement)
+        displayLayer = replacement
+        playbackTimebase = nil
+        configurePlaybackTimebase()
+
+        if let sourceView {
+            sourceView.layer.addSublayer(replacement)
+            replacement.frame = sourceView.bounds
+        }
+    }
+
+    private func configure(_ layer: AVSampleBufferDisplayLayer) {
+        layer.videoGravity = .resizeAspect
+        layer.backgroundColor = UIColor.black.cgColor
+        layer.preventsDisplaySleepDuringVideoPlayback = false
     }
 
     private func configurePlaybackTimebase() {
@@ -256,7 +270,14 @@ final class TelemetryPictureInPictureController: NSObject {
         // The renderer API is the iOS 17 replacement for enqueuing directly on the
         // display layer. Each buffer is marked for immediate display, so a fresh
         // telemetry frame replaces the previous one instead of building a queue.
-        displayLayer.sampleBufferRenderer.enqueue(sampleBuffer)
+        let videoRenderer = displayLayer.sampleBufferRenderer
+        if videoRenderer.status == .failed {
+            // Once AVFoundation loses decoder resources it rejects every later
+            // frame until flushed. Recover on the next one-second telemetry tick
+            // instead of leaving a permanent black window until process restart.
+            videoRenderer.flush()
+        }
+        videoRenderer.enqueue(sampleBuffer)
         Task { @MainActor [weak self] in
             await Task.yield()
             self?.refreshPossibleState()
@@ -336,12 +357,6 @@ final class TelemetryPictureInPictureController: NSObject {
         return sampleBuffer
     }
 
-    private func deactivateAudioSession() {
-        try? AVAudioSession.sharedInstance().setActive(
-            false,
-            options: [.notifyOthersOnDeactivation]
-        )
-    }
 }
 
 extension TelemetryPictureInPictureController: AVPictureInPictureControllerDelegate {
@@ -360,7 +375,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         isStarting = false
         isActive = false
         errorMessage = "Picture in Picture could not start."
-        deactivateAudioSession()
+        displayLayer.sampleBufferRenderer.flush()
     }
 
     func pictureInPictureControllerDidStopPictureInPicture(
@@ -368,8 +383,8 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
     ) {
         isStarting = false
         isActive = false
+        displayLayer.sampleBufferRenderer.flush()
         refreshPossibleState()
-        deactivateAudioSession()
     }
 
     func pictureInPictureController(
