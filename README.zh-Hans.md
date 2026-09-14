@@ -32,8 +32,8 @@ Build 19 还会使用静音后台音频会话，尝试在 App 离开前台后继
 
 ## 安装
 
-从本 Fork 的 [Releases](https://github.com/EASU555/MiniWatts/releases) 下载 Build 19 的
-`MiniWatts-unsigned.ipa`，用你自己的 Apple ID 签名安装——[Sideloadly](https://sideloadly.io)、
+从本 Fork 的 [Releases](https://github.com/EASU555/MiniWatts/releases) 下载
+`MiniWatts-1.0.1-build19-unsigned.ipa`，用你自己的 Apple ID 签名安装——[Sideloadly](https://sideloadly.io)、
 [AltStore](https://altstore.io)、[SideStore](https://sidestore.io) 和 Xcode 都可以。
 免费 Apple ID 可用，但应用 7 天后过期，需要重新签名。
 

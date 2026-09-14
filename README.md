@@ -44,7 +44,7 @@ monitor when you no longer need them.
 
 ## Install
 
-Download the Build 19 `MiniWatts-unsigned.ipa` from this fork's
+Download `MiniWatts-1.0.1-build19-unsigned.ipa` from this fork's
 [Releases](https://github.com/EASU555/MiniWatts/releases) and sign it with your own
 Apple ID — [Sideloadly](https://sideloadly.io), [AltStore](https://altstore.io),
 [SideStore](https://sidestore.io) and Xcode all do this. A free Apple ID works; the app
