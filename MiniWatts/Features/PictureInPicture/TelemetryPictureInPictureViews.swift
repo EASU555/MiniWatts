@@ -17,7 +17,7 @@ struct TelemetryPictureInPicturePreview: UIViewRepresentable {
 
     func updateUIView(_ uiView: TelemetryPictureInPictureSourceView, context: Context) {
         controller.attach(to: uiView)
-        controller.layoutSource(in: uiView.bounds)
+        controller.layoutSource(in: uiView.bounds, hostedBy: uiView)
     }
 
     static func dismantleUIView(

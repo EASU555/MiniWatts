@@ -123,7 +123,15 @@ final class TelemetryPictureInPictureController: NSObject {
     @ObservationIgnored private var pictureInPictureController: AVPictureInPictureController?
     @ObservationIgnored private var pictureInPicturePossibleObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimebase: CMTimebase?
-    @ObservationIgnored private weak var sourceView: UIView?
+    // Kept strongly while PiP is active so SwiftUI dismantling its representable
+    // cannot also destroy the layer tree AVKit is still presenting.
+    @ObservationIgnored private var sourceView: UIView?
+    /// SwiftUI may replace the inline preview while a settings value changes.
+    /// Moving the active sample-buffer layer to that replacement interrupts the
+    /// content source AVKit is presenting and can leave the PiP window black.
+    /// Remember the new host and reattach only after PiP has stopped.
+    @ObservationIgnored private weak var pendingSourceView: UIView?
+    @ObservationIgnored private var sourceViewWasDismantled = false
     @ObservationIgnored private var latestData: TelemetryFrameData?
 
     override init() {
@@ -148,8 +156,15 @@ final class TelemetryPictureInPictureController: NSObject {
     var keepsSensorSamplingActive: Bool { isActive || isStarting }
 
     func attach(to view: UIView) {
+        if keepsSensorSamplingActive, sourceView !== view {
+            pendingSourceView = view
+            return
+        }
+
         let needsAttachment = sourceView !== view || displayLayer.superlayer !== view.layer
         sourceView = view
+        pendingSourceView = nil
+        sourceViewWasDismantled = false
         if needsAttachment {
             displayLayer.removeFromSuperlayer()
             view.layer.addSublayer(displayLayer)
@@ -161,14 +176,23 @@ final class TelemetryPictureInPictureController: NSObject {
         }
     }
 
-    func layoutSource(in bounds: CGRect) {
+    func layoutSource(in bounds: CGRect, hostedBy view: UIView) {
+        guard sourceView === view else { return }
         displayLayer.frame = bounds
     }
 
     func detach(from view: UIView) {
-        guard sourceView === view, !keepsSensorSamplingActive else { return }
+        if pendingSourceView === view {
+            pendingSourceView = nil
+        }
+        guard sourceView === view else { return }
+        if keepsSensorSamplingActive {
+            sourceViewWasDismantled = true
+            return
+        }
         displayLayer.removeFromSuperlayer()
         sourceView = nil
+        sourceViewWasDismantled = false
         isPossible = false
     }
 
@@ -262,6 +286,25 @@ final class TelemetryPictureInPictureController: NSObject {
         if let sourceView {
             sourceView.layer.addSublayer(replacement)
             replacement.frame = sourceView.bounds
+        }
+    }
+
+    private func attachToPendingPreviewIfNeeded() {
+        guard !keepsSensorSamplingActive else { return }
+        if let pendingSourceView, sourceView !== pendingSourceView {
+            self.pendingSourceView = nil
+            sourceView = pendingSourceView
+            sourceViewWasDismantled = false
+            displayLayer.removeFromSuperlayer()
+            pendingSourceView.layer.addSublayer(displayLayer)
+            displayLayer.frame = pendingSourceView.bounds
+            renderLatest()
+        } else if sourceViewWasDismantled {
+            self.pendingSourceView = nil
+            sourceViewWasDismantled = false
+            displayLayer.removeFromSuperlayer()
+            sourceView = nil
+            isPossible = false
         }
     }
 
@@ -419,6 +462,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         isActive = false
         errorMessage = "Picture in Picture could not start."
         displayLayer.sampleBufferRenderer.flush()
+        attachToPendingPreviewIfNeeded()
     }
 
     func pictureInPictureControllerDidStopPictureInPicture(
@@ -427,6 +471,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         isStarting = false
         isActive = false
         displayLayer.sampleBufferRenderer.flush()
+        attachToPendingPreviewIfNeeded()
         refreshPossibleState()
     }
 
