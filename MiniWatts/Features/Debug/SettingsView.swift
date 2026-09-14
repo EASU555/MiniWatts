@@ -2,16 +2,25 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(PowerMonitor.self) private var monitor
+    @Environment(TelemetryPictureInPictureController.self) private var pictureInPicture
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         @Bindable var monitor = monitor
+        @Bindable var pictureInPicture = pictureInPicture
         NavigationStack {
             ZStack {
                 Backdrop(glow: .mwAccent, glowIntensity: 0.6)
                 ScrollView {
                     VStack(spacing: 14) {
                         recordingPanel(keepAwake: $monitor.keepScreenAwakeWhileCharging)
+                        liveActivityPanel(enabled: $monitor.liveActivityEnabled,
+                                          metric: $monitor.liveActivityMetric)
+                        pictureInPicturePanel(
+                            showPower: $pictureInPicture.showPower,
+                            showTemperatures: $pictureInPicture.showTemperatures,
+                            layout: $pictureInPicture.layout
+                        )
                         capacityPanel(capacity: $monitor.configuredBatteryWattHours)
                         devicePanel
                         aboutPanel
@@ -39,6 +48,130 @@ struct SettingsView: View {
         }
     }
 
+    private func pictureInPicturePanel(
+        showPower: Binding<Bool>,
+        showTemperatures: Binding<Bool>,
+        layout: Binding<TelemetryPictureInPictureLayout>
+    ) -> some View {
+        Panel("Floating monitor", systemImage: "pip") {
+            VStack(alignment: .leading, spacing: 12) {
+                TelemetryPictureInPicturePreview(controller: pictureInPicture)
+                    .aspectRatio(16 / 9, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                    }
+                    .accessibilityLabel("Picture in Picture preview")
+
+                Toggle("Charging power", isOn: showPower)
+                    .tint(.mwAccent)
+                Toggle("Component temperatures", isOn: showTemperatures)
+                    .tint(.mwAccent)
+
+                if showPower.wrappedValue && showTemperatures.wrappedValue {
+                    Picker("Layout", selection: layout) {
+                        Text("Together").tag(TelemetryPictureInPictureLayout.together)
+                        Text("Separate pages").tag(TelemetryPictureInPictureLayout.separatePages)
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                if !showPower.wrappedValue && !showTemperatures.wrappedValue {
+                    EmptyNote(text: "Select at least one item to display.",
+                              systemImage: "exclamationmark.circle")
+                }
+
+                Button {
+                    if pictureInPicture.isActive {
+                        pictureInPicture.stop()
+                    } else {
+                        pictureInPicture.start()
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        if pictureInPicture.isStarting {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: pictureInPicture.isActive ? "pip.exit" : "pip.enter")
+                        }
+                        Text(pictureInPicture.isActive
+                             ? "Stop Picture in Picture" : "Start Picture in Picture")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.mwAccent)
+                .disabled(pictureInPicture.isStarting
+                          || !pictureInPicture.isSupported
+                          || (!pictureInPicture.isActive
+                              && !pictureInPicture.hasSelectedContent))
+
+                if !pictureInPicture.isSupported {
+                    EmptyNote(text: "Picture in Picture is not supported on this device.",
+                              systemImage: "exclamationmark.circle")
+                }
+
+                if let errorMessage = pictureInPicture.errorMessage {
+                    EmptyNote(text: errorMessage, systemImage: "exclamationmark.circle")
+                }
+
+                Text("The floating monitor redraws once per second. Together shows power and temperatures at the same time; Separate pages alternates between them every four seconds.")
+                    .font(.caption)
+                    .foregroundStyle(Color.mwMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("Start Picture in Picture here before leaving MiniWatts. Sensor sampling stays active while the floating window is open and stops when you close it.")
+                    .font(.caption)
+                    .foregroundStyle(Color.mwMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func liveActivityPanel(enabled: Binding<Bool>,
+                                   metric: Binding<LiveActivityMetric>) -> some View {
+        Panel("Live Activity", systemImage: "platter.filled.top.iphone") {
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle(isOn: enabled) {
+                    Text("Show charging data on the Lock Screen and Dynamic Island")
+                        .font(.subheadline.weight(.medium))
+                }
+                .tint(.mwAccent)
+
+                HStack {
+                    Text("Primary readout")
+                        .font(.subheadline)
+                    Spacer()
+                    Picker("Primary readout", selection: metric) {
+                        Text("Charging power").tag(LiveActivityMetric.chargingPower)
+                        Text("SoC temperature").tag(LiveActivityMetric.socTemperature)
+                        Text("Battery temperature").tag(LiveActivityMetric.batteryTemperature)
+                        Text("Hottest component").tag(LiveActivityMetric.hottestTemperature)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                }
+
+                Text("The compact Dynamic Island shows this reading. Press and hold it to see power, SoC, battery and hottest-component temperatures together.")
+                    .font(.caption)
+                    .foregroundStyle(Color.mwMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("MiniWatts starts the Live Activity when a charger connects. Unless the floating monitor is running, sensor access pauses when the app is suspended, so an old reading is clearly marked as paused instead of continuing to look live.")
+                    .font(.caption)
+                    .foregroundStyle(Color.mwMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !monitor.liveActivitiesAvailable {
+                    EmptyNote(text: "Live Activities are disabled in iOS Settings.",
+                              systemImage: "exclamationmark.circle")
+                }
+            }
+        }
+    }
+
     private func recordingPanel(keepAwake: Binding<Bool>) -> some View {
         Panel("Recording", systemImage: "record.circle") {
             VStack(alignment: .leading, spacing: 12) {
@@ -47,7 +180,7 @@ struct SettingsView: View {
                         .font(.system(size: 14, weight: .medium))
                 }
                 .tint(.mwAccent)
-                Text("Sensors can only be read while MiniWatts is on screen, so a charge is only recorded for as long as the phone stays awake. With this on, the screen is held on — but only while a charger is connected, never on battery.")
+                Text("Sensors are normally read only while MiniWatts is on screen. With this on, the screen is held awake while a charger is connected, never on battery. A running floating monitor is the only background exception.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)

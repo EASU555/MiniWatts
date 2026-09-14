@@ -3,6 +3,7 @@ import UIKit
 
 struct RootView: View {
     @Environment(PowerMonitor.self) private var monitor
+    @Environment(TelemetryPictureInPictureController.self) private var pictureInPicture
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -19,20 +20,33 @@ struct RootView: View {
                 .tabItem { Label("History", systemImage: "chart.xyaxis.line") }
         }
         .tint(.mwAccent)
+        .onChange(of: monitor.snapshot.date, initial: true) { _, _ in
+            pictureInPicture.update(snapshot: monitor.snapshot)
+        }
         .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
             case .active:
                 monitor.start()
             case .background:
-                // Sensor reads are pointless while suspended, so the tick stops —
-                // but an open charge session stays open. It ends when the charger
-                // comes out, not when the app goes off screen.
-                monitor.pause()
+                // A running PiP surface is the one deliberate background sampling
+                // mode. Otherwise the tick stops, while an open charge session stays
+                // open until the charger is removed.
+                if !pictureInPicture.keepsSensorSamplingActive {
+                    monitor.pause()
+                }
             default:
                 // `.inactive` is transient and the app is still on screen for most
                 // of it: a pulled-down Control Center, the app switcher, an
                 // incoming call. Nothing to do.
                 break
+            }
+        }
+        .onChange(of: pictureInPicture.keepsSensorSamplingActive) { _, keepSampling in
+            guard scenePhase == .background else { return }
+            if keepSampling {
+                monitor.start()
+            } else {
+                monitor.pause()
             }
         }
         .onChange(of: shouldStayAwake, initial: true) { _, awake in

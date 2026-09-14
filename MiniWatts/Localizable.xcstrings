@@ -1535,12 +1535,12 @@
         }
       }
     },
-    "Sensors can only be read while MiniWatts is on screen, so a charge is only recorded for as long as the phone stays awake. With this on, the screen is held on — but only while a charger is connected, never on battery." : {
+    "Sensors are normally read only while MiniWatts is on screen. With this on, the screen is held awake while a charger is connected, never on battery. A running floating monitor is the only background exception." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "只有 MiniWatts 在前台时才能读取传感器，所以一次充电只能记录到屏幕保持点亮为止。打开后会保持屏幕常亮——但仅限连接充电器时，用电池时绝不会。"
+            "value" : "传感器通常只在 MiniWatts 位于前台时读取。打开后会在连接充电器时保持屏幕常亮，用电池时绝不会；正在运行的悬浮监视器是唯一的后台例外。"
           }
         }
       }
@@ -2021,6 +2021,296 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无线输入电压"
+          }
+        }
+      }
+    },
+    "Live Activity" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时活动"
+          }
+        }
+      }
+    },
+    "Show charging data on the Lock Screen and Dynamic Island" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在锁定屏幕和灵动岛显示充电数据"
+          }
+        }
+      }
+    },
+    "Primary readout" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主要读数"
+          }
+        }
+      }
+    },
+    "Charging power" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "充电功率"
+          }
+        }
+      }
+    },
+    "SoC temperature" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SoC 温度"
+          }
+        }
+      }
+    },
+    "Battery temperature" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "电池温度"
+          }
+        }
+      }
+    },
+    "Hottest component" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最高部件温度"
+          }
+        }
+      }
+    },
+    "The compact Dynamic Island shows this reading. Press and hold it to see power, SoC, battery and hottest-component temperatures together." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "灵动岛紧凑状态显示此项读数。长按展开后可同时查看功率、SoC、电池和最高部件温度。"
+          }
+        }
+      }
+    },
+    "MiniWatts starts the Live Activity when a charger connects. Unless the floating monitor is running, sensor access pauses when the app is suspended, so an old reading is clearly marked as paused instead of continuing to look live." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接充电器时，MiniWatts 会自动启动实时活动。除非悬浮监视器正在运行，否则 App 挂起后传感器读取会暂停，旧读数将明确标记为已暂停，不会伪装成实时数据。"
+          }
+        }
+      }
+    },
+    "Live Activities are disabled in iOS Settings." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS 设置中已关闭实时活动。"
+          }
+        }
+      }
+    },
+    "Floating monitor" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "悬浮监视器"
+          }
+        }
+      }
+    },
+    "Picture in Picture preview" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画中画预览"
+          }
+        }
+      }
+    },
+    "Component temperatures" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部件温度"
+          }
+        }
+      }
+    },
+    "Layout" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "布局"
+          }
+        }
+      }
+    },
+    "Together" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同屏"
+          }
+        }
+      }
+    },
+    "Separate pages" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分页轮播"
+          }
+        }
+      }
+    },
+    "Start Picture in Picture" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始画中画"
+          }
+        }
+      }
+    },
+    "Stop Picture in Picture" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止画中画"
+          }
+        }
+      }
+    },
+    "Select at least one item to display." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "至少选择一项显示内容。"
+          }
+        }
+      }
+    },
+    "Picture in Picture is not supported on this device." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此设备不支持画中画。"
+          }
+        }
+      }
+    },
+    "Picture in Picture audio mode could not start." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画中画音频模式无法启动。"
+          }
+        }
+      }
+    },
+    "Picture in Picture is not ready. Keep the preview visible and try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画中画尚未就绪，请保持预览可见后重试。"
+          }
+        }
+      }
+    },
+    "Picture in Picture could not start." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画中画无法启动。"
+          }
+        }
+      }
+    },
+    "The floating monitor redraws once per second. Together shows power and temperatures at the same time; Separate pages alternates between them every four seconds." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "悬浮监视器每秒刷新一次。同屏模式同时显示功率和温度；分页轮播模式每四秒切换一次。"
+          }
+        }
+      }
+    },
+    "Start Picture in Picture here before leaving MiniWatts. Sensor sampling stays active while the floating window is open and stops when you close it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "离开 MiniWatts 前请先在这里启动画中画。悬浮窗口打开期间会持续采样，关闭后停止。"
+          }
+        }
+      }
+    },
+    "Select content in Settings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在设置中选择显示内容"
+          }
+        }
+      }
+    },
+    "Not charging" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未在充电"
+          }
+        }
+      }
+    },
+    "From wireless charger" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来自无线充电器"
+          }
+        }
+      }
+    },
+    "Charger" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "充电器"
           }
         }
       }

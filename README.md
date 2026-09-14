@@ -13,6 +13,19 @@ heat, and what every temperature sensor in the phone is doing while it happens.
 |:-:|:-:|:-:|:-:|
 | <img src="docs/screenshots/power.jpg" width="200" alt="Power"> | <img src="docs/screenshots/thermal.jpg" width="200" alt="Thermal"> | <img src="docs/screenshots/adapter.jpg" width="200" alt="Adapter"> | <img src="docs/screenshots/history.jpg" width="200" alt="History"> |
 
+While a charger is connected, a Live Activity can put charging power, SoC
+temperature, battery temperature or the hottest component in the Dynamic Island and
+on the Lock Screen. Choose the compact readout in Settings; press and hold the Island
+to see all four.
+
+Settings also has a user-started floating monitor built with system Picture in
+Picture. Its generated video surface refreshes every second and can show charging
+power, SoC, battery, charger and hottest-component temperatures. Power and
+temperatures can be enabled independently; when both are enabled they can share one
+screen or alternate as separate pages. While this window is open, its Picture in
+Picture background mode keeps sensor sampling active. Otherwise sensor access stops
+when iOS suspends the app and the Live Activity marks old data as paused.
+
 > **Sideload only.** Private APIs mean this can never be on the App Store — you sign
 > and install it yourself. There is no network code of any kind: nothing it reads
 > leaves your phone.

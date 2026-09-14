@@ -1,0 +1,66 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Battery" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "电池" } }
+      }
+    },
+    "Battery temperature" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "电池温度" } }
+      }
+    },
+    "Charging" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "充电中" } }
+      }
+    },
+    "Charging power" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "充电功率" } }
+      }
+    },
+    "From charger" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "来自充电器" } }
+      }
+    },
+    "Hottest" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最高" } }
+      }
+    },
+    "Hottest component" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最高部件温度" } }
+      }
+    },
+    "Into battery" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "充入电池" } }
+      }
+    },
+    "No reading" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无读数" } }
+      }
+    },
+    "Power" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "功率" } }
+      }
+    },
+    "Reading paused" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "读数已暂停" } }
+      }
+    },
+    "SoC temperature" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "SoC 温度" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

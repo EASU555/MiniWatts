@@ -60,7 +60,10 @@ rm -rf "$ARCHIVE" "$EXPORT_DIR"
 mkdir -p "$BUILD_DIR"
 
 overrides=()
-[ -n "$BUNDLE_ID" ] && overrides+=("PRODUCT_BUNDLE_IDENTIFIER=$BUNDLE_ID")
+# Both the app and its Live Activity extension derive their identifiers from this
+# setting. A global PRODUCT_BUNDLE_IDENTIFIER override would give both targets the
+# same identifier and make the resulting app impossible to install.
+[ -n "$BUNDLE_ID" ] && overrides+=("MINIWATTS_APP_BUNDLE_ID=$BUNDLE_ID")
 [ -z "${MARKETING_VERSION:-}" ] || overrides+=("MARKETING_VERSION=$MARKETING_VERSION")
 [ -z "${CURRENT_PROJECT_VERSION:-}" ] || overrides+=("CURRENT_PROJECT_VERSION=$CURRENT_PROJECT_VERSION")
 echo "==> Version ${MARKETING_VERSION:-(project file)} build ${CURRENT_PROJECT_VERSION:-(project file)}"
@@ -104,7 +107,14 @@ if [ "$MODE" = "unsigned" ]; then
   # (N_OSO debug-map entries), which -file-prefix-map does not reach. Stripping
   # debug and local symbols removes them. The dSYM in DerivedData keeps whatever
   # is needed to symbolicate a crash later.
-  xcrun strip -S -x "$BUILD_DIR/Payload/$SCHEME.app/$SCHEME"
+  # Strip the executable in every nested bundle, including the Live Activity
+  # extension. Leaving the extension untouched would put the same N_OSO source
+  # paths back into an otherwise clean ipa.
+  while IFS= read -r -d '' plist; do
+    bundle="$(dirname "$plist")"
+    executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist" 2>/dev/null || true)"
+    [ -z "$executable" ] || [ ! -f "$bundle/$executable" ] || xcrun strip -S -x "$bundle/$executable"
+  done < <(find "$BUILD_DIR/Payload/$SCHEME.app" -name Info.plist -print0)
   (cd "$BUILD_DIR" && zip -qry "export/$SCHEME-unsigned.ipa" Payload)
   rm -rf "$BUILD_DIR/Payload"
   IPA="$EXPORT_DIR/$SCHEME-unsigned.ipa"

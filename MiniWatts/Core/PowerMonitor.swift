@@ -46,6 +46,33 @@ final class PowerMonitor {
         didSet { UserDefaults.standard.set(keepScreenAwakeWhileCharging, forKey: Self.keepAwakeKey) }
     }
 
+    /// Automatically presents the current charge as a Live Activity. ActivityKit
+    /// owns the Lock Screen / Dynamic Island surface; the sensor tick remains the
+    /// single source of truth for its content.
+    var liveActivityEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(liveActivityEnabled, forKey: Self.liveActivityEnabledKey)
+            liveActivityController.reconcile(snapshot: snapshot,
+                                             selectedMetric: liveActivityMetric,
+                                             enabled: liveActivityEnabled,
+                                             forceUpdate: true)
+        }
+    }
+
+    var liveActivityMetric: LiveActivityMetric {
+        didSet {
+            UserDefaults.standard.set(liveActivityMetric.rawValue, forKey: Self.liveActivityMetricKey)
+            liveActivityController.reconcile(snapshot: snapshot,
+                                             selectedMetric: liveActivityMetric,
+                                             enabled: liveActivityEnabled,
+                                             forceUpdate: true)
+        }
+    }
+
+    var liveActivitiesAvailable: Bool {
+        ChargingLiveActivityController.areActivitiesEnabled
+    }
+
     let thermal = ThermalMonitor()
 
     /// Usable pack energy, used to turn %/h into watts. Read from IOKit where the
@@ -71,6 +98,8 @@ final class PowerMonitor {
     private static let nominalCellVoltage = 3.87
     private static let wattHoursKey = "batteryWattHours"
     private static let keepAwakeKey = "keepScreenAwakeWhileCharging"
+    private static let liveActivityEnabledKey = "liveActivityEnabled"
+    private static let liveActivityMetricKey = "liveActivityMetric"
     private static let liveWindow = 180
 
     private let battery = IOKitBattery()
@@ -78,6 +107,7 @@ final class PowerMonitor {
     private let batteryCenter = BatteryCenterBridge()
     private let energy = EnergyAccumulator()
     private let store = SessionStore()
+    private let liveActivityController = ChargingLiveActivityController()
 
     private var task: Task<Void, Never>?
     private var tick = 0
@@ -102,6 +132,9 @@ final class PowerMonitor {
         // Defaults to on: recording a whole charge is the point of the History tab,
         // and it cannot happen if the screen locks after thirty seconds.
         keepScreenAwakeWhileCharging = defaults.object(forKey: Self.keepAwakeKey) as? Bool ?? true
+        liveActivityEnabled = defaults.object(forKey: Self.liveActivityEnabledKey) as? Bool ?? true
+        liveActivityMetric = defaults.string(forKey: Self.liveActivityMetricKey)
+            .flatMap(LiveActivityMetric.init(rawValue:)) ?? .chargingPower
         collectDiagnostics()
         Task { await loadStoredSessions() }
     }
@@ -146,7 +179,8 @@ final class PowerMonitor {
 
     /// Stops the tick but leaves any open session open.
     ///
-    /// This is what backgrounding does now. It used to close the session, which made
+    /// This is what ordinary backgrounding does now; an active floating PiP keeps the
+    /// tick running. Backgrounding used to close the session, which made
     /// the History tab close to useless: `scenePhase` leaves `.active` for a pulled-down
     /// Control Center, an incoming call, the app switcher and the screen locking, so an
     /// overnight charge was recorded as a scatter of two-minute fragments instead of one
@@ -194,6 +228,9 @@ final class PowerMonitor {
         appendLive(current)
         updateRateEstimate(current)
         updateSession(current)
+        liveActivityController.reconcile(snapshot: current,
+                                         selectedMetric: liveActivityMetric,
+                                         enabled: liveActivityEnabled)
         lastExternalConnected = current.externalConnected
     }
 

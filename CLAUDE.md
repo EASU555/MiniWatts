@@ -44,6 +44,14 @@ by several entries.
   lifecycle. Injected once in `MiniWattsApp`, read via `@Environment(PowerMonitor.self)`.
   `headline` lives here rather than on the snapshot: its last fallback is the %-rate
   estimate, which is derived across several snapshots and so is not a snapshot's to give.
+- `Core/LiveActivity/` — the shared ActivityKit attributes and the app-side controller.
+  The controller starts on a plug event, updates at most every five seconds and gives
+  every update a 15-second `staleDate`. `MiniWattsLiveActivity/` is the WidgetKit
+  extension that renders the Lock Screen and Dynamic Island presentations.
+- `Features/PictureInPicture/` — converts the current snapshot to a 640×360 SwiftUI
+  instrument frame, then enqueues it on `AVSampleBufferDisplayLayer` for a user-started
+  `AVPictureInPictureController`. Power and temperatures are independently selectable;
+  the combined mode can be one page or a four-second two-page rotation.
 - `Design/` — palette (`Color.mw(light:dark:)`, no asset catalog entries), `Panel`/
   `Metric`/`Pill`/`BarRow`, `PowerRing`, Swift Charts wrappers, `PhoneHeatMap`.
 - `Features/` — one folder per tab, plus Settings. `DebugView` (Raw data) is
@@ -73,7 +81,10 @@ main-actor isolated unless it says otherwise. Consequences that have already bit
 A charge session ends when the **charger is unplugged**, not when the app leaves the
 foreground. Three things make that work and they are easy to undo by accident:
 
-- `RootView` calls `monitor.pause()` on `.background` only. It used to call a `stop()`
+- `RootView` calls `monitor.pause()` on `.background` only, except while the user-started
+  floating Picture in Picture monitor is active. PiP owns the app's `audio` background
+  mode and keeps the same one-second tick alive until the floating window closes. It
+  used to call a `stop()`
   that closed the session on anything that was not `.active`, and `.inactive` fires for
   a pulled-down Control Center, the app switcher, an incoming call and the screen
   locking — so an overnight charge was recorded as a scatter of two-minute fragments.
@@ -83,8 +94,9 @@ foreground. Three things make that work and they are easy to undo by accident:
   session across however long the app was away.
 - Settings has *keep the screen on while charging*, default on, applied in `RootView`
   (`isIdleTimerDisabled`) and gated on the phone being plugged in. Sensors can only be
-  read in the foreground, so without it the screen locks and a full charge can never be
-  recorded. UIKit stays in the view layer; `Core` only holds the preference.
+  read in the foreground unless PiP has deliberately established its playback background
+  session, so without either mode the screen locks and a full charge cannot be recorded.
+  UIKit stays in the view layer; `Core` only holds the preference.
 
 `SessionStore` encodes and writes on its own serial queue, coalescing bursts, and the
 load in `PowerMonitor.init` is a `Task`. At the ceiling — 60 sessions × 1,500 samples —
@@ -223,9 +235,11 @@ that, which is why `Backdrop`'s `.animation(_:value: glow)` restarted an 0.8 s
 full-screen `plusLighter` animation every second on the Thermal tab for a temperature
 that had not moved. Every palette entry is now a `static let`; keep it that way.
 
-There is **no `Info.plist` in the source tree** and there should not be one: the
-bundle is built entirely from `GENERATE_INFOPLIST_FILE` plus the `INFOPLIST_KEY_*`
-build settings. The file used to exist for a single key,
+There is **no main-app `Info.plist` in the source tree** and there should not be one:
+the app bundle is built entirely from `GENERATE_INFOPLIST_FILE` plus the
+`INFOPLIST_KEY_*` build settings. (The WidgetKit extension does have its own plist,
+because its required `NSExtension` dictionary cannot be expressed as one flat build
+setting.) The main-app file used to exist for a single key,
 `CADisableMinimumFrameDurationOnPhone`, which opts the app into 120 Hz for data that
 changes once a second; with that gone the file held nothing, and Xcode dropped both it
 and the `INFOPLIST_FILE` setting on the next build. Do not re-add it — put new keys in

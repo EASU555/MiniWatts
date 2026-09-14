@@ -28,9 +28,9 @@ check() { # description, 0 = clean
 
 echo "Checking $(basename "$IPA")"
 
-[ -e "$APP/_CodeSignature" ] && r=1 || r=0
+find "$APP" -type d -name _CodeSignature -print -quit | grep -q . && r=1 || r=0
 check "no code signature" $r
-[ -e "$APP/embedded.mobileprovision" ] && r=1 || r=0
+find "$APP" -type f -name embedded.mobileprovision -print -quit | grep -q . && r=1 || r=0
 check "no provisioning profile" $r
 
 # A home directory in any file means a build path survived.
