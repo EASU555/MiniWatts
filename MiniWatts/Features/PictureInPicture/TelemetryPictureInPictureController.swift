@@ -366,7 +366,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureSampleBufferPla
     func pictureInPictureController(
         _ pictureInPictureController: AVPictureInPictureController,
         skipByInterval skipInterval: CMTime,
-        completionHandler: @escaping () -> Void
+        completion completionHandler: @escaping @Sendable () -> Void
     ) {
         completionHandler()
     }
