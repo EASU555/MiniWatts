@@ -2174,6 +2174,196 @@
           }
         }
       }
+    },
+    "WAITING" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待数据"
+          }
+        }
+      }
+    },
+    "LIVE · 1S" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时 · 1秒"
+          }
+        }
+      }
+    },
+    "Select content in Settings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在设置中选择显示内容"
+          }
+        }
+      }
+    },
+    "Charging power" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "充电功率"
+          }
+        }
+      }
+    },
+    "Component temperatures" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部件温度"
+          }
+        }
+      }
+    },
+    "Charger" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "充电器"
+          }
+        }
+      }
+    },
+    "Not charging" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未在充电"
+          }
+        }
+      }
+    },
+    "From wireless charger" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来自无线充电器"
+          }
+        }
+      }
+    },
+    "Temperature display" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "温度显示"
+          }
+        }
+      }
+    },
+    "All components" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部部件"
+          }
+        }
+      }
+    },
+    "SoC temperature" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SoC 温度"
+          }
+        }
+      }
+    },
+    "Battery temperature" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "电池温度"
+          }
+        }
+      }
+    },
+    "Charger temperature" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "充电器温度"
+          }
+        }
+      }
+    },
+    "Hottest component" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最高部件温度"
+          }
+        }
+      }
+    },
+    "Layout" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "布局"
+          }
+        }
+      }
+    },
+    "Together" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同屏"
+          }
+        }
+      }
+    },
+    "Separate pages" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分页轮播"
+          }
+        }
+      }
+    },
+    "Select at least one item to display." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "至少选择一项显示内容。"
+          }
+        }
+      }
+    },
+    "The floating monitor redraws once per second. Choose all temperatures or one component; the iOS system thermal state is always shown. Together shows power and temperatures at the same time; Separate pages alternates between them every four seconds." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "悬浮监视器每秒刷新一次。温度可选择全部部件或单独一个部件，且始终显示 iOS 系统发热状态。同屏模式同时显示功率和温度；分页轮播模式每四秒切换一次。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

@@ -7,6 +7,7 @@ struct SettingsView: View {
 
     var body: some View {
         @Bindable var monitor = monitor
+        @Bindable var floatingMeter = floatingMeter
         NavigationStack {
             ZStack {
                 Backdrop(glow: .mwAccent, glowIntensity: 0.6)
@@ -14,7 +15,10 @@ struct SettingsView: View {
                     VStack(spacing: 14) {
                         recordingPanel(keepAwake: $monitor.keepScreenAwakeWhileCharging)
                         glancesPanel(liveActivity: $monitor.showsLiveActivityWhileCharging)
-                        floatingPanel
+                        floatingPanel(showPower: $floatingMeter.showPower,
+                                      showTemperatures: $floatingMeter.showTemperatures,
+                                      layout: $floatingMeter.layout,
+                                      temperatureSelection: $floatingMeter.temperatureSelection)
                         capacityPanel(capacity: $monitor.configuredBatteryWattHours)
                         devicePanel
                         aboutPanel
@@ -85,23 +89,56 @@ struct SettingsView: View {
     /// The one surface that can show a number that moves while the app is off
     /// screen. Manual on purpose: it is a window over everything else, it keeps the
     /// app running, and none of that should happen because a charger was plugged in.
-    private var floatingPanel: some View {
+    private func floatingPanel(
+        showPower: Binding<Bool>,
+        showTemperatures: Binding<Bool>,
+        layout: Binding<FloatingMeterLayout>,
+        temperatureSelection: Binding<FloatingTemperatureSelection>
+    ) -> some View {
         Panel("Floating meter", systemImage: "pip") {
             VStack(alignment: .leading, spacing: 12) {
-                Color.clear
-                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                    .overlay {
-                        GeometryReader { geometry in
-                            FloatingMeterFrame(reading: ChargeReading(monitor.snapshot))
-                                .frame(width: 320, height: 180)
-                                .scaleEffect(geometry.size.width / 320, anchor: .topLeading)
-                        }
-                    }
+                FloatingMeterPreview(controller: floatingMeter)
+                    .aspectRatio(16 / 9, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .stroke(Color.mwCardStroke, lineWidth: 1)
                     }
+
+                Toggle("Charging power", isOn: showPower)
+                    .tint(.mwAccent)
+                Toggle("Component temperatures", isOn: showTemperatures)
+                    .tint(.mwAccent)
+
+                if showTemperatures.wrappedValue {
+                    HStack {
+                        Text("Temperature display")
+                            .font(.subheadline)
+                        Spacer()
+                        Picker("Temperature display", selection: temperatureSelection) {
+                            Text("All components").tag(FloatingTemperatureSelection.all)
+                            Text("SoC temperature").tag(FloatingTemperatureSelection.soc)
+                            Text("Battery temperature").tag(FloatingTemperatureSelection.battery)
+                            Text("Charger temperature").tag(FloatingTemperatureSelection.charger)
+                            Text("Hottest component").tag(FloatingTemperatureSelection.hottest)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                    }
+                }
+
+                if showPower.wrappedValue && showTemperatures.wrappedValue {
+                    Picker("Layout", selection: layout) {
+                        Text("Together").tag(FloatingMeterLayout.together)
+                        Text("Separate pages").tag(FloatingMeterLayout.separatePages)
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                if !showPower.wrappedValue && !showTemperatures.wrappedValue {
+                    EmptyNote(text: "Select at least one item to display.",
+                              systemImage: "exclamationmark.circle")
+                }
 
                 switch floatingMeter.status {
                 case .unsupported:
@@ -117,8 +154,13 @@ struct SettingsView: View {
                         HStack(spacing: 7) {
                             Image(systemName: floatingMeter.isRunning ? "stop.fill" : "pip.enter")
                                 .font(.system(size: 13, weight: .semibold))
-                            Text(floatingMeter.isRunning ? "Close the floating meter" : "Open the floating meter")
-                                .font(.system(size: 14, weight: .semibold))
+                            if floatingMeter.isRunning {
+                                Text("Close the floating meter")
+                                    .font(.system(size: 14, weight: .semibold))
+                            } else {
+                                Text("Open the floating meter")
+                                    .font(.system(size: 14, weight: .semibold))
+                            }
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
@@ -128,10 +170,11 @@ struct SettingsView: View {
                         )
                     }
                     .tint(.mwAccent)
-                    .disabled(floatingMeter.status == .starting)
+                    .disabled(floatingMeter.status == .starting
+                              || (!floatingMeter.isRunning && !floatingMeter.hasSelectedContent))
                 }
 
-                Text("Puts the reading in a floating window that stays on top of other apps and keeps updating once a second. It is the only place iOS lets an app keep a number moving while it is off screen: a widget is refreshed a few times an hour, and the Lock Screen activity only moves while MiniWatts itself is running.")
+                Text("The floating monitor redraws once per second. Choose all temperatures or one component; the iOS system thermal state is always shown. Together shows power and temperatures at the same time; Separate pages alternates between them every four seconds.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
