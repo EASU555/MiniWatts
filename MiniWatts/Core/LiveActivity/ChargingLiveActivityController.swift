@@ -88,8 +88,11 @@ final class ChargingLiveActivityController {
         pendingUpdate = nil
         updateTask?.cancel()
         updateTask = nil
-        Task {
-            await active.end(nil, dismissalPolicy: .immediate)
+        let activityID = active.id
+        Task.detached {
+            guard let current = Activity<MiniWattsActivityAttributes>.activities
+                .first(where: { $0.id == activityID }) else { return }
+            await current.end(nil, dismissalPolicy: .immediate)
         }
     }
 
@@ -109,7 +112,21 @@ final class ChargingLiveActivityController {
 
             switch activity.activityState {
             case .active, .stale:
-                await activity.update(content)
+                // ActivityKit's update API is `@concurrent` in Swift 6. Reacquire
+                // the activity by ID outside the main actor, then await that single
+                // update before taking the next coalesced value.
+                let activityID = activity.id
+                let didUpdate = await Task.detached {
+                    guard let current = Activity<MiniWattsActivityAttributes>.activities
+                        .first(where: { $0.id == activityID }) else { return false }
+                    await current.update(content)
+                    return true
+                }.value
+                if !didUpdate, self.activity?.id == activityID {
+                    self.activity = nil
+                    lastUpdate = .distantPast
+                    lastMetric = nil
+                }
             case .pending:
                 // Keep the latest value ready until the system finishes presenting
                 // the newly requested activity.
