@@ -95,7 +95,10 @@ nonisolated struct PowerSnapshot {
         var temperatures: [HIDSensors.Reading] = []
         for reading in sensors {
             if byName[reading.name] == nil { byName[reading.name] = reading }
-            if reading.kind == .temperature { temperatures.append(reading) }
+            if reading.kind == .temperature,
+               HIDSensors.plausibleCelsius.contains(reading.value) {
+                temperatures.append(reading)
+            }
         }
         self.temperatures = temperatures
 
@@ -244,7 +247,11 @@ nonisolated struct PowerSnapshot {
     var registryVoltage: Double? { int("Voltage", in: registry).map { Double($0) / 1000 } }
     /// Positive while charging, negative while discharging.
     var registryCurrent: Double? { int("InstantAmperage", in: registry).map { Double($0) / 1000 } }
-    var registryTemperature: Double? { int("Temperature", in: registry).map { Double($0) / 100 } }
+    var registryTemperature: Double? {
+        int("Temperature", in: registry)
+            .map { Double($0) / 100 }
+            .flatMap { HIDSensors.plausibleCelsius.contains($0) ? $0 : nil }
+    }
     var cycleCount: Int? { int("CycleCount", in: registry) }
     var designCapacity: Int? { int("DesignCapacity", in: registry) }
     var maxCapacity: Int? { int("AppleRawMaxCapacity", in: registry) ?? int("NominalChargeCapacity", in: registry) }

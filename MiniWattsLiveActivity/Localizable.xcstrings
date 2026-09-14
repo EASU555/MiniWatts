@@ -26,6 +26,46 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "充电功率" } }
       }
     },
+    "Charge power" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "充电功率" } }
+      }
+    },
+    "Charge power and level, read from the phone's own sensors." : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "充电功率与电量，读取自手机自身的传感器。" } }
+      }
+    },
+    "Charging on hold" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂停充电" } }
+      }
+    },
+    "drawn from battery" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "由电池供电" } }
+      }
+    },
+    "From app %@" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "App 记录于 %@" } }
+      }
+    },
+    "from charger" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "来自充电器" } }
+      }
+    },
+    "from MagSafe" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "来自 MagSafe" } }
+      }
+    },
+    "Full" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已充满" } }
+      }
+    },
     "From charger" : {
       "localizations" : {
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "来自充电器" } }
@@ -46,6 +86,16 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "充入电池" } }
       }
     },
+    "into battery" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "进入电池" } }
+      }
+    },
+    "Last charge" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上次充电" } }
+      }
+    },
     "No reading" : {
       "localizations" : {
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无读数" } }
@@ -54,6 +104,16 @@
     "On battery" : {
       "localizations" : {
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用电池" } }
+      }
+    },
+    "Open MiniWatts once, then check back." : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请先打开一次 MiniWatts，稍后再来查看。" } }
+      }
+    },
+    "Plugged in, not charging" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已连接电源，未充电" } }
       }
     },
     "Power" : {
@@ -69,6 +129,11 @@
     "SoC temperature" : {
       "localizations" : {
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "SoC 温度" } }
+      }
+    },
+    "Updated %@" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更新于 %@" } }
       }
     }
   },

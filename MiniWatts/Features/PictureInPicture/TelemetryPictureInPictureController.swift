@@ -132,7 +132,7 @@ final class TelemetryPictureInPictureController: NSObject {
     /// Remember the new host and reattach only after PiP has stopped.
     @ObservationIgnored private weak var pendingSourceView: UIView?
     @ObservationIgnored private var sourceViewWasDismantled = false
-    @ObservationIgnored private var latestData: TelemetryFrameData?
+    private(set) var latestData: TelemetryFrameData?
 
     override init() {
         let defaults = UserDefaults.standard

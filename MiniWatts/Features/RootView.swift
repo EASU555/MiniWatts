@@ -5,6 +5,7 @@ struct RootView: View {
     @Environment(PowerMonitor.self) private var monitor
     @Environment(TelemetryPictureInPictureController.self) private var pictureInPicture
     @Environment(\.scenePhase) private var scenePhase
+    @State private var widgetPublisher = WidgetPublisher()
 
     var body: some View {
         TabView {
@@ -20,17 +21,37 @@ struct RootView: View {
                 .tabItem { Label("History", systemImage: "chart.xyaxis.line") }
         }
         .tint(.mwAccent)
-        .onChange(of: monitor.snapshot.date, initial: true) { _, _ in
-            pictureInPicture.update(
-                snapshot: monitor.snapshot,
-                thermalState: monitor.thermal.state
-            )
+        .background(alignment: .topLeading) {
+            // AVKit requires its presenting sample-buffer layer to remain in the
+            // window hierarchy. Hosting it here avoids Settings redraws moving or
+            // destroying the active PiP source.
+            TelemetryPictureInPicturePreview(controller: pictureInPicture)
+                .frame(width: 16, height: 9)
+                .opacity(0.02)
+                .allowsHitTesting(false)
+        }
+        .task {
+            monitor.onTick = { [weak monitor, pictureInPicture, widgetPublisher] snapshot in
+                guard let monitor else { return }
+                pictureInPicture.update(
+                    snapshot: snapshot,
+                    thermalState: monitor.thermal.state
+                )
+                widgetPublisher.publish(
+                    ChargeReading(snapshot),
+                    lastSession: monitor.sessions.first
+                )
+            }
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
             case .active:
                 monitor.start()
             case .background:
+                widgetPublisher.flush(
+                    ChargeReading(monitor.snapshot),
+                    lastSession: monitor.sessions.first
+                )
                 // PiP and a manually enabled Live Activity are deliberate local
                 // background-sampling modes. Otherwise the tick stops.
                 if !keepsBackgroundSamplingActive {

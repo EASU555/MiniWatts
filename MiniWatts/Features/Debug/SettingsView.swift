@@ -57,7 +57,7 @@ struct SettingsView: View {
     ) -> some View {
         Panel("Floating monitor", systemImage: "pip") {
             VStack(alignment: .leading, spacing: 12) {
-                TelemetryPictureInPicturePreview(controller: pictureInPicture)
+                TelemetryPictureInPictureInlinePreview(controller: pictureInPicture)
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay {
@@ -179,6 +179,11 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text("Turning this on starts the Live Activity immediately. It stays visible across charger changes and keeps refreshing once per second in the background until you turn it off.")
+                    .font(.caption)
+                    .foregroundStyle(Color.mwMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("Widgets read the sensors themselves whenever iOS refreshes them — usually every 15 to 60 minutes — and straight away when you plug in or unplug with MiniWatts open. Each one says when its numbers were taken.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)

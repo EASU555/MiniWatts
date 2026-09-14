@@ -79,6 +79,10 @@ final class PowerMonitor {
 
     let thermal = ThermalMonitor()
 
+    /// Direct fan-out from the sensor tick. Unlike a SwiftUI `onChange`, this
+    /// continues while Picture in Picture keeps the process running off screen.
+    @ObservationIgnored var onTick: ((PowerSnapshot) -> Void)?
+
     /// Usable pack energy, used to turn %/h into watts. Read from IOKit where the
     /// sandbox allows it, otherwise from the value the user sets in Settings.
     var batteryWattHours: Double {
@@ -241,6 +245,7 @@ final class PowerMonitor {
                                          enabled: liveActivityEnabled)
         refreshLiveActivityBackgroundExecution()
         lastExternalConnected = current.externalConnected
+        onTick?(current)
     }
 
     private func refreshLiveActivityBackgroundExecution() {

@@ -21,6 +21,11 @@ import Foundation
 ///   Charger TQ0j / TQ0d    charger junction / die temperature
 ///   PMU tdie1…n            SoC die temperatures
 nonisolated final class HIDSensors {
+    /// Values outside this physical range are sentinels or raw counters, not
+    /// temperatures. Keep them visible in Raw Data, but out of user-facing heat
+    /// summaries and widgets.
+    static let plausibleCelsius = -40.0...150.0
+
     enum Kind: Int {
         case current = 2
         case voltage = 3

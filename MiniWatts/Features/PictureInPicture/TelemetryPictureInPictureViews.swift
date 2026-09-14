@@ -36,6 +36,29 @@ struct TelemetryPictureInPicturePreview: UIViewRepresentable {
     }
 }
 
+/// A SwiftUI-only copy of the latest frame for Settings. The real AVFoundation
+/// layer stays hosted by RootView for the lifetime of the app.
+struct TelemetryPictureInPictureInlinePreview: View {
+    let controller: TelemetryPictureInPictureController
+
+    var body: some View {
+        GeometryReader { geometry in
+            let scale = min(geometry.size.width / 640, geometry.size.height / 360)
+            TelemetryVideoFrameView(
+                data: controller.latestData,
+                showPower: controller.showPower,
+                showTemperatures: controller.showTemperatures,
+                layout: controller.layout,
+                temperatureSelection: controller.temperatureSelection
+            )
+            .frame(width: 640, height: 360)
+            .scaleEffect(scale, anchor: .topLeading)
+        }
+        .background(.black)
+        .environment(\.colorScheme, .dark)
+    }
+}
+
 final class TelemetryPictureInPictureSourceView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
