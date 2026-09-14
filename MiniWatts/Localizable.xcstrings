@@ -2024,6 +2024,156 @@
           }
         }
       }
+    },
+    "Lock Screen and widgets" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "锁定屏幕与小组件"
+          }
+        }
+      }
+    },
+    "Live Activity while charging" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "充电时显示实时活动"
+          }
+        }
+      }
+    },
+    "Shows charge power on the Lock Screen, in the Dynamic Island and in StandBy. It updates only while MiniWatts is running; once the app is suspended the reading is marked as paused rather than shown as current." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在锁定屏幕、灵动岛和待机显示中显示充电功率。它只在 MiniWatts 运行时更新；App 被挂起后，读数会标记为已暂停，而不会被当作当前数值显示。"
+          }
+        }
+      }
+    },
+    "Widgets read the sensors themselves whenever iOS refreshes them — usually every 15 to 60 minutes — and straight away when you plug in or unplug with MiniWatts open. Each one says when its numbers were taken." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小组件会在 iOS 刷新时自行读取传感器——通常每 15 到 60 分钟一次；MiniWatts 打开时插拔充电器会立即刷新。每个小组件都会注明数据的读取时间。"
+          }
+        }
+      }
+    },
+    "Floating meter" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "悬浮读数"
+          }
+        }
+      }
+    },
+    "Open the floating meter" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开悬浮读数"
+          }
+        }
+      }
+    },
+    "Close the floating meter" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭悬浮读数"
+          }
+        }
+      }
+    },
+    "This device does not support Picture in Picture." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此设备不支持画中画。"
+          }
+        }
+      }
+    },
+    "Puts the reading in a floating window that stays on top of other apps and keeps updating once a second. It is the only place iOS lets an app keep a number moving while it is off screen: a widget is refreshed a few times an hour, and the Lock Screen activity only moves while MiniWatts itself is running." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把读数放进一个悬浮窗，它浮在其他 App 上方，每秒更新一次。这是 iOS 唯一允许 App 在离开屏幕后还能让数字继续走动的地方：小组件每小时只刷新几次，锁屏实时活动也只在 MiniWatts 自己运行时才会变。"
+          }
+        }
+      }
+    },
+    "While the window is open MiniWatts keeps running, so it also records the charge with the screen locked — and it draws more power than being suspended. Close the window when you are done with it. No sound is ever played; the window uses the same system feature as a video playing in the corner, which is why the app declares audio playback at all." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "悬浮窗开着时 MiniWatts 会一直运行，所以锁屏后也能继续记录这次充电，同时也比挂起时更耗电，用完请关掉它。它不会播放任何声音：悬浮窗用的是和角落里播放视频相同的系统功能，App 声明音频播放能力只是为了它。"
+          }
+        }
+      }
+    },
+    "iOS will not open the window yet. Leave MiniWatts on screen for a moment and try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS 现在还不让打开这个窗口。让 MiniWatts 在屏幕上多停一会儿，再试一次。"
+          }
+        }
+      }
+    },
+    "Sensor names, scales and even which sensors exist differ from model to model, and nothing about them is documented. This build was written and checked on an iPhone Air (iPhone18,4). On another model a reading can be missing, or belong to something other than its name suggests. Values that are impossible are hidden rather than shown, but a wrong value that happens to look reasonable cannot be caught that way — so treat anything surprising as suspect, and please report it with your model identifier." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "传感器叫什么、怎么换算、甚至有没有这个传感器，都因机型而异，而且没有任何官方文档。这个版本是在 iPhone Air（iPhone18,4）上开发和验证的。换一个机型，某项读数可能不存在，也可能名字和实际含义对不上。明显不可能的数值会被隐藏而不是显示出来，但一个看着还算合理、实际却是错的数值，这样是拦不住的——所以看到反常的数字请当它可疑，并带上你的机型标识反馈给我。"
+          }
+        }
+      }
+    },
+    "Sensor names and scales differ by iPhone model, and this build was checked on an iPhone Air. Impossible readings are hidden, but a reading that is merely wrong cannot be spotted that way — if something here looks off for your model, it may well be." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "传感器的名称和换算方式因 iPhone 机型而异，这个版本是在 iPhone Air 上验证的。不可能的读数会被隐藏，但只是错、却还说得过去的读数拦不住——如果这里有哪个数字在你的机型上看着不对，很可能就是不对。"
+          }
+        }
+      }
+    },
+    "Free and open source" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "免费开源"
+          }
+        }
+      }
+    },
+    "Apache 2.0 licence. The whole app, widget included, is on GitHub." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "采用 Apache 2.0 许可证，整个 App（包括小组件）的源码都在 GitHub 上。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

@@ -46,7 +46,21 @@ final class PowerMonitor {
         didSet { UserDefaults.standard.set(keepScreenAwakeWhileCharging, forKey: Self.keepAwakeKey) }
     }
 
+    /// Whether to show the charging live activity on the Lock Screen, in the Dynamic
+    /// Island and in StandBy. Applied by `RootView`, like the setting above.
+    var showsLiveActivityWhileCharging: Bool {
+        didSet { UserDefaults.standard.set(showsLiveActivityWhileCharging, forKey: Self.liveActivityKey) }
+    }
+
     let thermal = ThermalMonitor()
+
+    /// Called at the end of every tick. `RootView` installs it and fans the reading
+    /// out to the live activity, the widget and the floating meter.
+    ///
+    /// A closure rather than SwiftUI's `onChange`, which is what this used to be:
+    /// view updates stop when the app leaves the screen, and off screen is exactly
+    /// when the floating meter is the only thing still showing a number.
+    var onTick: ((PowerSnapshot) -> Void)?
 
     /// Usable pack energy, used to turn %/h into watts. Read from IOKit where the
     /// sandbox allows it, otherwise from the value the user sets in Settings.
@@ -71,6 +85,7 @@ final class PowerMonitor {
     private static let nominalCellVoltage = 3.87
     private static let wattHoursKey = "batteryWattHours"
     private static let keepAwakeKey = "keepScreenAwakeWhileCharging"
+    private static let liveActivityKey = "showsLiveActivityWhileCharging"
     private static let liveWindow = 180
 
     private let battery = IOKitBattery()
@@ -102,6 +117,7 @@ final class PowerMonitor {
         // Defaults to on: recording a whole charge is the point of the History tab,
         // and it cannot happen if the screen locks after thirty seconds.
         keepScreenAwakeWhileCharging = defaults.object(forKey: Self.keepAwakeKey) as? Bool ?? true
+        showsLiveActivityWhileCharging = defaults.object(forKey: Self.liveActivityKey) as? Bool ?? true
         collectDiagnostics()
         Task { await loadStoredSessions() }
     }
@@ -195,6 +211,7 @@ final class PowerMonitor {
         updateRateEstimate(current)
         updateSession(current)
         lastExternalConnected = current.externalConnected
+        onTick?(current)
     }
 
     private func appendLive(_ snapshot: PowerSnapshot) {

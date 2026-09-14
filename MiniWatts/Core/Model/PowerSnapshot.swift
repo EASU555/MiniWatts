@@ -95,7 +95,14 @@ nonisolated struct PowerSnapshot {
         var temperatures: [HIDSensors.Reading] = []
         for reading in sensors {
             if byName[reading.name] == nil { byName[reading.name] = reading }
-            if reading.kind == .temperature { temperatures.append(reading) }
+            // A reading on the temperature page that no phone could produce is not a
+            // temperature — it is a sentinel or a raw counter, and it used to be drawn
+            // on the heat map as if it were a reading. It stays in `sensors`, which
+            // Raw data shows unedited, and out of everything that treats a number as
+            // degrees.
+            if reading.kind == .temperature, HIDSensors.plausibleCelsius.contains(reading.value) {
+                temperatures.append(reading)
+            }
         }
         self.temperatures = temperatures
 
@@ -241,7 +248,14 @@ nonisolated struct PowerSnapshot {
     var registryVoltage: Double? { int("Voltage", in: registry).map { Double($0) / 1000 } }
     /// Positive while charging, negative while discharging.
     var registryCurrent: Double? { int("InstantAmperage", in: registry).map { Double($0) / 1000 } }
-    var registryTemperature: Double? { int("Temperature", in: registry).map { Double($0) / 100 } }
+    /// Hundredths of a degree on every model checked — but a model that scales it
+    /// differently would put a nonsense number on the Power tab, so it goes through
+    /// the same plausibility check as the HID sensors.
+    var registryTemperature: Double? {
+        int("Temperature", in: registry)
+            .map { Double($0) / 100 }
+            .flatMap { HIDSensors.plausibleCelsius.contains($0) ? $0 : nil }
+    }
     var cycleCount: Int? { int("CycleCount", in: registry) }
     var designCapacity: Int? { int("DesignCapacity", in: registry) }
     var maxCapacity: Int? { int("AppleRawMaxCapacity", in: registry) ?? int("NominalChargeCapacity", in: registry) }

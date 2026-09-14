@@ -48,6 +48,12 @@ by several entries.
   `Metric`/`Pill`/`BarRow`, `PowerRing`, Swift Charts wrappers, `PhoneHeatMap`.
 - `Features/` — one folder per tab, plus Settings. `DebugView` (Raw data) is
   `#if DEBUG` only and reached from the bottom of Settings, not the main toolbar.
+- `Shared/` — the four files compiled into both targets: `ChargeReading`,
+  `ChargeActivityAttributes`, `WidgetSnapshot`, `ReadingWording`. `Widgets/` — the app
+  side of the widget and the live activity (`WidgetPublisher`, `ChargeActivityController`),
+  driven from the tick. `Floating/` — the Picture in Picture readout; see *The floating
+  meter*. `Widget/`, at the top level, is the extension itself; see *Widgets and Live
+  Activity*.
 
 ## Swift 6 isolation
 
@@ -83,8 +89,9 @@ foreground. Three things make that work and they are easy to undo by accident:
   session across however long the app was away.
 - Settings has *keep the screen on while charging*, default on, applied in `RootView`
   (`isIdleTimerDisabled`) and gated on the phone being plugged in. Sensors can only be
-  read in the foreground, so without it the screen locks and a full charge can never be
-  recorded. UIKit stays in the view layer; `Core` only holds the preference.
+  read while the app runs, so without it the screen locks and a full charge can never be
+  recorded. UIKit stays in the view layer; `Core` only holds the preference. The other
+  way to keep the tick alive is the floating meter, which runs through a locked screen.
 
 `SessionStore` encodes and writes on its own serial queue, coalescing bursts, and the
 load in `PowerMonitor.init` is a `Task`. At the ceiling — 60 sessions × 1,500 samples —
@@ -183,6 +190,128 @@ against a pack energy the user sets in Settings.
 - Enumerating **all** HID services needs `IOHIDEventSystemClientSetMatching(client, NULL)`.
   An empty matching dictionary matches nothing, which made the debug button look dead.
 - `PMU tdie14`–`tdie17` appear in the service list but return NaN; they are skipped.
+- **NaN is not the only "nothing here".** Users on other models reported a charge IC at
+  −9199.4 °C, and the app drew it on the heat map as a temperature.
+  `HIDSensors.plausibleCelsius` (−40…150) is applied where `PowerSnapshot` decides what
+  counts as a temperature, not in `read()` — the reading stays in `sensors`, which Raw
+  data shows unedited, and never reaches a zone, the heat map or a widget.
+  `registryTemperature` goes through the same check, since its ÷100 scaling is only
+  known to hold on the models checked here.
+  Only temperature is filtered — volts and amps have shown no comparable sentinel, and
+  a range tight enough to catch one would risk hiding a real rail on an unseen model.
+  This catches impossible values, not merely wrong ones: Settings → About and the
+  Thermal page both say which model the build was verified on, because a mis-scaled
+  reading that still looks plausible cannot be caught in code.
+
+## Widgets and Live Activity
+
+The `WidgetExtension` target lives in `Widget/`: one Home Screen and Lock Screen widget
+(`BatteryWidget`) and the charging live activity (`ChargeLiveActivity`). Swift 6 like the
+app, but **without** `SWIFT_DEFAULT_ACTOR_ISOLATION`: WidgetKit's providers are
+nonisolated, and the extension has no main-actor state to protect.
+
+**Shared code is listed in the pbxproj, not kept in a folder.** The extension compiles
+eight files from `MiniWatts/` — the sensor readers, `PowerSnapshot` and what it depends
+on, and the three files in `MiniWatts/Shared/`. They are named in a
+`PBXFileSystemSynchronizedBuildFileExceptionSet` on the `MiniWatts` folder with
+`target = WidgetExtension`. For a folder that *is* synchronised into a target an exception
+set removes files; for one that is not, it adds them — confirmed by the extension's build,
+which compiles exactly those eight and nothing else from the app. A new file the widget
+needs has to be added there, or ticked under Target Membership in Xcode, which writes the
+same entry. Keep shared files free of UI and of the app-only model: the initialiser that
+turns a `ChargeSession` into a `WidgetSnapshot.Session` lives in `MiniWatts/Widgets/` for
+exactly that reason.
+
+**The extension reads the sensors itself.** `ReadingProbe` runs the app's IOKit and HID code
+at every timeline refresh. It keeps a single `HIDSensors` for the life of the process: a
+second client in one process reads NaN, and the extension's process can outlive a refresh.
+The App Group file the app writes (`WidgetSnapshot`, `group.org.zhaohe.MiniWatts`) is a
+fallback plus the last finished charge, and may not exist at all — re-signing tools differ
+on whether they carry an App Group entitlement over, and AltStore only grants custom
+entitlements to a handful of apps. Everything that reads it treats `nil` as normal.
+
+Not verified on a device when this was written: that `IOHIDEventSystemClient` answers inside
+the widget extension's sandbox, and whether the App Group survives Sideloadly, AltStore and
+SideStore. A widget that shows the level but never watts means the first did not.
+
+**Refresh is iOS's call.** A timeline asks to be refreshed after 5 minutes when plugged in
+and 30 on battery; iOS fits that to a budget of roughly one refresh every 15–60 minutes. The
+app calls `WidgetCenter.reloadAllTimelines()` on plugging in, unplugging and a finished
+session — requests made by the foreground app do not count against the budget. Every widget
+says when its numbers were taken, and whether the extension read them or the app did.
+
+**The live activity is driven by the app alone.** No push updates: those need an APNs server
+and a certificate tied to a developer team, and a re-signed copy could never receive them.
+So `ChargeActivityController` starts an activity only while the app is in front; sends an
+update at most every 5 s and at least every 20 s; gives each update a stale date 45 s out, so
+a suspended app's last reading is shown as paused rather than as current; ends the activity
+two minutes after unplugging, or at once if the setting is turned off; and adopts an activity
+left over from a killed run instead of starting a second one. `Activity` is not `Sendable`, so
+tasks are handed the activity's id and look it up — holding the instance across a `Task` does
+not compile under Swift 6. `NSSupportsLiveActivities` is set through `INFOPLIST_KEY_*` on the
+app target, like every other Info.plist key.
+
+**The widget has its own palette and its own string catalog.** It does not compile
+`Theme.swift`: `Color.mw` wraps a trait-resolution closure, and a widget is archived and drawn
+by the system, so `WidgetPalette` resolves the same hex values against `colorScheme` itself.
+`Widget/Localizable.xcstrings` holds the widget's copy plus the shared files' strings, copied
+across from the app's catalog so they do not turn up as new and untranslated.
+
+**Packaging.** An extension is a bundle of its own inside `PlugIns/`, with its own executable,
+signature directory and debug map. `build-ipa.sh` strips and de-signs every `.appex` as well
+as the app, and `verify-clean.sh` looks for signatures and profiles at any depth. The
+extension is also one more App ID for whoever installs it: a free Apple ID gets ten a week,
+and AltStore offers to drop extensions to stay under that, which drops the widget with them.
+
+## The floating meter
+
+`Floating/` puts the live reading in a Picture in Picture window, started by hand from
+Settings. It exists because neither glance can show a number that moves while the app
+is away: a widget shows what it read at its last timeline reload and iOS grants
+roughly one reload every 15 to 60 minutes, and a live activity can only be updated by
+a running app — push updates need APNs and a team certificate, which a re-signed build
+can never have. Every reload WidgetKit does not charge to the budget comes down to the
+same thing (app in the foreground, an active audio or navigation session, a tap on the
+widget, WidgetKit developer mode in Settings → Developer). PiP is the one surface the
+system keeps alive by itself: it wants frames, so the process runs, and the one-second
+tick keeps reading sensors.
+
+- **`UIBackgroundModes = audio` is the price** — see *Performance*. Nothing is ever
+  played: the session is `.playback` with `.mixWithOthers` and carries no audio, and
+  `shouldProhibitBackgroundAudioPlayback` returns false, so whatever the phone was
+  playing keeps playing.
+- **The layer has to be on screen.** `RootView` keeps `FloatingMeterStage` — the host
+  for the `AVSampleBufferDisplayLayer` that PiP draws from — 16 × 9 pt at 2 % opacity
+  behind the tab bar for the life of the app. The system opens no window for a layer
+  that is not in the hierarchy and closes the window when the source goes away, which
+  rules out hosting it in the Settings sheet, the obvious place for a preview. Settings
+  shows a plain SwiftUI copy of the frame instead.
+- **Frames are rendered, not captured.** `ImageRenderer` draws `FloatingMeterFrame` at
+  320 × 180 @2× into a pooled BGRA `CVPixelBuffer`, then a `CMSampleBuffer` tagged
+  `DisplayImmediately` — there is no timebase on the layer, each frame is shown when it
+  arrives. A failed renderer stays failed until it is flushed and silently swallows
+  every frame after, which looks exactly like a frozen reading, so the status is
+  checked on the way in. The frame carries a running clock: if the seconds stop, the
+  reading behind them stopped too.
+- **`controlsStyle = 1`** is undocumented, guarded by a `responds(to:)` check, and the
+  reason the window reads as an instrument rather than a paused video: it drops the
+  play/pause and skip buttons AVKit otherwise draws over the frame.
+- **The controller is built on the first frame, not on the first tap.**
+  `isPictureInPicturePossible` is the controller's own answer, so building it inside
+  `start()` — which is what the button waits on — is a deadlock: no controller, so the
+  window is never reported as available, so the button stays disabled and nothing ever
+  builds the controller. The button is now only disabled while a start is in flight,
+  a start the system silently ignores (it answers neither the window nor the delegate)
+  is reported as `.notReady`, and a `.starting` that is never confirmed times out after
+  six seconds.
+- **The tick feeds every glance now.** `PowerMonitor.onTick` replaced `RootView`'s
+  `onChange(of: monitor.snapshot.date)`: SwiftUI stops updating views once the app is
+  off screen, which is exactly when the window is the only thing still showing a
+  number. `RootView` also skips `monitor.pause()` while the window is open.
+
+Unverified on a device when this was written: that PiP starts from a host that small,
+that `IOHIDEventSystemClient` still answers once the app is in the background, and how
+often iOS actually asks for a frame.
 
 ## Distribution
 
@@ -223,13 +352,17 @@ that, which is why `Backdrop`'s `.animation(_:value: glow)` restarted an 0.8 s
 full-screen `plusLighter` animation every second on the Thermal tab for a temperature
 that had not moved. Every palette entry is now a `static let`; keep it that way.
 
-There is **no `Info.plist` in the source tree** and there should not be one: the
-bundle is built entirely from `GENERATE_INFOPLIST_FILE` plus the `INFOPLIST_KEY_*`
-build settings. The file used to exist for a single key,
-`CADisableMinimumFrameDurationOnPhone`, which opts the app into 120 Hz for data that
-changes once a second; with that gone the file held nothing, and Xcode dropped both it
-and the `INFOPLIST_FILE` setting on the next build. Do not re-add it — put new keys in
-`INFOPLIST_KEY_*` instead.
+`MiniWatts/Info.plist` holds **one key**, `UIBackgroundModes`, and should hold no
+more: everything else in the bundle comes from `GENERATE_INFOPLIST_FILE` plus the
+`INFOPLIST_KEY_*` settings, which are merged with the file. Put new keys in
+`INFOPLIST_KEY_*`. `UIBackgroundModes` is there because it has no build setting —
+Xcode's own spec defines none — and Picture in Picture will not start without it.
+The file had been deleted once before, when its only key was
+`CADisableMinimumFrameDurationOnPhone` (120 Hz for data that changes once a second),
+and Xcode dropped the `INFOPLIST_FILE` setting along with it. Note that the app
+folder is synchronised into the target, so the file also needs a membership exception
+or it is copied into the bundle as a resource as well — the same exception Xcode
+writes for the widget's own `Info.plist`.
 
 `PageScaffold` uses a `LazyVStack`. History puts up to sixty session panels through it.
 
