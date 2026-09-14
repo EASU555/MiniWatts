@@ -251,21 +251,27 @@ struct TelemetryVideoFrameView: View {
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
+            (
                 Text(verbatim: formatted(value))
                     .font(.system(size: 29, weight: .bold, design: .rounded))
-                    .monospacedDigit()
+                +
                 Text(verbatim: "°")
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.secondary)
-            }
+                    .foregroundColor(.secondary)
+            )
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.65)
+            .allowsTightening(true)
+            .frame(maxWidth: .infinity)
             Text(verbatim: detail ?? " ")
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
         }
-        .padding(12)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.white.opacity(0.065), in: RoundedRectangle(cornerRadius: 14))
         .overlay {
