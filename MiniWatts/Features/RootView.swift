@@ -39,7 +39,8 @@ struct RootView: View {
             monitor.onTick = { [liveActivity, widgets, floatingMeter] snapshot in
                 let reading = ChargeReading(snapshot)
                 floatingMeter.render(reading)
-                liveActivity.sync(reading,
+                liveActivity.sync(snapshot,
+                                  selectedMetric: monitor.liveActivityMetric,
                                   enabled: monitor.showsLiveActivityWhileCharging,
                                   isForeground: UIApplication.shared.applicationState == .active)
                 widgets.publish(reading, lastSession: monitor.sessions.first)
