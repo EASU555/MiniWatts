@@ -276,7 +276,7 @@ private func formattedValue(
     for metric: LiveActivityMetric,
     state: MiniWattsActivityAttributes.ContentState
 ) -> String {
-    guard let value = numericValue(for: metric, state: state) else {
+    guard numericValue(for: metric, state: state) != nil else {
         return String(localized: "No reading")
     }
     return shortValue(for: metric, state: state)

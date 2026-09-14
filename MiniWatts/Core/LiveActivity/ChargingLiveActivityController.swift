@@ -62,7 +62,12 @@ final class ChargingLiveActivityController {
         lastMetric = selectedMetric
         let update = content(for: state, at: now)
         guard let activity else { return }
-        Task { await activity.update(update) }
+        let activityID = activity.id
+        Task.detached {
+            guard let current = Activity<MiniWattsActivityAttributes>.activities
+                .first(where: { $0.id == activityID }) else { return }
+            await current.update(update)
+        }
     }
 
     func endIfNeeded() {
@@ -72,7 +77,12 @@ final class ChargingLiveActivityController {
         activity = nil
         lastUpdate = .distantPast
         lastMetric = nil
-        Task { await active.end(nil, dismissalPolicy: .immediate) }
+        let activityID = active.id
+        Task.detached {
+            guard let current = Activity<MiniWattsActivityAttributes>.activities
+                .first(where: { $0.id == activityID }) else { return }
+            await current.end(nil, dismissalPolicy: .immediate)
+        }
     }
 
     private func content(for state: MiniWattsActivityAttributes.ContentState,
