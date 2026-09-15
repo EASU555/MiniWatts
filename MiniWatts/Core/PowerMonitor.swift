@@ -188,18 +188,6 @@ final class PowerMonitor {
         }
     }
 
-    /// Rebinds the app model to any Live Activity ActivityKit still owns and pushes
-    /// the newest cached snapshot immediately. This is intentionally separate from
-    /// `start()`: background audio may have kept the sensor task alive, so returning
-    /// to the app would otherwise skip its guarded startup refresh.
-    func recoverLiveActivityPresentation() {
-        liveActivityController.reconcile(snapshot: snapshot,
-                                         selectedMetric: liveActivityMetric,
-                                         enabled: liveActivityEnabled,
-                                         forceUpdate: true)
-        refreshLiveActivityBackgroundExecution()
-    }
-
     /// Stops the tick but leaves any open session open.
     ///
     /// This is what ordinary backgrounding does now; an active floating PiP keeps the

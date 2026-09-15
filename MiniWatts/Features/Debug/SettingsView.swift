@@ -20,8 +20,7 @@ struct SettingsView: View {
                             showPower: $pictureInPicture.showPower,
                             showTemperatures: $pictureInPicture.showTemperatures,
                             layout: $pictureInPicture.layout,
-                            temperatureSelection: $pictureInPicture.temperatureSelection,
-                            autoHideWhenDocked: $pictureInPicture.autoHideWhenDocked
+                            temperatureSelection: $pictureInPicture.temperatureSelection
                         )
                         capacityPanel(capacity: $monitor.configuredBatteryWattHours)
                         devicePanel
@@ -44,7 +43,10 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Done") { dismiss() }.tint(.mwAccent)
+                    HStack(spacing: 8) {
+                        Button("Done") { dismiss() }.tint(.mwAccent)
+                        PersonalBuildBadge()
+                    }
                 }
             }
         }
@@ -54,8 +56,7 @@ struct SettingsView: View {
         showPower: Binding<Bool>,
         showTemperatures: Binding<Bool>,
         layout: Binding<TelemetryPictureInPictureLayout>,
-        temperatureSelection: Binding<TelemetryTemperatureSelection>,
-        autoHideWhenDocked: Binding<Bool>
+        temperatureSelection: Binding<TelemetryTemperatureSelection>
     ) -> some View {
         Panel("Floating monitor", systemImage: "pip") {
             VStack(alignment: .leading, spacing: 12) {
@@ -96,16 +97,6 @@ struct SettingsView: View {
                         Text("Separate pages").tag(TelemetryPictureInPictureLayout.separatePages)
                     }
                     .pickerStyle(.segmented)
-                }
-
-                Toggle("Automatically hide after opening", isOn: autoHideWhenDocked)
-                    .tint(.mwAccent)
-
-                if pictureInPicture.isVisuallyHidden {
-                    EmptyNote(
-                        text: "The floating monitor is hidden. Monitoring and Dynamic Island updates are still running.",
-                        systemImage: "eye.slash"
-                    )
                 }
 
                 if !showPower.wrappedValue && !showTemperatures.wrappedValue {
@@ -153,12 +144,7 @@ struct SettingsView: View {
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Start Picture in Picture here before leaving MiniWatts. Picture in Picture and Dynamic Island run independently, and sensor sampling stays active while either presentation is enabled.")
-                    .font(.caption)
-                    .foregroundStyle(Color.mwMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text("With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts hides the docked surface without changing the video stream or Dynamic Island lifecycle. Turn this option off to show it again.")
+                Text("Start Picture in Picture here before leaving MiniWatts. Sensor sampling stays active while the floating window is open and stops when you close it.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)

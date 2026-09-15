@@ -20,28 +20,16 @@ final class ChargingLiveActivityController {
     private var lastMetric: LiveActivityMetric?
     private var pendingUpdate: ActivityContent<MiniWattsActivityAttributes.ContentState>?
     private var updateTask: Task<Void, Never>?
-    private var updateGeneration = 0
-    private var pendingStateStartedAt: Date?
 
     init() {
-        activity = Self.currentActivity
+        activity = Activity<MiniWattsActivityAttributes>.activities.first
     }
 
     static var areActivitiesEnabled: Bool {
         ActivityAuthorizationInfo().areActivitiesEnabled
     }
 
-    var isRunning: Bool {
-        guard let activity else { return false }
-        switch activity.activityState {
-        case .active, .pending, .stale:
-            return true
-        case .ended, .dismissed:
-            return false
-        @unknown default:
-            return false
-        }
-    }
+    var isRunning: Bool { activity != nil }
 
     func reconcile(snapshot: PowerSnapshot,
                    selectedMetric: LiveActivityMetric,
@@ -52,7 +40,12 @@ final class ChargingLiveActivityController {
             return
         }
 
-        adoptSystemActivityIfNeeded()
+        if let activity,
+           activity.activityState == .ended || activity.activityState == .dismissed {
+            self.activity = nil
+            lastUpdate = .distantPast
+            lastMetric = nil
+        }
 
         let state = Self.contentState(from: snapshot, selectedMetric: selectedMetric)
         let now = snapshot.date
@@ -69,16 +62,8 @@ final class ChargingLiveActivityController {
                 lastMetric = selectedMetric
             } catch {
                 // Live Activities can be disabled or the system-wide activity limit
-                // can be full. A request can also race ActivityKit publishing an
-                // activity that this process briefly lost track of. Re-adopt that
-                // system activity instead of remaining disconnected until relaunch.
-                activity = Self.currentActivity
-                if activity != nil {
-                    lastUpdate = .distantPast
-                    lastMetric = nil
-                    pendingUpdate = content(for: state, at: now)
-                    beginUpdatingIfNeeded()
-                }
+                // can be full. The monitor must keep sampling even when this surface
+                // is unavailable, so a failed request is intentionally non-fatal.
             }
             return
         }
@@ -95,9 +80,14 @@ final class ChargingLiveActivityController {
 
     func endIfNeeded() {
         let active = activity
-            ?? Self.currentActivity
-        clearActivityReference()
+            ?? Activity<MiniWattsActivityAttributes>.activities.first
         guard let active else { return }
+        activity = nil
+        lastUpdate = .distantPast
+        lastMetric = nil
+        pendingUpdate = nil
+        updateTask?.cancel()
+        updateTask = nil
         let activityID = active.id
         Task.detached {
             guard let current = Activity<MiniWattsActivityAttributes>.activities
@@ -108,23 +98,20 @@ final class ChargingLiveActivityController {
 
     private func beginUpdatingIfNeeded() {
         guard updateTask == nil else { return }
-        updateGeneration &+= 1
-        let generation = updateGeneration
         updateTask = Task { @MainActor [weak self] in
-            await self?.drainPendingUpdates(generation: generation)
+            await self?.drainPendingUpdates()
         }
     }
 
     /// Sends at most one update at a time and skips directly to the newest snapshot
     /// when more sensor ticks arrive while ActivityKit is busy.
-    private func drainPendingUpdates(generation: Int) async {
+    private func drainPendingUpdates() async {
         while !Task.isCancelled, let content = pendingUpdate {
             pendingUpdate = nil
             guard let activity else { break }
 
             switch activity.activityState {
             case .active, .stale:
-                pendingStateStartedAt = nil
                 // ActivityKit's update API is `@concurrent` in Swift 6. Reacquire
                 // the activity by ID outside the main actor, then await that single
                 // update before taking the next coalesced value.
@@ -136,88 +123,29 @@ final class ChargingLiveActivityController {
                     return true
                 }.value
                 if !didUpdate, self.activity?.id == activityID {
-                    clearActivityReference()
+                    self.activity = nil
+                    lastUpdate = .distantPast
+                    lastMetric = nil
                 }
             case .pending:
                 // Keep the latest value ready until the system finishes presenting
-                // the newly requested activity. A request that remains pending for
-                // too long is wedged; end it so the next sensor tick can create a
-                // clean activity instead of showing placeholders until app relaunch.
-                let now = Date()
-                if let pendingStateStartedAt,
-                   now.timeIntervalSince(pendingStateStartedAt) >= 10 {
-                    let activityID = activity.id
-                    clearActivityReference()
-                    Task.detached {
-                        guard let current = Activity<MiniWattsActivityAttributes>.activities
-                            .first(where: { $0.id == activityID }) else { return }
-                        await current.end(nil, dismissalPolicy: .immediate)
-                    }
-                    break
-                }
-                if pendingStateStartedAt == nil {
-                    pendingStateStartedAt = now
-                }
+                // the newly requested activity.
                 pendingUpdate = content
                 try? await Task.sleep(for: .milliseconds(250))
             case .ended, .dismissed:
-                clearActivityReference()
+                self.activity = nil
+                lastUpdate = .distantPast
+                lastMetric = nil
+                pendingUpdate = nil
             @unknown default:
                 pendingUpdate = nil
             }
         }
-        guard generation == updateGeneration else { return }
         updateTask = nil
 
         // A sensor tick can enqueue a value during the final suspension point.
         if pendingUpdate != nil {
             beginUpdatingIfNeeded()
-        }
-    }
-
-    /// ActivityKit owns the authoritative list. The local reference can disappear
-    /// transiently after a delayed update or media-service transition even though
-    /// the Dynamic Island is still on screen. Reacquiring it prevents a second
-    /// request from colliding with the system activity and leaving both without data.
-    private func adoptSystemActivityIfNeeded() {
-        if let activity {
-            switch activity.activityState {
-            case .active, .pending, .stale:
-                return
-            case .ended, .dismissed:
-                clearActivityReference()
-            @unknown default:
-                clearActivityReference()
-            }
-        }
-
-        guard let existing = Self.currentActivity else { return }
-        activity = existing
-        lastUpdate = .distantPast
-        lastMetric = nil
-    }
-
-    private func clearActivityReference() {
-        activity = nil
-        lastUpdate = .distantPast
-        lastMetric = nil
-        pendingUpdate = nil
-        pendingStateStartedAt = nil
-        updateGeneration &+= 1
-        updateTask?.cancel()
-        updateTask = nil
-    }
-
-    private static var currentActivity: Activity<MiniWattsActivityAttributes>? {
-        Activity<MiniWattsActivityAttributes>.activities.first { activity in
-            switch activity.activityState {
-            case .active, .pending, .stale:
-                return true
-            case .ended, .dismissed:
-                return false
-            @unknown default:
-                return false
-            }
         }
     }
 

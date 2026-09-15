@@ -81,11 +81,7 @@ final class TelemetryPictureInPictureController: NSObject {
     private static let showTemperaturesKey = "pictureInPictureShowTemperatures"
     private static let layoutKey = "pictureInPictureLayout"
     private static let temperatureSelectionKey = "pictureInPictureTemperatureSelection"
-    private static let autoHideWhenDockedKey = "pictureInPictureAutoHideWhenDocked"
     private static let frameSize = CGSize(width: 640, height: 360)
-    /// A zero-height presentation removes AVKit's edge-stash surface without
-    /// changing the 640 x 360 sample-buffer format that keeps PiP stable.
-    private static let hiddenPresentationSize = CGSize(width: 640, height: 0)
 
     var showPower: Bool {
         didSet {
@@ -118,34 +114,15 @@ final class TelemetryPictureInPictureController: NSObject {
         }
     }
 
-    var autoHideWhenDocked: Bool {
-        didSet {
-            UserDefaults.standard.set(autoHideWhenDocked, forKey: Self.autoHideWhenDockedKey)
-            if autoHideWhenDocked {
-                scheduleAutoHideIfDocked()
-            } else {
-                restoreVisiblePresentation()
-            }
-        }
-    }
-
     private(set) var isActive = false
     private(set) var isStarting = false
     private(set) var isPossible = false
-    private(set) var isVisuallyHidden = false
     private(set) var errorMessage: LocalizedStringResource?
 
     @ObservationIgnored private(set) var displayLayer = AVSampleBufferDisplayLayer()
     @ObservationIgnored private var pictureInPictureController: AVPictureInPictureController?
     @ObservationIgnored private var pictureInPicturePossibleObservation: NSKeyValueObservation?
-    @ObservationIgnored private var pictureInPictureSuspendedObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimebase: CMTimebase?
-    /// AVKit does not guarantee a terminal delegate callback when a start request is
-    /// interrupted by an audio-session or scene transition. Keep one bounded attempt
-    /// so Settings can never remain stuck in its loading state.
-    @ObservationIgnored private var startTask: Task<Void, Never>?
-    @ObservationIgnored private var startAttempt = 0
-    @ObservationIgnored private var autoHideTask: Task<Void, Never>?
     // Kept strongly while PiP is active so SwiftUI dismantling its representable
     // cannot also destroy the layer tree AVKit is still presenting.
     @ObservationIgnored private var sourceView: UIView?
@@ -165,7 +142,6 @@ final class TelemetryPictureInPictureController: NSObject {
             .flatMap(TelemetryPictureInPictureLayout.init(rawValue:)) ?? .together
         temperatureSelection = defaults.string(forKey: Self.temperatureSelectionKey)
             .flatMap(TelemetryTemperatureSelection.init(rawValue:)) ?? .all
-        autoHideWhenDocked = defaults.object(forKey: Self.autoHideWhenDockedKey) as? Bool ?? true
         super.init()
 
         configure(displayLayer)
@@ -239,141 +215,38 @@ final class TelemetryPictureInPictureController: NSObject {
             return
         }
 
-        guard let sourceView, sourceView.window != nil else {
-            errorMessage = "Picture in Picture is not ready. Keep the preview visible and try again."
-            return
-        }
-
-        // Prefer the controller that has already been displaying one-second frames.
-        // Throwing that ready controller away on every tap creates a race in which
-        // AVKit is asked to start before the replacement layer has been committed.
-        sourceView.layoutIfNeeded()
-        restoreVisiblePresentation()
+        // Recreate the controller only after the media audio session is active and
+        // the source layer is attached to a visible view. A controller created by
+        // SwiftUI's early makeUIView pass can otherwise remain permanently unable
+        // to enter PiP even after the preview begins displaying frames.
+        sourceView?.layoutIfNeeded()
+        rebuildRenderingPipeline()
         renderLatest()
         ensurePictureInPictureController()
-        refreshPossibleState()
-        if displayLayer.sampleBufferRenderer.status == .failed
-            || pictureInPictureController == nil {
-            rebuildRenderingPipeline()
-            renderLatest()
-            ensurePictureInPictureController()
-        }
 
         isStarting = true
-        startAttempt &+= 1
-        let attempt = startAttempt
-        startTask?.cancel()
-        startTask = Task { @MainActor [weak self] in
-            await self?.performStart(attempt: attempt, canRepairReadiness: true)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            // AVKit needs a committed, displayed frame before PiP becomes possible.
+            // KVO normally updates the state immediately; the bounded poll also
+            // covers devices that deliver the initial observation late.
+            for _ in 0..<20 {
+                refreshPossibleState()
+                if isPossible { break }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            guard let controller = pictureInPictureController,
+                  controller.isPictureInPicturePossible else {
+                isStarting = false
+                errorMessage = "Picture in Picture is not ready. Keep the preview visible and try again."
+                return
+            }
+            controller.startPictureInPicture()
         }
     }
 
     func stop() {
-        invalidateStartAttempt()
-        isStarting = false
-        restoreVisiblePresentation()
         pictureInPictureController?.stopPictureInPicture()
-    }
-
-    /// Scene suspension can pause the watchdog along with the rest of the process.
-    /// Reconcile AVKit's authoritative state as soon as the app becomes active so a
-    /// half-finished transition never requires a force quit.
-    func recoverAfterEnteringForeground() {
-        if isStarting {
-            if pictureInPictureController?.isPictureInPictureActive == true {
-                completeStartAttempt(startAttempt)
-            } else {
-                failStartAttempt(startAttempt, message: "Picture in Picture could not start.")
-            }
-            return
-        }
-
-        if isActive, pictureInPictureController?.isPictureInPictureActive != true {
-            isActive = false
-            discardPictureInPictureController()
-            displayLayer.sampleBufferRenderer.flush()
-            renderLatest()
-            ensurePictureInPictureController()
-            attachToPendingPreviewIfNeeded()
-        }
-    }
-
-    private func performStart(attempt: Int, canRepairReadiness: Bool) async {
-        // AVKit needs a committed, displayed frame before PiP becomes possible.
-        // KVO normally updates the state immediately; the bounded poll also covers
-        // devices that deliver the initial observation late.
-        for _ in 0..<40 {
-            guard isCurrentStartAttempt(attempt) else { return }
-            refreshPossibleState()
-            if isPossible { break }
-            try? await Task.sleep(for: .milliseconds(100))
-        }
-        guard isCurrentStartAttempt(attempt) else { return }
-        guard let controller = pictureInPictureController,
-              controller.isPictureInPicturePossible else {
-            if canRepairReadiness {
-                // A controller created during SwiftUI's early view construction can
-                // remain permanently impossible even though the source is now in the
-                // window. Replace that one controller and retry inside the same tap.
-                rebuildRenderingPipeline()
-                renderLatest()
-                ensurePictureInPictureController()
-                await performStart(attempt: attempt, canRepairReadiness: false)
-                return
-            }
-            failStartAttempt(
-                attempt,
-                message: "Picture in Picture is not ready. Keep the preview visible and try again."
-            )
-            return
-        }
-
-        controller.startPictureInPicture()
-
-        // Some iOS builds occasionally deliver neither didStart nor failedToStart
-        // after accepting the request. Bound that transition and discard the wedged
-        // controller so the next tap works without force-quitting MiniWatts.
-        for _ in 0..<50 {
-            guard isCurrentStartAttempt(attempt) else { return }
-            if controller.isPictureInPictureActive {
-                completeStartAttempt(attempt)
-                return
-            }
-            try? await Task.sleep(for: .milliseconds(100))
-        }
-        failStartAttempt(attempt, message: "Picture in Picture could not start.")
-    }
-
-    private func isCurrentStartAttempt(_ attempt: Int) -> Bool {
-        !Task.isCancelled && isStarting && startAttempt == attempt
-    }
-
-    private func completeStartAttempt(_ attempt: Int) {
-        guard startAttempt == attempt else { return }
-        invalidateStartAttempt()
-        isStarting = false
-        isActive = true
-        errorMessage = nil
-        scheduleAutoHideIfDocked()
-    }
-
-    private func failStartAttempt(_ attempt: Int, message: LocalizedStringResource) {
-        guard startAttempt == attempt else { return }
-        invalidateStartAttempt()
-        isStarting = false
-        isActive = false
-        errorMessage = message
-        discardPictureInPictureController()
-        displayLayer.sampleBufferRenderer.flush()
-        renderLatest()
-        ensurePictureInPictureController()
-        attachToPendingPreviewIfNeeded()
-    }
-
-    private func invalidateStartAttempt() {
-        startAttempt &+= 1
-        startTask?.cancel()
-        startTask = nil
     }
 
     private func ensurePictureInPictureController() {
@@ -387,39 +260,21 @@ final class TelemetryPictureInPictureController: NSObject {
         controller.requiresLinearPlayback = true
         controller.canStartPictureInPictureAutomaticallyFromInline = false
         pictureInPictureController = controller
-        let controllerID = ObjectIdentifier(controller)
         pictureInPicturePossibleObservation = controller.observe(
             \.isPictureInPicturePossible,
             options: [.initial, .new]
         ) { [weak self] _, change in
             let possible = change.newValue ?? false
             Task { @MainActor [weak self] in
-                guard let self,
-                      let current = self.pictureInPictureController,
-                      ObjectIdentifier(current) == controllerID else { return }
-                self.isPossible = possible
-            }
-        }
-        pictureInPictureSuspendedObservation = controller.observe(
-            \.isPictureInPictureSuspended,
-            options: [.initial, .new]
-        ) { [weak self] _, change in
-            let isSuspended = change.newValue ?? false
-            Task { @MainActor [weak self] in
-                guard let self,
-                      let current = self.pictureInPictureController,
-                      ObjectIdentifier(current) == controllerID else { return }
-                if isSuspended {
-                    self.scheduleAutoHideIfDocked()
-                } else if self.isVisuallyHidden {
-                    self.restoreVisiblePresentation()
-                }
+                self?.isPossible = possible
             }
         }
     }
 
     private func rebuildRenderingPipeline() {
-        discardPictureInPictureController()
+        pictureInPicturePossibleObservation = nil
+        pictureInPictureController = nil
+        isPossible = false
 
         displayLayer.removeFromSuperlayer()
         let replacement = AVSampleBufferDisplayLayer()
@@ -432,18 +287,6 @@ final class TelemetryPictureInPictureController: NSObject {
             sourceView.layer.addSublayer(replacement)
             replacement.frame = sourceView.bounds
         }
-    }
-
-    private func discardPictureInPictureController() {
-        autoHideTask?.cancel()
-        autoHideTask = nil
-        pictureInPicturePossibleObservation = nil
-        pictureInPictureSuspendedObservation = nil
-        pictureInPictureController?.delegate = nil
-        pictureInPictureController = nil
-        displayLayer.opacity = 1
-        isVisuallyHidden = false
-        isPossible = false
     }
 
     private func attachToPendingPreviewIfNeeded() {
@@ -463,62 +306,6 @@ final class TelemetryPictureInPictureController: NSObject {
             sourceView = nil
             isPossible = false
         }
-    }
-
-    private func scheduleAutoHideIfDocked() {
-        guard autoHideWhenDocked,
-              isActive,
-              !isVisuallyHidden,
-              pictureInPictureController?.isPictureInPictureSuspended == true else { return }
-        autoHideTask?.cancel()
-        autoHideTask = Task { @MainActor [weak self] in
-            // Let AVKit finish the edge-stash animation before changing only its
-            // presentation size. PiP's content source and audio lifecycle stay intact.
-            try? await Task.sleep(for: .milliseconds(350))
-            guard !Task.isCancelled,
-                  let self,
-                  self.autoHideWhenDocked,
-                  self.isActive,
-                  self.pictureInPictureController?.isPictureInPictureSuspended == true else { return }
-            self.hideDockedPresentation()
-        }
-    }
-
-    private func hideDockedPresentation() {
-        isVisuallyHidden = true
-        setSystemControlsHidden(true)
-        updateDisplayPresentationSize(Self.hiddenPresentationSize)
-        displayLayer.opacity = 0
-    }
-
-    private func restoreVisiblePresentation() {
-        autoHideTask?.cancel()
-        autoHideTask = nil
-        isVisuallyHidden = false
-        displayLayer.opacity = 1
-        setSystemControlsHidden(false)
-        updateDisplayPresentationSize(Self.frameSize)
-        renderLatest()
-    }
-
-    private func setSystemControlsHidden(_ hidden: Bool) {
-        guard let pictureInPictureController else { return }
-        let selector = NSSelectorFromString("setControlsStyle:")
-        guard pictureInPictureController.responds(to: selector) else { return }
-        pictureInPictureController.setValue(hidden ? 2 : 0, forKey: "controlsStyle")
-    }
-
-    private func updateDisplayPresentationSize(_ size: CGSize) {
-        let selector = NSSelectorFromString("_updatePresentationSize:")
-        guard displayLayer.responds(to: selector),
-              let implementation = displayLayer.method(for: selector) else { return }
-        typealias UpdatePresentationSize = @convention(c) (
-            AnyObject,
-            Selector,
-            CGSize
-        ) -> Void
-        let update = unsafeBitCast(implementation, to: UpdatePresentationSize.self)
-        update(displayLayer, selector, size)
     }
 
     private func configure(_ layer: AVSampleBufferDisplayLayer) {
@@ -662,35 +449,28 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
     func pictureInPictureControllerWillStartPictureInPicture(
         _ pictureInPictureController: AVPictureInPictureController
     ) {
-        guard self.pictureInPictureController === pictureInPictureController else { return }
+        isStarting = false
         isActive = true
         errorMessage = nil
-    }
-
-    func pictureInPictureControllerDidStartPictureInPicture(
-        _ pictureInPictureController: AVPictureInPictureController
-    ) {
-        guard self.pictureInPictureController === pictureInPictureController else { return }
-        completeStartAttempt(startAttempt)
     }
 
     func pictureInPictureController(
         _ pictureInPictureController: AVPictureInPictureController,
         failedToStartPictureInPictureWithError error: any Error
     ) {
-        guard self.pictureInPictureController === pictureInPictureController else { return }
-        failStartAttempt(startAttempt, message: "Picture in Picture could not start.")
+        isStarting = false
+        isActive = false
+        errorMessage = "Picture in Picture could not start."
+        displayLayer.sampleBufferRenderer.flush()
+        attachToPendingPreviewIfNeeded()
     }
 
     func pictureInPictureControllerDidStopPictureInPicture(
         _ pictureInPictureController: AVPictureInPictureController
     ) {
-        guard self.pictureInPictureController === pictureInPictureController else { return }
-        invalidateStartAttempt()
         isStarting = false
         isActive = false
         displayLayer.sampleBufferRenderer.flush()
-        restoreVisiblePresentation()
         attachToPendingPreviewIfNeeded()
         refreshPossibleState()
     }

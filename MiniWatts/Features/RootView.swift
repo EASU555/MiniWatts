@@ -30,6 +30,14 @@ struct RootView: View {
                 .opacity(0.02)
                 .allowsHitTesting(false)
         }
+        .overlay(alignment: .topLeading) {
+            GeometryReader { proxy in
+                PersonalBuildBadge()
+                    .padding(.leading, 8)
+                    .padding(.top, proxy.safeAreaInsets.top + 4)
+            }
+            .allowsHitTesting(false)
+        }
         .task {
             monitor.onTick = { [weak monitor, pictureInPicture, widgetPublisher] snapshot in
                 guard let monitor else { return }
@@ -46,9 +54,7 @@ struct RootView: View {
         .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
             case .active:
-                pictureInPicture.recoverAfterEnteringForeground()
                 monitor.start()
-                monitor.recoverLiveActivityPresentation()
             case .background:
                 widgetPublisher.flush(
                     ChargeReading(monitor.snapshot),
@@ -91,6 +97,22 @@ struct RootView: View {
     private var keepsBackgroundSamplingActive: Bool {
         pictureInPicture.keepsSensorSamplingActive
             || monitor.liveActivityBackgroundRefreshActive
+    }
+}
+
+/// Always-visible identifier for sideload test packages. This is intentionally
+/// hard-coded so screenshots can be matched to the exact personal build.
+struct PersonalBuildBadge: View {
+    static let number = 29
+
+    var body: some View {
+        Text(verbatim: "B\(Self.number)")
+            .font(.caption2.monospaced().weight(.bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Color.mwAccent, in: Capsule())
+            .accessibilityLabel("Personal build \(Self.number)")
     }
 }
 
