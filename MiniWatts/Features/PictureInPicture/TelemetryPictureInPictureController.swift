@@ -279,6 +279,7 @@ final class TelemetryPictureInPictureController: NSObject {
         controller.requiresLinearPlayback = true
         controller.canStartPictureInPictureAutomaticallyFromInline = false
         pictureInPictureController = controller
+        let controllerID = ObjectIdentifier(controller)
         pictureInPicturePossibleObservation = controller.observe(
             \.isPictureInPicturePossible,
             options: [.initial, .new]
@@ -291,12 +292,12 @@ final class TelemetryPictureInPictureController: NSObject {
         pictureInPictureSuspendedObservation = controller.observe(
             \.isPictureInPictureSuspended,
             options: [.initial, .new]
-        ) { [weak self, weak controller] _, change in
+        ) { [weak self] _, change in
             let isDocked = change.newValue ?? false
-            Task { @MainActor [weak self, weak controller] in
+            Task { @MainActor [weak self] in
                 guard let self,
-                      let controller,
-                      self.pictureInPictureController === controller else { return }
+                      let current = self.pictureInPictureController,
+                      ObjectIdentifier(current) == controllerID else { return }
                 if isDocked {
                     self.scheduleWindowHideIfDocked()
                 } else {
