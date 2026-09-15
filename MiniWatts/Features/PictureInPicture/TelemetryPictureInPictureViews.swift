@@ -57,7 +57,7 @@ struct TelemetryPictureInPictureInlinePreview: View {
             } else {
                 ZStack {
                     Color.black
-                    Label("Native Picture in Picture carrier", systemImage: "pip")
+                    Label("0.1 pt hidden Picture in Picture carrier", systemImage: "pip")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
                 }

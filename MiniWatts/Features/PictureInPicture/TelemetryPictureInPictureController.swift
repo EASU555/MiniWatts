@@ -15,7 +15,7 @@ nonisolated enum TelemetryPictureInPictureLayout: String, CaseIterable, Identifi
 
 nonisolated enum TelemetryPictureInPictureContentMode: String, CaseIterable, Identifiable {
     case liveReadings
-    case nativeCarrier
+    case hiddenCarrier
 
     var id: Self { self }
 }
@@ -78,9 +78,10 @@ nonisolated struct TelemetryFrameData: Hashable {
     }
 }
 
-/// Owns either the one-frame-per-second telemetry stream or a standard looping
-/// AVPlayer carrier. PiP is user initiated; while either route remains active,
-/// RootView keeps PowerMonitor's sensor tick alive in the background.
+/// Owns either the one-frame-per-second telemetry stream or a video-call PiP
+/// surface that iOS can shrink below the AVPlayerLayer minimum. PiP is user
+/// initiated; while either route remains active, RootView keeps PowerMonitor's
+/// sensor tick alive in the background.
 @Observable
 @MainActor
 final class TelemetryPictureInPictureController: NSObject {
@@ -90,6 +91,8 @@ final class TelemetryPictureInPictureController: NSObject {
     private static let temperatureSelectionKey = "pictureInPictureTemperatureSelection"
     private static let contentModeKey = "pictureInPictureContentMode"
     private static let frameSize = CGSize(width: 640, height: 360)
+    private static let visibleVideoCallSize = CGSize(width: 300, height: 168.75)
+    private static let hiddenVideoCallSize = CGSize(width: 300, height: 0.1)
 
     var showPower: Bool {
         didSet {
@@ -138,14 +141,16 @@ final class TelemetryPictureInPictureController: NSObject {
     private(set) var isActive = false
     private(set) var isStarting = false
     private(set) var isPossible = false
+    private(set) var isVisuallyHidden = false
     private(set) var errorMessage: LocalizedStringResource?
 
     @ObservationIgnored private(set) var displayLayer = AVSampleBufferDisplayLayer()
-    @ObservationIgnored private var nativePlayer: AVQueuePlayer?
-    @ObservationIgnored private var nativeLooper: AVPlayerLooper?
-    @ObservationIgnored private var nativePlayerLayer: AVPlayerLayer?
+    @ObservationIgnored private var videoCallContentController: AVPictureInPictureVideoCallViewController?
+    @ObservationIgnored private var videoCallSourceView: UIView?
+    @ObservationIgnored private var videoCallContentView: UIView?
     @ObservationIgnored private var pictureInPictureController: AVPictureInPictureController?
     @ObservationIgnored private var pictureInPicturePossibleObservation: NSKeyValueObservation?
+    @ObservationIgnored private var pictureInPictureSuspendedObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimebase: CMTimebase?
     @ObservationIgnored private var pendingPipelineRebuild = false
     // Kept strongly while PiP is active so SwiftUI dismantling its representable
@@ -167,8 +172,13 @@ final class TelemetryPictureInPictureController: NSObject {
             .flatMap(TelemetryPictureInPictureLayout.init(rawValue:)) ?? .together
         temperatureSelection = defaults.string(forKey: Self.temperatureSelectionKey)
             .flatMap(TelemetryTemperatureSelection.init(rawValue:)) ?? .all
-        contentMode = defaults.string(forKey: Self.contentModeKey)
-            .flatMap(TelemetryPictureInPictureContentMode.init(rawValue:)) ?? .liveReadings
+        let storedContentMode = defaults.string(forKey: Self.contentModeKey)
+        // Build 40 called the blank AVPlayer route `nativeCarrier`. Carry that
+        // preference forward into the replacement VideoCall hidden route.
+        contentMode = storedContentMode == "nativeCarrier"
+            ? .hiddenCarrier
+            : storedContentMode.flatMap(TelemetryPictureInPictureContentMode.init(rawValue:))
+                ?? .liveReadings
         super.init()
 
         configure(displayLayer)
@@ -180,7 +190,7 @@ final class TelemetryPictureInPictureController: NSObject {
     }
 
     var hasSelectedContent: Bool {
-        contentMode == .nativeCarrier || showPower || showTemperatures
+        contentMode == .hiddenCarrier || showPower || showTemperatures
     }
     var keepsSensorSamplingActive: Bool { isActive || isStarting }
 
@@ -190,19 +200,19 @@ final class TelemetryPictureInPictureController: NSObject {
             return
         }
 
-        let activeLayer: CALayer? = contentMode == .liveReadings
-            ? displayLayer
-            : nativePlayerLayer
-        let needsAttachment = sourceView !== view || activeLayer?.superlayer !== view.layer
+        let activeSurfaceIsAttached = contentMode == .liveReadings
+            ? displayLayer.superlayer === view.layer
+            : videoCallSourceView?.superview === view
+        let needsAttachment = sourceView !== view || !activeSurfaceIsAttached
         sourceView = view
         pendingSourceView = nil
         sourceViewWasDismantled = false
         if needsAttachment {
             displayLayer.removeFromSuperlayer()
-            nativePlayerLayer?.removeFromSuperlayer()
-            attachActiveLayer(to: view)
+            videoCallSourceView?.removeFromSuperview()
+            attachActiveSurface(to: view)
         }
-        layoutActiveLayer(in: view.bounds)
+        layoutActiveSurface(in: view.bounds)
         ensurePictureInPictureController()
         if needsAttachment {
             renderLatest()
@@ -211,7 +221,7 @@ final class TelemetryPictureInPictureController: NSObject {
 
     func layoutSource(in bounds: CGRect, hostedBy view: UIView) {
         guard sourceView === view else { return }
-        layoutActiveLayer(in: bounds)
+        layoutActiveSurface(in: bounds)
     }
 
     func detach(from view: UIView) {
@@ -224,7 +234,7 @@ final class TelemetryPictureInPictureController: NSObject {
             return
         }
         displayLayer.removeFromSuperlayer()
-        nativePlayerLayer?.removeFromSuperlayer()
+        videoCallSourceView?.removeFromSuperview()
         sourceView = nil
         sourceViewWasDismantled = false
         isPossible = false
@@ -258,8 +268,6 @@ final class TelemetryPictureInPictureController: NSObject {
         rebuildRenderingPipeline()
         if contentMode == .liveReadings {
             renderLatest()
-        } else {
-            nativePlayer?.play()
         }
         ensurePictureInPictureController()
 
@@ -286,7 +294,18 @@ final class TelemetryPictureInPictureController: NSObject {
 
     func stop() {
         pictureInPictureController?.stopPictureInPicture()
-        nativePlayer?.pause()
+    }
+
+    /// The 0.1 pt path follows the public VideoCall PiP sizing mechanism used by
+    /// GlobalRefresh-PiP. It changes AVKit's content size rather than moving or
+    /// covering a system-owned PiP window.
+    func setVisuallyHidden(_ hidden: Bool) {
+        guard contentMode == .hiddenCarrier else { return }
+        guard isActive else {
+            errorMessage = "Start Picture in Picture before changing its hidden state."
+            return
+        }
+        applyVideoCallGeometry(hidden: hidden)
     }
 
     private func ensurePictureInPictureController() {
@@ -299,12 +318,14 @@ final class TelemetryPictureInPictureController: NSObject {
                 playbackDelegate: self
             )
             controller = AVPictureInPictureController(contentSource: source)
-        case .nativeCarrier:
-            guard let nativePlayerLayer,
-                  let nativeController = AVPictureInPictureController(
-                    playerLayer: nativePlayerLayer
-                  ) else { return }
-            controller = nativeController
+        case .hiddenCarrier:
+            configureVideoCallCarrier()
+            guard let videoCallSourceView, let videoCallContentController else { return }
+            let source = AVPictureInPictureController.ContentSource(
+                activeVideoCallSourceView: videoCallSourceView,
+                contentViewController: videoCallContentController
+            )
+            controller = AVPictureInPictureController(contentSource: source)
         }
         controller.delegate = self
         controller.requiresLinearPlayback = true
@@ -315,85 +336,149 @@ final class TelemetryPictureInPictureController: NSObject {
         // soon as the standard PiP controller exists; iOS remains solely
         // responsible for dragging, edge docking and the restore affordance.
         setSystemControlsHidden()
+        let controllerID = ObjectIdentifier(controller)
         pictureInPicturePossibleObservation = controller.observe(
             \.isPictureInPicturePossible,
             options: [.initial, .new]
         ) { [weak self] _, change in
             let possible = change.newValue ?? false
             Task { @MainActor [weak self] in
-                self?.isPossible = possible
+                guard let self,
+                      let current = self.pictureInPictureController,
+                      ObjectIdentifier(current) == controllerID else { return }
+                self.isPossible = possible
+            }
+        }
+        pictureInPictureSuspendedObservation = controller.observe(
+            \.isPictureInPictureSuspended,
+            options: [.new]
+        ) { [weak self] _, change in
+            guard change.newValue == true else { return }
+            Task { @MainActor [weak self] in
+                guard let self,
+                      let current = self.pictureInPictureController,
+                      ObjectIdentifier(current) == controllerID,
+                      self.contentMode == .hiddenCarrier,
+                      self.isActive,
+                      !self.isVisuallyHidden else { return }
+                self.applyVideoCallGeometry(hidden: true)
             }
         }
     }
 
     private func rebuildRenderingPipeline() {
         pictureInPicturePossibleObservation = nil
+        pictureInPictureSuspendedObservation = nil
         pictureInPictureController = nil
         isPossible = false
 
         displayLayer.removeFromSuperlayer()
-        nativePlayerLayer?.removeFromSuperlayer()
+        videoCallSourceView?.removeFromSuperview()
 
         switch contentMode {
         case .liveReadings:
-            tearDownNativeCarrier()
+            tearDownVideoCallCarrier()
             let replacement = AVSampleBufferDisplayLayer()
             configure(replacement)
             displayLayer = replacement
             playbackTimebase = nil
             configurePlaybackTimebase()
-        case .nativeCarrier:
-            configureNativeCarrier()
+        case .hiddenCarrier:
+            configureVideoCallCarrier()
         }
 
         if let sourceView {
-            attachActiveLayer(to: sourceView)
-            layoutActiveLayer(in: sourceView.bounds)
+            attachActiveSurface(to: sourceView)
+            layoutActiveSurface(in: sourceView.bounds)
         }
     }
 
-    private func configureNativeCarrier() {
-        guard nativePlayer == nil else { return }
-        guard let url = Bundle.main.url(forResource: "BlankPiP", withExtension: "mp4") else {
-            errorMessage = "Native Picture in Picture carrier is missing."
-            return
-        }
-        let item = AVPlayerItem(url: url)
-        let player = AVQueuePlayer()
-        player.isMuted = true
-        player.actionAtItemEnd = .none
-        let looper = AVPlayerLooper(player: player, templateItem: item)
-        let layer = AVPlayerLayer(player: player)
-        layer.videoGravity = .resizeAspect
-        layer.backgroundColor = UIColor.black.cgColor
-        nativePlayer = player
-        nativeLooper = looper
-        nativePlayerLayer = layer
+    private func configureVideoCallCarrier() {
+        guard videoCallContentController == nil else { return }
+
+        let contentController = AVPictureInPictureVideoCallViewController()
+        contentController.preferredContentSize = Self.visibleVideoCallSize
+        contentController.view.backgroundColor = .clear
+        contentController.view.isOpaque = false
+        contentController.view.clipsToBounds = true
+
+        let contentView = UIView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.backgroundColor = .clear
+        contentView.isOpaque = false
+        contentController.view.addSubview(contentView)
+        NSLayoutConstraint.activate([
+            contentView.leadingAnchor.constraint(equalTo: contentController.view.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: contentController.view.trailingAnchor),
+            contentView.topAnchor.constraint(equalTo: contentController.view.topAnchor),
+            contentView.bottomAnchor.constraint(equalTo: contentController.view.bottomAnchor)
+        ])
+
+        let source = UIView(frame: CGRect(origin: .zero, size: Self.visibleVideoCallSize))
+        source.backgroundColor = .clear
+        source.isOpaque = false
+        source.clipsToBounds = true
+
+        videoCallContentController = contentController
+        videoCallContentView = contentView
+        videoCallSourceView = source
+        isVisuallyHidden = false
     }
 
-    private func tearDownNativeCarrier() {
-        nativePlayer?.pause()
-        nativePlayerLayer?.removeFromSuperlayer()
-        nativePlayerLayer = nil
-        nativeLooper = nil
-        nativePlayer = nil
+    private func tearDownVideoCallCarrier() {
+        videoCallSourceView?.removeFromSuperview()
+        videoCallContentView?.removeFromSuperview()
+        videoCallSourceView = nil
+        videoCallContentView = nil
+        videoCallContentController = nil
+        isVisuallyHidden = false
     }
 
-    private func attachActiveLayer(to view: UIView) {
+    private func attachActiveSurface(to view: UIView) {
         switch contentMode {
         case .liveReadings:
             view.layer.addSublayer(displayLayer)
-        case .nativeCarrier:
-            configureNativeCarrier()
-            if let nativePlayerLayer {
-                view.layer.addSublayer(nativePlayerLayer)
+        case .hiddenCarrier:
+            configureVideoCallCarrier()
+            if let videoCallSourceView {
+                view.addSubview(videoCallSourceView)
             }
         }
     }
 
-    private func layoutActiveLayer(in bounds: CGRect) {
+    private func layoutActiveSurface(in bounds: CGRect) {
         displayLayer.frame = bounds
-        nativePlayerLayer?.frame = bounds
+        guard contentMode == .hiddenCarrier, let videoCallSourceView else { return }
+        let targetSize = isVisuallyHidden
+            ? Self.hiddenVideoCallSize
+            : Self.visibleVideoCallSize
+        videoCallSourceView.frame = CGRect(
+            x: bounds.midX - targetSize.width / 2,
+            y: bounds.midY - targetSize.height / 2,
+            width: targetSize.width,
+            height: targetSize.height
+        )
+    }
+
+    private func applyVideoCallGeometry(hidden: Bool) {
+        guard let videoCallContentController else { return }
+        let size = hidden ? Self.hiddenVideoCallSize : Self.visibleVideoCallSize
+        isVisuallyHidden = hidden
+        UIView.performWithoutAnimation {
+            videoCallContentController.preferredContentSize = size
+            if hidden {
+                videoCallContentController.view.alpha = 0.01
+                videoCallContentView?.alpha = 0.01
+            } else {
+                videoCallContentController.view.alpha = 1
+                videoCallContentView?.alpha = 1
+            }
+            if let sourceView {
+                layoutActiveSurface(in: sourceView.bounds)
+                sourceView.layoutIfNeeded()
+            }
+            videoCallContentController.view.layoutIfNeeded()
+        }
     }
 
     private func attachToPendingPreviewIfNeeded() {
@@ -403,9 +488,9 @@ final class TelemetryPictureInPictureController: NSObject {
             sourceView = pendingSourceView
             sourceViewWasDismantled = false
             displayLayer.removeFromSuperlayer()
-            nativePlayerLayer?.removeFromSuperlayer()
-            attachActiveLayer(to: pendingSourceView)
-            layoutActiveLayer(in: pendingSourceView.bounds)
+            videoCallSourceView?.removeFromSuperview()
+            attachActiveSurface(to: pendingSourceView)
+            layoutActiveSurface(in: pendingSourceView.bounds)
             if contentMode == .liveReadings {
                 renderLatest()
             }
@@ -413,6 +498,7 @@ final class TelemetryPictureInPictureController: NSObject {
             self.pendingSourceView = nil
             sourceViewWasDismantled = false
             displayLayer.removeFromSuperlayer()
+            videoCallSourceView?.removeFromSuperview()
             sourceView = nil
             isPossible = false
         }
@@ -578,7 +664,6 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
     ) {
         isStarting = false
         isActive = false
-        nativePlayer?.pause()
         errorMessage = "Picture in Picture could not start."
         displayLayer.sampleBufferRenderer.flush()
         if pendingPipelineRebuild {
@@ -593,7 +678,9 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
     ) {
         isStarting = false
         isActive = false
-        nativePlayer?.pause()
+        if contentMode == .hiddenCarrier {
+            applyVideoCallGeometry(hidden: false)
+        }
         displayLayer.sampleBufferRenderer.flush()
         if pendingPipelineRebuild {
             pendingPipelineRebuild = false
@@ -648,10 +735,9 @@ extension TelemetryPictureInPictureController: AVPictureInPictureSampleBufferPla
     func pictureInPictureControllerShouldProhibitBackgroundAudioPlayback(
         _ pictureInPictureController: AVPictureInPictureController
     ) -> Bool {
-        // MiniWatts' manually enabled Live Activity uses an inaudible audio engine
-        // to keep local PMU reads eligible in the background. Prohibiting background
-        // audio here let PiP remain visible while silently suspending that engine,
-        // so the Dynamic Island became stale until the app returned to the front.
+        // The telemetry stream and its media session must remain eligible while
+        // PiP is active; otherwise the visible PiP can survive while its sensor
+        // values and the Dynamic Island stop advancing in the background.
         false
     }
 }

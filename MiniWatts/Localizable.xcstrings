@@ -2115,42 +2115,72 @@
         }
       }
     },
-    "Native carrier mode shows a blank Picture in Picture window. It follows the standard AVPlayerLayer path so you can test whether iOS fully fades the side restore indicator while sensor sampling and Dynamic Island updates continue." : {
+    "Hidden carrier mode uses the system video-call Picture in Picture container. After it is parked at the screen edge, MiniWatts shrinks it to 0.1 pt so no PlayerLayer line remains." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "原生载体模式会显示一个空白画中画窗口，并完全采用标准 AVPlayerLayer 路线，用于测试 iOS 是否会在传感器采样和灵动岛更新继续运行时彻底淡出侧边恢复指示。"
+            "value" : "隐藏载体模式使用系统的视频通话画中画容器。停靠到屏幕边缘后，MiniWatts 会将其压缩到 0.1 pt，因此不会残留 PlayerLayer 的小细线。"
           }
         }
       }
     },
-    "Native Picture in Picture carrier" : {
+    "0.1 pt hidden Picture in Picture carrier" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "原生画中画载体"
+            "value" : "0.1 pt 隐藏画中画载体"
           }
         }
       }
     },
-    "Native Picture in Picture carrier is missing." : {
+    "Hide floating window to 0.1 pt" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "缺少原生画中画载体。"
+            "value" : "将悬浮窗隐藏到 0.1 pt"
           }
         }
       }
     },
-    "Stop Picture in Picture before changing modes. Swipe the window to either screen edge to park it; iOS handles docking and decides whether the restore indicator fades after the window is idle." : {
+    "Restore floating window" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "切换模式前请先停止画中画。将窗口滑向任一屏幕边缘即可停靠；停靠动作以及静置后恢复指示是否淡出均由 iOS 决定。"
+            "value" : "恢复悬浮窗"
+          }
+        }
+      }
+    },
+    "Start Picture in Picture before changing its hidden state." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先启动画中画，再更改隐藏状态。"
+          }
+        }
+      }
+    },
+    "Stop Picture in Picture before changing modes. Swipe the floating monitor to either screen edge when you want to park it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换模式前请先停止画中画。需要停靠时，将悬浮监视器滑向任一屏幕边缘。"
+          }
+        }
+      }
+    },
+    "Start Picture in Picture, then swipe it to either screen edge. MiniWatts hides it automatically when iOS reports that it is parked; if iOS does not report that state, return here and tap Hide floating window to 0.1 pt. Open MiniWatts again to restore or stop it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先启动画中画，再将它滑向任一屏幕边缘。iOS 报告已停靠后，MiniWatts 会自动隐藏；如果 iOS 没有报告该状态，请返回这里点击“将悬浮窗隐藏到 0.1 pt”。再次打开 MiniWatts 可以恢复或停止画中画。"
           }
         }
       }

@@ -65,7 +65,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Toggle("Show live readings in the floating window", isOn: Binding(
                     get: { contentMode.wrappedValue == .liveReadings },
-                    set: { contentMode.wrappedValue = $0 ? .liveReadings : .nativeCarrier }
+                    set: { contentMode.wrappedValue = $0 ? .liveReadings : .hiddenCarrier }
                 ))
                 .tint(.mwAccent)
                 .disabled(pictureInPicture.keepsSensorSamplingActive)
@@ -115,8 +115,28 @@ struct SettingsView: View {
                                   systemImage: "exclamationmark.circle")
                     }
                 } else {
-                    EmptyNote(text: "Native carrier mode shows a blank Picture in Picture window. It follows the standard AVPlayerLayer path so you can test whether iOS fully fades the side restore indicator while sensor sampling and Dynamic Island updates continue.",
+                    EmptyNote(text: "Hidden carrier mode uses the system video-call Picture in Picture container. After it is parked at the screen edge, MiniWatts shrinks it to 0.1 pt so no PlayerLayer line remains.",
                               systemImage: "pip")
+
+                    if pictureInPicture.isActive {
+                        Button {
+                            pictureInPicture.setVisuallyHidden(
+                                !pictureInPicture.isVisuallyHidden
+                            )
+                        } label: {
+                            Label(
+                                pictureInPicture.isVisuallyHidden
+                                    ? "Restore floating window"
+                                    : "Hide floating window to 0.1 pt",
+                                systemImage: pictureInPicture.isVisuallyHidden
+                                    ? "rectangle.inset.filled"
+                                    : "rectangle.compress.vertical"
+                            )
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.mwAccent)
+                    }
                 }
 
                 Button {
@@ -166,7 +186,9 @@ struct SettingsView: View {
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Stop Picture in Picture before changing modes. Swipe the window to either screen edge to park it; iOS handles docking and decides whether the restore indicator fades after the window is idle.")
+                Text(contentMode.wrappedValue == .liveReadings
+                     ? "Stop Picture in Picture before changing modes. Swipe the floating monitor to either screen edge when you want to park it."
+                     : "Start Picture in Picture, then swipe it to either screen edge. MiniWatts hides it automatically when iOS reports that it is parked; if iOS does not report that state, return here and tap Hide floating window to 0.1 pt. Open MiniWatts again to restore or stop it.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
