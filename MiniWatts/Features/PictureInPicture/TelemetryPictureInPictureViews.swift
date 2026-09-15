@@ -35,7 +35,7 @@ struct TelemetryPictureInPicturePreview: UIViewRepresentable {
     }
 }
 
-/// A SwiftUI-only copy of the latest frame for Settings. The real AVKit video-call
+/// A SwiftUI-only copy of the latest frame for Settings. The real AVKit sample-buffer
 /// source stays hosted by RootView for the lifetime of the app.
 struct TelemetryPictureInPictureInlinePreview: View {
     let controller: TelemetryPictureInPictureController

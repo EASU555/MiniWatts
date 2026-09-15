@@ -22,7 +22,7 @@ struct RootView: View {
         }
         .tint(.mwAccent)
         .background(alignment: .topLeading) {
-            // AVKit requires its presenting video-call source to remain in the
+            // AVKit requires its sample-buffer source to remain in the
             // window hierarchy. Hosting it here avoids Settings redraws moving or
             // destroying the active PiP source.
             TelemetryPictureInPicturePreview(controller: pictureInPicture)

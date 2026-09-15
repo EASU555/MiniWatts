@@ -1,5 +1,7 @@
 import AVFoundation
 import AVKit
+import CoreMedia
+import CoreVideo
 import Observation
 import SwiftUI
 import UIKit
@@ -81,10 +83,8 @@ final class TelemetryPictureInPictureController: NSObject {
     private static let temperatureSelectionKey = "pictureInPictureTemperatureSelection"
     private static let autoHideWhenDockedKey = "pictureInPictureAutoHideWhenDocked"
     private static let frameSize = CGSize(width: 640, height: 360)
-    /// The video-call content-source route accepts a fractional height. At 0.1 pt
-    /// the active PiP session remains alive, while its docked system tab has no
-    /// visible surface left to draw.
-    private static let hiddenFrameSize = CGSize(width: 640, height: 0.1)
+    private static let hiddenBufferSize = CGSize(width: 640, height: 1)
+    private static let hiddenPresentationSize = CGSize(width: 640, height: 0.1)
 
     var showPower: Bool {
         didSet {
@@ -134,11 +134,10 @@ final class TelemetryPictureInPictureController: NSObject {
     private(set) var isVisuallyHidden = false
     private(set) var errorMessage: LocalizedStringResource?
 
+    @ObservationIgnored private(set) var displayLayer = AVSampleBufferDisplayLayer()
     @ObservationIgnored private var pictureInPictureController: AVPictureInPictureController?
     @ObservationIgnored private var pictureInPicturePossibleObservation: NSKeyValueObservation?
-    @ObservationIgnored private var pictureInPictureSuspendedObservation: NSKeyValueObservation?
-    @ObservationIgnored private var videoCallContentController: AVPictureInPictureVideoCallViewController?
-    @ObservationIgnored private weak var videoCallImageView: UIImageView?
+    @ObservationIgnored private var playbackTimebase: CMTimebase?
     /// AVKit does not guarantee a terminal delegate callback when a start request is
     /// interrupted by an audio-session or scene transition. Keep one bounded attempt
     /// so Settings can never remain stuck in its loading state.
@@ -151,10 +150,10 @@ final class TelemetryPictureInPictureController: NSObject {
     @ObservationIgnored var prepareLiveActivityForStart: (() -> Bool)?
     @ObservationIgnored var recoverLiveActivityAfterTransition: (() -> Void)?
     // Kept strongly while PiP is active so SwiftUI dismantling its representable
-    // cannot also destroy the video-call source AVKit is still presenting.
+    // cannot also destroy the layer tree AVKit is still presenting.
     @ObservationIgnored private var sourceView: UIView?
     /// SwiftUI may replace the inline preview while a settings value changes.
-    /// Moving the active video-call source to that replacement interrupts the
+    /// Moving the active sample-buffer layer to that replacement interrupts the
     /// content source AVKit is presenting and can leave the PiP window black.
     /// Remember the new host and reattach only after PiP has stopped.
     @ObservationIgnored private weak var pendingSourceView: UIView?
@@ -171,6 +170,9 @@ final class TelemetryPictureInPictureController: NSObject {
             .flatMap(TelemetryTemperatureSelection.init(rawValue:)) ?? .all
         autoHideWhenDocked = defaults.object(forKey: Self.autoHideWhenDockedKey) as? Bool ?? true
         super.init()
+
+        configure(displayLayer)
+        configurePlaybackTimebase()
     }
 
     var isSupported: Bool {
@@ -186,17 +188,15 @@ final class TelemetryPictureInPictureController: NSObject {
             return
         }
 
-        let needsAttachment = sourceView !== view
-        if needsAttachment {
-            // Unlike the old sample-buffer route, a video-call ContentSource owns
-            // the exact UIView passed at construction time. Rebuild whenever
-            // SwiftUI replaces that inactive host so AVKit never points at a
-            // dismantled view.
-            discardPictureInPictureController()
-        }
+        let needsAttachment = sourceView !== view || displayLayer.superlayer !== view.layer
         sourceView = view
         pendingSourceView = nil
         sourceViewWasDismantled = false
+        if needsAttachment {
+            displayLayer.removeFromSuperlayer()
+            view.layer.addSublayer(displayLayer)
+        }
+        displayLayer.frame = view.bounds
         ensurePictureInPictureController()
         if needsAttachment {
             renderLatest()
@@ -205,6 +205,7 @@ final class TelemetryPictureInPictureController: NSObject {
 
     func layoutSource(in bounds: CGRect, hostedBy view: UIView) {
         guard sourceView === view else { return }
+        displayLayer.frame = bounds
     }
 
     func detach(from view: UIView) {
@@ -216,7 +217,7 @@ final class TelemetryPictureInPictureController: NSObject {
             sourceViewWasDismantled = true
             return
         }
-        discardPictureInPictureController()
+        displayLayer.removeFromSuperlayer()
         sourceView = nil
         sourceViewWasDismantled = false
         isPossible = false
@@ -232,8 +233,8 @@ final class TelemetryPictureInPictureController: NSObject {
         guard isSupported, hasSelectedContent, !keepsSensorSamplingActive else { return }
         errorMessage = nil
 
-        // Starting the video-call PiP content source can rebuild the shared audio
-        // graph. If the Live Activity keeper is already running, reapplying the
+        // Starting PiP can rebuild the shared audio graph. If the Live Activity
+        // keeper is already running, reapplying the
         // category here can stop that graph and strand ActivityKit on stale data.
         // Let PowerMonitor establish ownership first and only configure the session
         // ourselves when there is no active Live Activity keeper.
@@ -254,14 +255,15 @@ final class TelemetryPictureInPictureController: NSObject {
             return
         }
 
-        // Prefer the controller that is already attached to the stable RootView
-        // source. Replacing it on every tap creates a race with AVKit readiness.
+        // Prefer the controller that has already been displaying one-second frames.
+        // Replacing it on every tap creates a race with AVKit readiness.
         sourceView.layoutIfNeeded()
         restoreVisiblePresentation()
         renderLatest()
         ensurePictureInPictureController()
         refreshPossibleState()
-        if pictureInPictureController == nil {
+        if displayLayer.sampleBufferRenderer.status == .failed
+            || pictureInPictureController == nil {
             rebuildRenderingPipeline()
             renderLatest()
             ensurePictureInPictureController()
@@ -298,6 +300,7 @@ final class TelemetryPictureInPictureController: NSObject {
         if isActive, pictureInPictureController?.isPictureInPictureActive != true {
             isActive = false
             discardPictureInPictureController()
+            displayLayer.sampleBufferRenderer.flush()
             renderLatest()
             ensurePictureInPictureController()
             attachToPendingPreviewIfNeeded()
@@ -371,6 +374,7 @@ final class TelemetryPictureInPictureController: NSObject {
         isActive = false
         errorMessage = message
         discardPictureInPictureController()
+        displayLayer.sampleBufferRenderer.flush()
         renderLatest()
         ensurePictureInPictureController()
         attachToPendingPreviewIfNeeded()
@@ -383,33 +387,15 @@ final class TelemetryPictureInPictureController: NSObject {
     }
 
     private func ensurePictureInPictureController() {
-        guard pictureInPictureController == nil,
-              isSupported,
-              let sourceView else { return }
-
-        let contentController = AVPictureInPictureVideoCallViewController()
-        contentController.preferredContentSize = Self.frameSize
-        contentController.view.backgroundColor = .black
-        contentController.view.isOpaque = true
-        contentController.view.clipsToBounds = true
-
-        let imageView = UIImageView(frame: contentController.view.bounds)
-        imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        imageView.contentMode = .scaleAspectFit
-        imageView.backgroundColor = .black
-        imageView.isOpaque = true
-        contentController.view.addSubview(imageView)
-
+        guard pictureInPictureController == nil, isSupported else { return }
         let source = AVPictureInPictureController.ContentSource(
-            activeVideoCallSourceView: sourceView,
-            contentViewController: contentController
+            sampleBufferDisplayLayer: displayLayer,
+            playbackDelegate: self
         )
         let controller = AVPictureInPictureController(contentSource: source)
         controller.delegate = self
         controller.requiresLinearPlayback = true
         controller.canStartPictureInPictureAutomaticallyFromInline = false
-        videoCallContentController = contentController
-        videoCallImageView = imageView
         pictureInPictureController = controller
         let controllerID = ObjectIdentifier(controller)
         pictureInPicturePossibleObservation = controller.observe(
@@ -424,23 +410,23 @@ final class TelemetryPictureInPictureController: NSObject {
                 self.isPossible = possible
             }
         }
-        pictureInPictureSuspendedObservation = controller.observe(
-            \.isPictureInPictureSuspended,
-            options: [.new]
-        ) { [weak self] _, change in
-            guard change.newValue == true else { return }
-            Task { @MainActor [weak self] in
-                guard let self,
-                      let current = self.pictureInPictureController,
-                      ObjectIdentifier(current) == controllerID else { return }
-                self.scheduleAutomaticHide(delay: .milliseconds(350))
-            }
-        }
         renderLatest()
     }
 
     private func rebuildRenderingPipeline() {
         discardPictureInPictureController()
+
+        displayLayer.removeFromSuperlayer()
+        let replacement = AVSampleBufferDisplayLayer()
+        configure(replacement)
+        displayLayer = replacement
+        playbackTimebase = nil
+        configurePlaybackTimebase()
+
+        if let sourceView {
+            sourceView.layer.addSublayer(replacement)
+            replacement.frame = sourceView.bounds
+        }
         ensurePictureInPictureController()
     }
 
@@ -448,11 +434,8 @@ final class TelemetryPictureInPictureController: NSObject {
         autoHideTask?.cancel()
         autoHideTask = nil
         pictureInPicturePossibleObservation = nil
-        pictureInPictureSuspendedObservation = nil
         pictureInPictureController?.delegate = nil
         pictureInPictureController = nil
-        videoCallImageView = nil
-        videoCallContentController = nil
         isVisuallyHidden = false
         isPossible = false
     }
@@ -463,11 +446,14 @@ final class TelemetryPictureInPictureController: NSObject {
             self.pendingSourceView = nil
             sourceView = pendingSourceView
             sourceViewWasDismantled = false
-            rebuildRenderingPipeline()
+            displayLayer.removeFromSuperlayer()
+            pendingSourceView.layer.addSublayer(displayLayer)
+            displayLayer.frame = pendingSourceView.bounds
             renderLatest()
         } else if sourceViewWasDismantled {
             self.pendingSourceView = nil
             sourceViewWasDismantled = false
+            displayLayer.removeFromSuperlayer()
             sourceView = nil
             isPossible = false
         }
@@ -479,9 +465,8 @@ final class TelemetryPictureInPictureController: NSObject {
               !isVisuallyHidden else { return }
         autoHideTask?.cancel()
         autoHideTask = Task { @MainActor [weak self] in
-            // Some iOS releases do not publish isPictureInPictureSuspended when the
-            // user swipes a video-call PiP to an edge. Use that signal when it does
-            // arrive, but retain this bounded fallback so the feature is reliable.
+            // iOS doesn't publish a reliable public callback for the edge-stash
+            // gesture. Keep the bounded delay that worked on-device instead.
             try? await Task.sleep(for: delay)
             guard !Task.isCancelled,
                   let self,
@@ -493,13 +478,10 @@ final class TelemetryPictureInPictureController: NSObject {
     }
 
     private func hideDockedPresentation() {
-        guard let videoCallContentController else { return }
         isVisuallyHidden = true
-        UIView.performWithoutAnimation {
-            videoCallContentController.preferredContentSize = Self.hiddenFrameSize
-            videoCallImageView?.isHidden = true
-            videoCallContentController.view.layoutIfNeeded()
-        }
+        setSystemControlsHidden(true)
+        updateDisplayPresentationSize(Self.hiddenPresentationSize)
+        renderLatest()
         recoverLiveActivityAfterTransition?()
     }
 
@@ -507,11 +489,58 @@ final class TelemetryPictureInPictureController: NSObject {
         autoHideTask?.cancel()
         autoHideTask = nil
         isVisuallyHidden = false
-        UIView.performWithoutAnimation {
-            videoCallContentController?.preferredContentSize = Self.frameSize
-            videoCallImageView?.isHidden = false
-            videoCallContentController?.view.layoutIfNeeded()
-        }
+        setSystemControlsHidden(false)
+        updateDisplayPresentationSize(Self.frameSize)
+        renderLatest()
+    }
+
+    private func setSystemControlsHidden(_ hidden: Bool) {
+        guard let pictureInPictureController else { return }
+        let selector = NSSelectorFromString("setControlsStyle:")
+        guard pictureInPictureController.responds(to: selector) else { return }
+        pictureInPictureController.setValue(hidden ? 2 : 0, forKey: "controlsStyle")
+    }
+
+    /// AVSampleBufferDisplayLayer already updates this internal presentation size
+    /// whenever its input format changes. Calling the same selector immediately
+    /// avoids waiting for AVKit to notice the one-pixel fallback buffer.
+    private func updateDisplayPresentationSize(_ size: CGSize) {
+        let selector = NSSelectorFromString("_updatePresentationSize:")
+        guard displayLayer.responds(to: selector),
+              let implementation = displayLayer.method(for: selector) else { return }
+        typealias UpdatePresentationSize = @convention(c) (
+            AnyObject,
+            Selector,
+            CGSize
+        ) -> Void
+        let update = unsafeBitCast(
+            implementation,
+            to: UpdatePresentationSize.self
+        )
+        update(displayLayer, selector, size)
+    }
+
+    private func configure(_ layer: AVSampleBufferDisplayLayer) {
+        layer.videoGravity = .resizeAspect
+        layer.backgroundColor = UIColor.black.cgColor
+        layer.preventsDisplaySleepDuringVideoPlayback = false
+    }
+
+    private func configurePlaybackTimebase() {
+        guard playbackTimebase == nil else { return }
+        let clock = CMClockGetHostTimeClock()
+        var optionalTimebase: CMTimebase?
+        guard CMTimebaseCreateWithSourceClock(
+            allocator: kCFAllocatorDefault,
+            sourceClock: clock,
+            timebaseOut: &optionalTimebase
+        ) == noErr, let timebase = optionalTimebase else { return }
+
+        let now = CMClockGetTime(clock)
+        guard CMTimebaseSetTime(timebase, time: now) == noErr,
+              CMTimebaseSetRate(timebase, rate: 1) == noErr else { return }
+        playbackTimebase = timebase
+        displayLayer.controlTimebase = timebase
     }
 
     private func refreshPossibleState() {
@@ -533,12 +562,89 @@ final class TelemetryPictureInPictureController: NSObject {
         let renderer = ImageRenderer(content: content)
         renderer.scale = 1
         renderer.isOpaque = true
-        guard let image = renderer.cgImage else { return }
-        videoCallImageView?.image = UIImage(cgImage: image)
+        let outputSize = isVisuallyHidden ? Self.hiddenBufferSize : Self.frameSize
+        guard let image = renderer.cgImage,
+              let sampleBuffer = Self.makeSampleBuffer(from: image, size: outputSize) else { return }
+
+        let videoRenderer = displayLayer.sampleBufferRenderer
+        if videoRenderer.status == .failed {
+            videoRenderer.flush()
+        }
+        videoRenderer.enqueue(sampleBuffer)
         Task { @MainActor [weak self] in
             await Task.yield()
             self?.refreshPossibleState()
         }
+    }
+
+    private static func makeSampleBuffer(from image: CGImage, size: CGSize) -> CMSampleBuffer? {
+        let width = Int(size.width)
+        let height = Int(size.height)
+        let attributes: [CFString: Any] = [
+            kCVPixelBufferCGImageCompatibilityKey: true,
+            kCVPixelBufferCGBitmapContextCompatibilityKey: true,
+            kCVPixelBufferIOSurfacePropertiesKey: [:]
+        ]
+        var optionalPixelBuffer: CVPixelBuffer?
+        guard CVPixelBufferCreate(kCFAllocatorDefault,
+                                  width,
+                                  height,
+                                  kCVPixelFormatType_32BGRA,
+                                  attributes as CFDictionary,
+                                  &optionalPixelBuffer) == kCVReturnSuccess,
+              let pixelBuffer = optionalPixelBuffer else { return nil }
+
+        CVPixelBufferLockBaseAddress(pixelBuffer, [])
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
+        guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer),
+              let context = CGContext(
+                data: baseAddress,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: CVPixelBufferGetBytesPerRow(pixelBuffer),
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue
+                    | CGImageAlphaInfo.premultipliedFirst.rawValue
+              ) else { return nil }
+
+        context.draw(image, in: CGRect(origin: .zero, size: size))
+
+        var optionalFormat: CMVideoFormatDescription?
+        guard CMVideoFormatDescriptionCreateForImageBuffer(
+            allocator: kCFAllocatorDefault,
+            imageBuffer: pixelBuffer,
+            formatDescriptionOut: &optionalFormat
+        ) == noErr, let format = optionalFormat else { return nil }
+
+        let timestamp = CMClockGetTime(CMClockGetHostTimeClock())
+        var timing = CMSampleTimingInfo(duration: CMTime(value: 1, timescale: 1),
+                                        presentationTimeStamp: timestamp,
+                                        decodeTimeStamp: .invalid)
+        var optionalSampleBuffer: CMSampleBuffer?
+        guard CMSampleBufferCreateReadyWithImageBuffer(
+            allocator: kCFAllocatorDefault,
+            imageBuffer: pixelBuffer,
+            formatDescription: format,
+            sampleTiming: &timing,
+            sampleBufferOut: &optionalSampleBuffer
+        ) == noErr, let sampleBuffer = optionalSampleBuffer else { return nil }
+
+        if let attachments = CMSampleBufferGetSampleAttachmentsArray(
+            sampleBuffer,
+            createIfNecessary: true
+        ) {
+            let dictionary = unsafeBitCast(
+                CFArrayGetValueAtIndex(attachments, 0),
+                to: CFMutableDictionary.self
+            )
+            CFDictionarySetValue(
+                dictionary,
+                Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
+                Unmanaged.passUnretained(kCFBooleanTrue).toOpaque()
+            )
+        }
+        return sampleBuffer
     }
 
 }
@@ -575,6 +681,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         invalidateStartAttempt()
         isStarting = false
         isActive = false
+        displayLayer.sampleBufferRenderer.flush()
         restoreVisiblePresentation()
         attachToPendingPreviewIfNeeded()
         refreshPossibleState()
@@ -586,5 +693,48 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
     ) {
         completionHandler(true)
+    }
+}
+
+extension TelemetryPictureInPictureController: AVPictureInPictureSampleBufferPlaybackDelegate {
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        setPlaying playing: Bool
+    ) {
+        pictureInPictureController.invalidatePlaybackState()
+    }
+
+    func pictureInPictureControllerTimeRangeForPlayback(
+        _ pictureInPictureController: AVPictureInPictureController
+    ) -> CMTimeRange {
+        CMTimeRange(start: .zero, duration: .positiveInfinity)
+    }
+
+    func pictureInPictureControllerIsPlaybackPaused(
+        _ pictureInPictureController: AVPictureInPictureController
+    ) -> Bool {
+        false
+    }
+
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        didTransitionToRenderSize newRenderSize: CMVideoDimensions
+    ) {}
+
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        skipByInterval skipInterval: CMTime,
+        completion completionHandler: @escaping @Sendable () -> Void
+    ) {
+        completionHandler()
+    }
+
+    func pictureInPictureControllerShouldProhibitBackgroundAudioPlayback(
+        _ pictureInPictureController: AVPictureInPictureController
+    ) -> Bool {
+        // The Live Activity and PiP deliberately share the inaudible background
+        // sampling session. Returning true here makes AVKit suspend the keeper and
+        // freezes the Dynamic Island as soon as the floating window opens.
+        false
     }
 }
