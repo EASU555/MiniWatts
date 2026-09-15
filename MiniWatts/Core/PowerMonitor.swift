@@ -200,16 +200,6 @@ final class PowerMonitor {
         refreshLiveActivityBackgroundExecution()
     }
 
-    /// Gives ActivityKit's background refresh path first ownership of the shared
-    /// audio session before AVKit begins a PiP transition. Returning true tells the
-    /// PiP controller not to reconfigure that session out from under the keeper.
-    @discardableResult
-    func prepareLiveActivityForPictureInPicture() -> Bool {
-        guard liveActivityEnabled else { return false }
-        recoverLiveActivityPresentation()
-        return liveActivityBackgroundRefreshActive
-    }
-
     /// Stops the tick but leaves any open session open.
     ///
     /// This is what ordinary backgrounding does now; an active floating PiP keeps the

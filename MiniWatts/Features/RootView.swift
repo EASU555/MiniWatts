@@ -22,7 +22,7 @@ struct RootView: View {
         }
         .tint(.mwAccent)
         .background(alignment: .topLeading) {
-            // AVKit requires its sample-buffer source to remain in the
+            // AVKit requires its presenting sample-buffer layer to remain in the
             // window hierarchy. Hosting it here avoids Settings redraws moving or
             // destroying the active PiP source.
             TelemetryPictureInPicturePreview(controller: pictureInPicture)
@@ -31,12 +31,6 @@ struct RootView: View {
                 .allowsHitTesting(false)
         }
         .task {
-            pictureInPicture.prepareLiveActivityForStart = { [weak monitor] in
-                monitor?.prepareLiveActivityForPictureInPicture() ?? false
-            }
-            pictureInPicture.recoverLiveActivityAfterTransition = { [weak monitor] in
-                monitor?.recoverLiveActivityPresentation()
-            }
             monitor.onTick = { [weak monitor, pictureInPicture, widgetPublisher] snapshot in
                 guard let monitor else { return }
                 pictureInPicture.update(

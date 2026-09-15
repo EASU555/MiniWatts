@@ -2165,12 +2165,12 @@
         }
       }
     },
-    "With automatic hiding enabled, open Picture in Picture and swipe it to either screen edge. After four seconds MiniWatts shrinks it until it is invisible without stopping monitoring or Dynamic Island updates. Turn this option off to show it again." : {
+    "With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts hides the docked surface without changing the video stream or Dynamic Island lifecycle. Turn this option off to show it again." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "开启“打开后自动隐藏”后，启动画中画并将其滑向任一屏幕边缘。四秒后 MiniWatts 会将其缩小至不可见，但监测和灵动岛更新会继续；关闭此选项即可重新显示。"
+            "value" : "开启“打开后自动隐藏”后，将画中画滑向任一屏幕边缘。MiniWatts 会隐藏停靠画面，但不会改变视频流或灵动岛生命周期；关闭此选项即可重新显示。"
           }
         }
       }
@@ -2355,12 +2355,12 @@
         }
       }
     },
-    "Start Picture in Picture here before leaving MiniWatts. When Dynamic Island is enabled, MiniWatts moves to the background first so iOS can start both system presentations in the correct order. Sensor sampling stays active while the floating window is open." : {
+    "Start Picture in Picture here before leaving MiniWatts. Picture in Picture and Dynamic Island run independently, and sensor sampling stays active while either presentation is enabled." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "离开 MiniWatts 前请先在这里启动画中画。灵动岛开启时，MiniWatts 会先进入后台，让 iOS 按正确顺序启动两种系统展示；悬浮窗口打开期间会持续采样。"
+            "value" : "离开 MiniWatts 前请先在这里启动画中画。画中画和灵动岛相互独立运行；任一展示处于开启状态时，传感器都会持续采样。"
           }
         }
       }

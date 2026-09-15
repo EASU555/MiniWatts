@@ -83,8 +83,9 @@ final class TelemetryPictureInPictureController: NSObject {
     private static let temperatureSelectionKey = "pictureInPictureTemperatureSelection"
     private static let autoHideWhenDockedKey = "pictureInPictureAutoHideWhenDocked"
     private static let frameSize = CGSize(width: 640, height: 360)
-    private static let hiddenBufferSize = CGSize(width: 640, height: 1)
-    private static let hiddenPresentationSize = CGSize(width: 640, height: 0.1)
+    /// A zero-height presentation removes AVKit's edge-stash surface without
+    /// changing the 640 x 360 sample-buffer format that keeps PiP stable.
+    private static let hiddenPresentationSize = CGSize(width: 640, height: 0)
 
     var showPower: Bool {
         didSet {
@@ -121,7 +122,7 @@ final class TelemetryPictureInPictureController: NSObject {
         didSet {
             UserDefaults.standard.set(autoHideWhenDocked, forKey: Self.autoHideWhenDockedKey)
             if autoHideWhenDocked {
-                scheduleAutomaticHide()
+                scheduleAutoHideIfDocked()
             } else {
                 restoreVisiblePresentation()
             }
@@ -137,19 +138,14 @@ final class TelemetryPictureInPictureController: NSObject {
     @ObservationIgnored private(set) var displayLayer = AVSampleBufferDisplayLayer()
     @ObservationIgnored private var pictureInPictureController: AVPictureInPictureController?
     @ObservationIgnored private var pictureInPicturePossibleObservation: NSKeyValueObservation?
+    @ObservationIgnored private var pictureInPictureSuspendedObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimebase: CMTimebase?
     /// AVKit does not guarantee a terminal delegate callback when a start request is
     /// interrupted by an audio-session or scene transition. Keep one bounded attempt
     /// so Settings can never remain stuck in its loading state.
     @ObservationIgnored private var startTask: Task<Void, Never>?
     @ObservationIgnored private var startAttempt = 0
-    @ObservationIgnored private var startsThroughBackgroundTransition = false
     @ObservationIgnored private var autoHideTask: Task<Void, Never>?
-    /// PowerMonitor installs these hooks from RootView so ActivityKit owns the
-    /// shared background-audio session before AVKit starts, then gets another
-    /// forced reconciliation after each PiP presentation transition.
-    @ObservationIgnored var prepareLiveActivityForStart: (() -> Bool)?
-    @ObservationIgnored var recoverLiveActivityAfterTransition: (() -> Void)?
     // Kept strongly while PiP is active so SwiftUI dismantling its representable
     // cannot also destroy the layer tree AVKit is still presenting.
     @ObservationIgnored private var sourceView: UIView?
@@ -234,22 +230,13 @@ final class TelemetryPictureInPictureController: NSObject {
         guard isSupported, hasSelectedContent, !keepsSensorSamplingActive else { return }
         errorMessage = nil
 
-        // Starting PiP can rebuild the shared audio graph. If the Live Activity
-        // keeper is already running, reapplying the
-        // category here can stop that graph and strand ActivityKit on stale data.
-        // Let PowerMonitor establish ownership first and only configure the session
-        // ourselves when there is no active Live Activity keeper.
-        let liveActivityOwnsAudioSession = prepareLiveActivityForStart?() ?? false
-        startsThroughBackgroundTransition = liveActivityOwnsAudioSession
-        if !liveActivityOwnsAudioSession {
-            do {
-                let session = AVAudioSession.sharedInstance()
-                try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
-                try session.setActive(true)
-            } catch {
-                errorMessage = "Picture in Picture audio mode could not start."
-                return
-            }
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try session.setActive(true)
+        } catch {
+            errorMessage = "Picture in Picture audio mode could not start."
+            return
         }
 
         guard let sourceView, sourceView.window != nil else {
@@ -258,7 +245,8 @@ final class TelemetryPictureInPictureController: NSObject {
         }
 
         // Prefer the controller that has already been displaying one-second frames.
-        // Replacing it on every tap creates a race with AVKit readiness.
+        // Throwing that ready controller away on every tap creates a race in which
+        // AVKit is asked to start before the replacement layer has been committed.
         sourceView.layoutIfNeeded()
         restoreVisiblePresentation()
         renderLatest()
@@ -283,8 +271,7 @@ final class TelemetryPictureInPictureController: NSObject {
     func stop() {
         invalidateStartAttempt()
         isStarting = false
-        startsThroughBackgroundTransition = false
-        pictureInPictureController?.canStartPictureInPictureAutomaticallyFromInline = false
+        restoreVisiblePresentation()
         pictureInPictureController?.stopPictureInPicture()
     }
 
@@ -341,28 +328,7 @@ final class TelemetryPictureInPictureController: NSObject {
             return
         }
 
-        if startsThroughBackgroundTransition {
-            // A manually started PiP from the foreground becomes this app's active
-            // system presentation and iOS suppresses its own Live Activity UI. Arm
-            // AVKit first, then let the background transition start PiP in the same
-            // order used by ordinary video apps. The private suspend selector is
-            // confined to this sideload-only build and simply performs the same
-            // scene transition as swiping Home.
-            controller.canStartPictureInPictureAutomaticallyFromInline = true
-            let suspendSelector = NSSelectorFromString("suspend")
-            guard UIApplication.shared.responds(to: suspendSelector) else {
-                failStartAttempt(
-                    attempt,
-                    message: "Picture in Picture could not enter the background automatically."
-                )
-                return
-            }
-            try? await Task.sleep(for: .milliseconds(250))
-            guard isCurrentStartAttempt(attempt) else { return }
-            UIApplication.shared.perform(suspendSelector)
-        } else {
-            controller.startPictureInPicture()
-        }
+        controller.startPictureInPicture()
 
         // Some iOS builds occasionally deliver neither didStart nor failedToStart
         // after accepting the request. Bound that transition and discard the wedged
@@ -387,11 +353,8 @@ final class TelemetryPictureInPictureController: NSObject {
         invalidateStartAttempt()
         isStarting = false
         isActive = true
-        startsThroughBackgroundTransition = false
-        pictureInPictureController?.canStartPictureInPictureAutomaticallyFromInline = false
         errorMessage = nil
-        scheduleAutomaticHide()
-        recoverLiveActivityAfterTransition?()
+        scheduleAutoHideIfDocked()
     }
 
     private func failStartAttempt(_ attempt: Int, message: LocalizedStringResource) {
@@ -399,7 +362,6 @@ final class TelemetryPictureInPictureController: NSObject {
         invalidateStartAttempt()
         isStarting = false
         isActive = false
-        startsThroughBackgroundTransition = false
         errorMessage = message
         discardPictureInPictureController()
         displayLayer.sampleBufferRenderer.flush()
@@ -438,7 +400,22 @@ final class TelemetryPictureInPictureController: NSObject {
                 self.isPossible = possible
             }
         }
-        renderLatest()
+        pictureInPictureSuspendedObservation = controller.observe(
+            \.isPictureInPictureSuspended,
+            options: [.initial, .new]
+        ) { [weak self] _, change in
+            let isSuspended = change.newValue ?? false
+            Task { @MainActor [weak self] in
+                guard let self,
+                      let current = self.pictureInPictureController,
+                      ObjectIdentifier(current) == controllerID else { return }
+                if isSuspended {
+                    self.scheduleAutoHideIfDocked()
+                } else if self.isVisuallyHidden {
+                    self.restoreVisiblePresentation()
+                }
+            }
+        }
     }
 
     private func rebuildRenderingPipeline() {
@@ -455,15 +432,16 @@ final class TelemetryPictureInPictureController: NSObject {
             sourceView.layer.addSublayer(replacement)
             replacement.frame = sourceView.bounds
         }
-        ensurePictureInPictureController()
     }
 
     private func discardPictureInPictureController() {
         autoHideTask?.cancel()
         autoHideTask = nil
         pictureInPicturePossibleObservation = nil
+        pictureInPictureSuspendedObservation = nil
         pictureInPictureController?.delegate = nil
         pictureInPictureController = nil
+        displayLayer.opacity = 1
         isVisuallyHidden = false
         isPossible = false
     }
@@ -487,20 +465,21 @@ final class TelemetryPictureInPictureController: NSObject {
         }
     }
 
-    private func scheduleAutomaticHide(delay: Duration = .seconds(4)) {
+    private func scheduleAutoHideIfDocked() {
         guard autoHideWhenDocked,
               isActive,
-              !isVisuallyHidden else { return }
+              !isVisuallyHidden,
+              pictureInPictureController?.isPictureInPictureSuspended == true else { return }
         autoHideTask?.cancel()
         autoHideTask = Task { @MainActor [weak self] in
-            // iOS doesn't publish a reliable public callback for the edge-stash
-            // gesture. Keep the bounded delay that worked on-device instead.
-            try? await Task.sleep(for: delay)
+            // Let AVKit finish the edge-stash animation before changing only its
+            // presentation size. PiP's content source and audio lifecycle stay intact.
+            try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled,
                   let self,
                   self.autoHideWhenDocked,
                   self.isActive,
-                  !self.isVisuallyHidden else { return }
+                  self.pictureInPictureController?.isPictureInPictureSuspended == true else { return }
             self.hideDockedPresentation()
         }
     }
@@ -509,14 +488,14 @@ final class TelemetryPictureInPictureController: NSObject {
         isVisuallyHidden = true
         setSystemControlsHidden(true)
         updateDisplayPresentationSize(Self.hiddenPresentationSize)
-        renderLatest()
-        recoverLiveActivityAfterTransition?()
+        displayLayer.opacity = 0
     }
 
     private func restoreVisiblePresentation() {
         autoHideTask?.cancel()
         autoHideTask = nil
         isVisuallyHidden = false
+        displayLayer.opacity = 1
         setSystemControlsHidden(false)
         updateDisplayPresentationSize(Self.frameSize)
         renderLatest()
@@ -529,9 +508,6 @@ final class TelemetryPictureInPictureController: NSObject {
         pictureInPictureController.setValue(hidden ? 2 : 0, forKey: "controlsStyle")
     }
 
-    /// AVSampleBufferDisplayLayer already updates this internal presentation size
-    /// whenever its input format changes. Calling the same selector immediately
-    /// avoids waiting for AVKit to notice the one-pixel fallback buffer.
     private func updateDisplayPresentationSize(_ size: CGSize) {
         let selector = NSSelectorFromString("_updatePresentationSize:")
         guard displayLayer.responds(to: selector),
@@ -541,10 +517,7 @@ final class TelemetryPictureInPictureController: NSObject {
             Selector,
             CGSize
         ) -> Void
-        let update = unsafeBitCast(
-            implementation,
-            to: UpdatePresentationSize.self
-        )
+        let update = unsafeBitCast(implementation, to: UpdatePresentationSize.self)
         update(displayLayer, selector, size)
     }
 
@@ -590,12 +563,17 @@ final class TelemetryPictureInPictureController: NSObject {
         let renderer = ImageRenderer(content: content)
         renderer.scale = 1
         renderer.isOpaque = true
-        let outputSize = isVisuallyHidden ? Self.hiddenBufferSize : Self.frameSize
         guard let image = renderer.cgImage,
-              let sampleBuffer = Self.makeSampleBuffer(from: image, size: outputSize) else { return }
+              let sampleBuffer = Self.makeSampleBuffer(from: image, size: Self.frameSize) else { return }
 
+        // The renderer API is the iOS 17 replacement for enqueuing directly on the
+        // display layer. Each buffer is marked for immediate display, so a fresh
+        // telemetry frame replaces the previous one instead of building a queue.
         let videoRenderer = displayLayer.sampleBufferRenderer
         if videoRenderer.status == .failed {
+            // Once AVFoundation loses decoder resources it rejects every later
+            // frame until flushed. Recover on the next one-second telemetry tick
+            // instead of leaving a permanent black window until process restart.
             videoRenderer.flush()
         }
         videoRenderer.enqueue(sampleBuffer)
@@ -636,6 +614,9 @@ final class TelemetryPictureInPictureController: NSObject {
                     | CGImageAlphaInfo.premultipliedFirst.rawValue
               ) else { return nil }
 
+        // ImageRenderer's CGImage is already in the bitmap context's row order.
+        // Applying an additional UIKit-style Y flip here turns the entire monitor
+        // upside down in both the inline preview and the PiP window.
         context.draw(image, in: CGRect(origin: .zero, size: size))
 
         var optionalFormat: CMVideoFormatDescription?
@@ -690,7 +671,6 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         _ pictureInPictureController: AVPictureInPictureController
     ) {
         guard self.pictureInPictureController === pictureInPictureController else { return }
-        guard isStarting else { return }
         completeStartAttempt(startAttempt)
     }
 
@@ -713,7 +693,6 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         restoreVisiblePresentation()
         attachToPendingPreviewIfNeeded()
         refreshPossibleState()
-        recoverLiveActivityAfterTransition?()
     }
 
     func pictureInPictureController(
@@ -729,6 +708,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureSampleBufferPla
         _ pictureInPictureController: AVPictureInPictureController,
         setPlaying playing: Bool
     ) {
+        // Telemetry is a live source with no meaningful paused or seekable state.
         pictureInPictureController.invalidatePlaybackState()
     }
 
@@ -760,9 +740,10 @@ extension TelemetryPictureInPictureController: AVPictureInPictureSampleBufferPla
     func pictureInPictureControllerShouldProhibitBackgroundAudioPlayback(
         _ pictureInPictureController: AVPictureInPictureController
     ) -> Bool {
-        // The Live Activity and PiP deliberately share the inaudible background
-        // sampling session. Returning true here makes AVKit suspend the keeper and
-        // freezes the Dynamic Island as soon as the floating window opens.
+        // MiniWatts' manually enabled Live Activity uses an inaudible audio engine
+        // to keep local PMU reads eligible in the background. Prohibiting background
+        // audio here let PiP remain visible while silently suspending that engine,
+        // so the Dynamic Island became stale until the app returned to the front.
         false
     }
 }

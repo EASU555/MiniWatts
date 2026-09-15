@@ -153,12 +153,12 @@ struct SettingsView: View {
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Start Picture in Picture here before leaving MiniWatts. When Dynamic Island is enabled, MiniWatts moves to the background first so iOS can start both system presentations in the correct order. Sensor sampling stays active while the floating window is open.")
+                Text("Start Picture in Picture here before leaving MiniWatts. Picture in Picture and Dynamic Island run independently, and sensor sampling stays active while either presentation is enabled.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("With automatic hiding enabled, open Picture in Picture and swipe it to either screen edge. After four seconds MiniWatts shrinks it until it is invisible without stopping monitoring or Dynamic Island updates. Turn this option off to show it again.")
+                Text("With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts hides the docked surface without changing the video stream or Dynamic Island lifecycle. Turn this option off to show it again.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
