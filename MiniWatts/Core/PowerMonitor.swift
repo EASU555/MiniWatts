@@ -56,6 +56,7 @@ final class PowerMonitor {
         didSet {
             UserDefaults.standard.set(liveActivityEnabled, forKey: Self.liveActivityEnabledKey)
             liveActivityController.reconcile(snapshot: snapshot,
+                                             leadingItem: liveActivityLeadingItem,
                                              selectedMetric: liveActivityMetric,
                                              enabled: liveActivityEnabled,
                                              forceUpdate: true)
@@ -63,10 +64,23 @@ final class PowerMonitor {
         }
     }
 
+    var liveActivityLeadingItem: LiveActivityLeadingItem {
+        didSet {
+            UserDefaults.standard.set(liveActivityLeadingItem.rawValue,
+                                      forKey: Self.liveActivityLeadingItemKey)
+            liveActivityController.reconcile(snapshot: snapshot,
+                                             leadingItem: liveActivityLeadingItem,
+                                             selectedMetric: liveActivityMetric,
+                                             enabled: liveActivityEnabled,
+                                             forceUpdate: true)
+        }
+    }
+
     var liveActivityMetric: LiveActivityMetric {
         didSet {
             UserDefaults.standard.set(liveActivityMetric.rawValue, forKey: Self.liveActivityMetricKey)
             liveActivityController.reconcile(snapshot: snapshot,
+                                             leadingItem: liveActivityLeadingItem,
                                              selectedMetric: liveActivityMetric,
                                              enabled: liveActivityEnabled,
                                              forceUpdate: true)
@@ -109,6 +123,7 @@ final class PowerMonitor {
     // A new key deliberately does not inherit the old "automatic while charging"
     // preference. Build 12 changes this to an explicit persistent user action.
     private static let liveActivityEnabledKey = "liveActivityManualEnabled"
+    private static let liveActivityLeadingItemKey = "liveActivityLeadingItem"
     private static let liveActivityMetricKey = "liveActivityMetric"
     private static let liveWindow = 180
 
@@ -144,6 +159,8 @@ final class PowerMonitor {
         // and it cannot happen if the screen locks after thirty seconds.
         keepScreenAwakeWhileCharging = defaults.object(forKey: Self.keepAwakeKey) as? Bool ?? true
         liveActivityEnabled = defaults.object(forKey: Self.liveActivityEnabledKey) as? Bool ?? false
+        liveActivityLeadingItem = defaults.string(forKey: Self.liveActivityLeadingItemKey)
+            .flatMap(LiveActivityLeadingItem.init(rawValue:)) ?? .statusIcon
         liveActivityMetric = defaults.string(forKey: Self.liveActivityMetricKey)
             .flatMap(LiveActivityMetric.init(rawValue:)) ?? .chargingPower
         collectDiagnostics()
@@ -241,6 +258,7 @@ final class PowerMonitor {
         updateRateEstimate(current)
         updateSession(current)
         liveActivityController.reconcile(snapshot: current,
+                                         leadingItem: liveActivityLeadingItem,
                                          selectedMetric: liveActivityMetric,
                                          enabled: liveActivityEnabled)
         refreshLiveActivityBackgroundExecution()

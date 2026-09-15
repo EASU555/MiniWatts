@@ -2035,6 +2035,56 @@
         }
       }
     },
+    "Left side" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧显示"
+          }
+        }
+      }
+    },
+    "Right side" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右侧显示"
+          }
+        }
+      }
+    },
+    "Status icon" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "状态图标"
+          }
+        }
+      }
+    },
+    "Choose the compact Dynamic Island's left and right contents independently. For example, use status icon + power, or power + temperature. The right-side choice is also the primary readout when expanded." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可分别选择灵动岛紧凑状态左右两侧的内容，例如“状态图标 + 功率”或“功率 + 温度”。右侧选择同时作为长按展开后的主要读数。"
+          }
+        }
+      }
+    },
+    "Turning this on starts the Live Activity immediately. This personal build uses an ultra-low-frequency audio carrier to keep local sensor sampling alive after you leave the app. iOS can still stop the process, and removes every Dynamic Island Live Activity after eight hours." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开后会立即启动实时活动。此自用版本通过超低频音频载波，让离开 App 后的本地传感器采样尽量保持运行；iOS 仍可能终止进程，并会在八小时后移除灵动岛实时活动。"
+          }
+        }
+      }
+    },
     "Live Activity" : {
       "localizations" : {
         "zh-Hans" : {

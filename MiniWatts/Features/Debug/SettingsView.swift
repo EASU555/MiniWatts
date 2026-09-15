@@ -15,6 +15,7 @@ struct SettingsView: View {
                     VStack(spacing: 14) {
                         recordingPanel(keepAwake: $monitor.keepScreenAwakeWhileCharging)
                         liveActivityPanel(enabled: $monitor.liveActivityEnabled,
+                                          leadingItem: $monitor.liveActivityLeadingItem,
                                           metric: $monitor.liveActivityMetric)
                         pictureInPicturePanel(
                             showPower: $pictureInPicture.showPower,
@@ -158,6 +159,7 @@ struct SettingsView: View {
     }
 
     private func liveActivityPanel(enabled: Binding<Bool>,
+                                   leadingItem: Binding<LiveActivityLeadingItem>,
                                    metric: Binding<LiveActivityMetric>) -> some View {
         Panel("Live Activity", systemImage: "platter.filled.top.iphone") {
             VStack(alignment: .leading, spacing: 12) {
@@ -168,10 +170,25 @@ struct SettingsView: View {
                 .tint(.mwAccent)
 
                 HStack {
-                    Text("Primary readout")
+                    Text("Left side")
                         .font(.subheadline)
                     Spacer()
-                    Picker("Primary readout", selection: metric) {
+                    Picker("Left side", selection: leadingItem) {
+                        Text("Status icon").tag(LiveActivityLeadingItem.statusIcon)
+                        Text("Charging power").tag(LiveActivityLeadingItem.chargingPower)
+                        Text("SoC temperature").tag(LiveActivityLeadingItem.socTemperature)
+                        Text("Battery temperature").tag(LiveActivityLeadingItem.batteryTemperature)
+                        Text("Hottest component").tag(LiveActivityLeadingItem.hottestTemperature)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                }
+
+                HStack {
+                    Text("Right side")
+                        .font(.subheadline)
+                    Spacer()
+                    Picker("Right side", selection: metric) {
                         Text("Charging power").tag(LiveActivityMetric.chargingPower)
                         Text("SoC temperature").tag(LiveActivityMetric.socTemperature)
                         Text("Battery temperature").tag(LiveActivityMetric.batteryTemperature)
@@ -181,12 +198,12 @@ struct SettingsView: View {
                     .pickerStyle(.menu)
                 }
 
-                Text("The compact Dynamic Island shows this reading. Press and hold it to see power, SoC, battery and hottest-component temperatures together.")
+                Text("Choose the compact Dynamic Island's left and right contents independently. For example, use status icon + power, or power + temperature. The right-side choice is also the primary readout when expanded.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Turning this on starts the Live Activity immediately. It stays visible across charger changes and keeps refreshing once per second in the background until you turn it off.")
+                Text("Turning this on starts the Live Activity immediately. This personal build uses an ultra-low-frequency audio carrier to keep local sensor sampling alive after you leave the app. iOS can still stop the process, and removes every Dynamic Island Live Activity after eight hours.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)

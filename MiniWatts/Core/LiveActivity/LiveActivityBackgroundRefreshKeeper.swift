@@ -1,9 +1,12 @@
 import AVFoundation
+import Foundation
 
 /// Keeps the sensor process eligible for background execution while a manually
 /// enabled Live Activity needs local hardware readings. The extension cannot read
 /// the phone's PMU itself, so an inaudible PCM stream keeps the app-side sampler
-/// alive until the user disables the activity.
+/// alive until the user disables the activity. The carrier contains a real but
+/// effectively inaudible sub-bass signal: an all-zero buffer played at zero
+/// volume can be treated as idle after leaving the foreground on some releases.
 ///
 /// MiniWatts is sideload-only because it already relies on private IOKit APIs. This
 /// technique is likewise not intended as an App Store distribution strategy.
@@ -11,7 +14,7 @@ import AVFoundation
 final class LiveActivityBackgroundRefreshKeeper: NSObject {
     private var engine: AVAudioEngine?
     private var player: AVAudioPlayerNode?
-    private var silence: AVAudioPCMBuffer?
+    private var carrier: AVAudioPCMBuffer?
     private var shouldRun = false
     private var needsRebuild = true
     private var observationTasks: [Task<Void, Never>] = []
@@ -38,10 +41,10 @@ final class LiveActivityBackgroundRefreshKeeper: NSObject {
             return false
         }
 
-        if needsRebuild || engine == nil || player == nil || silence == nil {
+        if needsRebuild || engine == nil || player == nil || carrier == nil {
             rebuildAudioGraph()
         }
-        guard let engine, let player, let silence else {
+        guard let engine, let player, let carrier else {
             isRunning = false
             return false
         }
@@ -55,7 +58,7 @@ final class LiveActivityBackgroundRefreshKeeper: NSObject {
                 try engine.start()
             }
             if !player.isPlaying {
-                player.scheduleBuffer(silence, at: nil, options: [.loops])
+                player.scheduleBuffer(carrier, at: nil, options: [.loops])
                 player.play()
             }
             isRunning = engine.isRunning && player.isPlaying
@@ -71,32 +74,42 @@ final class LiveActivityBackgroundRefreshKeeper: NSObject {
 
         let newEngine = AVAudioEngine()
         let newPlayer = AVAudioPlayerNode()
+        let sampleRate = 44_100.0
         guard let format = AVAudioFormat(
-            standardFormatWithSampleRate: 44_100,
+            standardFormatWithSampleRate: sampleRate,
             channels: 1
-        ), let newSilence = AVAudioPCMBuffer(
+        ), let newCarrier = AVAudioPCMBuffer(
             pcmFormat: format,
             frameCapacity: 44_100
         ) else {
             engine = nil
             player = nil
-            silence = nil
+            carrier = nil
             needsRebuild = true
             return
         }
 
-        newSilence.frameLength = newSilence.frameCapacity
-        if let samples = newSilence.floatChannelData?[0] {
-            samples.initialize(repeating: 0, count: Int(newSilence.frameLength))
+        newCarrier.frameLength = newCarrier.frameCapacity
+        if let samples = newCarrier.floatChannelData?[0] {
+            // 17 Hz sits below normal hearing and -100 dBFS is far beneath the
+            // phone speaker's useful output, but the rendered PCM is not digital
+            // silence. This keeps the audio render path genuine without producing
+            // a useful audible signal or interrupting other audio.
+            let frequency = 17.0
+            let amplitude = 0.000_01
+            for frame in 0..<Int(newCarrier.frameLength) {
+                let phase = 2 * Double.pi * frequency * Double(frame) / sampleRate
+                samples[frame] = Float(sin(phase) * amplitude)
+            }
         }
         newEngine.attach(newPlayer)
         newEngine.connect(newPlayer, to: newEngine.mainMixerNode, format: format)
-        newPlayer.volume = 0
+        newPlayer.volume = 1
         newEngine.prepare()
 
         engine = newEngine
         player = newPlayer
-        silence = newSilence
+        carrier = newCarrier
         needsRebuild = false
     }
 
@@ -137,6 +150,15 @@ final class LiveActivityBackgroundRefreshKeeper: NSObject {
                 self?.handleEngineConfigurationChange(notification)
             }
         })
+        observationTasks.append(Task { @MainActor [weak self] in
+            for await _ in center.notifications(
+                named: AVAudioSession.routeChangeNotification,
+                object: session
+            ) {
+                guard !Task.isCancelled else { return }
+                self?.handleAudioRouteChange()
+            }
+        })
     }
 
     private func handleAudioInterruption(_ notification: Notification) {
@@ -169,6 +191,12 @@ final class LiveActivityBackgroundRefreshKeeper: NSObject {
         guard shouldRun,
               let changedEngine = notification.object as? AVAudioEngine,
               changedEngine === engine else { return }
+        stopAudioGraph(markForRebuild: true)
+        setActive(true)
+    }
+
+    private func handleAudioRouteChange() {
+        guard shouldRun else { return }
         stopAudioGraph(markForRebuild: true)
         setActive(true)
     }

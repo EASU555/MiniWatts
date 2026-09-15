@@ -17,6 +17,7 @@ final class ChargingLiveActivityController {
 
     private var activity: Activity<MiniWattsActivityAttributes>?
     private var lastUpdate = Date.distantPast
+    private var lastLeadingItem: LiveActivityLeadingItem?
     private var lastMetric: LiveActivityMetric?
     private var pendingUpdate: ActivityContent<MiniWattsActivityAttributes.ContentState>?
     private var updateTask: Task<Void, Never>?
@@ -32,6 +33,7 @@ final class ChargingLiveActivityController {
     var isRunning: Bool { activity != nil }
 
     func reconcile(snapshot: PowerSnapshot,
+                   leadingItem: LiveActivityLeadingItem,
                    selectedMetric: LiveActivityMetric,
                    enabled: Bool,
                    forceUpdate: Bool = false) {
@@ -44,10 +46,13 @@ final class ChargingLiveActivityController {
            activity.activityState == .ended || activity.activityState == .dismissed {
             self.activity = nil
             lastUpdate = .distantPast
+            lastLeadingItem = nil
             lastMetric = nil
         }
 
-        let state = Self.contentState(from: snapshot, selectedMetric: selectedMetric)
+        let state = Self.contentState(from: snapshot,
+                                      leadingItem: leadingItem,
+                                      selectedMetric: selectedMetric)
         let now = snapshot.date
 
         if activity == nil {
@@ -59,6 +64,7 @@ final class ChargingLiveActivityController {
                     pushType: nil
                 )
                 lastUpdate = now
+                lastLeadingItem = leadingItem
                 lastMetric = selectedMetric
             } catch {
                 // Live Activities can be disabled or the system-wide activity limit
@@ -69,10 +75,12 @@ final class ChargingLiveActivityController {
         }
 
         guard forceUpdate
+                || leadingItem != lastLeadingItem
                 || selectedMetric != lastMetric
                 || now.timeIntervalSince(lastUpdate) >= Self.updateInterval else { return }
 
         lastUpdate = now
+        lastLeadingItem = leadingItem
         lastMetric = selectedMetric
         pendingUpdate = content(for: state, at: now)
         beginUpdatingIfNeeded()
@@ -84,6 +92,7 @@ final class ChargingLiveActivityController {
         guard let active else { return }
         activity = nil
         lastUpdate = .distantPast
+        lastLeadingItem = nil
         lastMetric = nil
         pendingUpdate = nil
         updateTask?.cancel()
@@ -125,6 +134,7 @@ final class ChargingLiveActivityController {
                 if !didUpdate, self.activity?.id == activityID {
                     self.activity = nil
                     lastUpdate = .distantPast
+                    lastLeadingItem = nil
                     lastMetric = nil
                 }
             case .pending:
@@ -135,6 +145,7 @@ final class ChargingLiveActivityController {
             case .ended, .dismissed:
                 self.activity = nil
                 lastUpdate = .distantPast
+                lastLeadingItem = nil
                 lastMetric = nil
                 pendingUpdate = nil
             @unknown default:
@@ -160,6 +171,7 @@ final class ChargingLiveActivityController {
 
     private static func contentState(
         from snapshot: PowerSnapshot,
+        leadingItem: LiveActivityLeadingItem,
         selectedMetric: LiveActivityMetric
     ) -> MiniWattsActivityAttributes.ContentState {
         let power: (watts: Double?, isBatterySide: Bool) = snapshot.externalConnected
@@ -174,6 +186,7 @@ final class ChargingLiveActivityController {
             batteryTemperature: snapshot.batteryTemperature,
             hottestTemperature: snapshot.hottestSensor?.value,
             hottestSensorName: snapshot.hottestSensor?.name,
+            leadingItem: leadingItem,
             selectedMetric: selectedMetric,
             isWireless: snapshot.isWirelessInput
         )

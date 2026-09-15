@@ -48,11 +48,7 @@ struct MiniWattsChargingLiveActivity: Widget {
                         .padding(.top, 4)
                 }
             } compactLeading: {
-                Image(systemName: context.isStale
-                      ? "pause.fill" : symbol(for: context.state.selectedMetric))
-                    .foregroundStyle(context.isStale
-                                     ? Color.secondary : color(for: context.state.selectedMetric))
-                    .accessibilityHidden(true)
+                CompactLeadingContent(state: context.state, isStale: context.isStale)
             } compactTrailing: {
                 CompactMetricValue(state: context.state)
                     .foregroundStyle(context.isStale
@@ -210,6 +206,33 @@ private struct CompactMetricValue: View {
     var body: some View {
         Text(verbatim: shortValue(for: state.selectedMetric, state: state))
             .font(.caption.monospacedDigit().weight(.bold))
+    }
+}
+
+private struct CompactLeadingContent: View {
+    let state: MiniWattsActivityAttributes.ContentState
+    let isStale: Bool
+
+    var body: some View {
+        if isStale {
+            Image(systemName: "pause.fill")
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Reading paused")
+        } else if let metric = (state.leadingItem ?? .statusIcon).metric {
+            Text(verbatim: shortValue(for: metric, state: state))
+                .font(.caption2.monospacedDigit().weight(.bold))
+                .foregroundStyle(color(for: metric))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .accessibilityLabel(label(for: metric))
+                .accessibilityValue(Text(verbatim: formattedValue(for: metric, state: state)))
+        } else {
+            Image(systemName: state.isWireless
+                  ? "bolt.horizontal.circle.fill" : "bolt.circle.fill")
+                .foregroundStyle(.yellow)
+                .accessibilityLabel(state.externalConnected == false
+                                    ? "On battery" : "Charging")
+        }
     }
 }
 
