@@ -33,11 +33,12 @@ struct ChargeLiveActivity: Widget {
                     PrimaryMetricView(state: state,
                                       palette: palette,
                                       size: 28,
-                                      isStale: context.isStale)
+                                      isStale: context.isStale,
+                                      inlineCaption: false)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 6) {
-                        ExpandedMetricStrip(state: state, palette: palette)
+                        SecondaryMetrics(state: state, palette: palette)
                         LevelBar(percent: reading.percent,
                                  tint: palette.tint(for: reading),
                                  track: palette.track,
@@ -68,8 +69,10 @@ struct ChargeActivityLockScreenView: View {
         let palette = WidgetPalette(scheme)
         let state = context.state
         let reading = state.reading
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 12) {
+        // The Lock Screen gives an activity about 160 pt of height. Everything here has
+        // to fit inside it, padding included, or the system clips the top and bottom.
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 PrimaryMetricView(state: state,
                                   palette: palette,
                                   size: 34,
@@ -79,7 +82,7 @@ struct ChargeActivityLockScreenView: View {
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
                     .monospacedDigit()
             }
-            ExpandedMetricStrip(state: state, palette: palette)
+            SecondaryMetrics(state: state, palette: palette)
                 .opacity(context.isStale ? 0.55 : 1)
             LevelBar(percent: reading.percent,
                      tint: palette.tint(for: reading),
@@ -92,19 +95,24 @@ struct ChargeActivityLockScreenView: View {
     }
 }
 
+/// The selected reading: symbol, number and a caption saying what it is. On the Lock
+/// Screen the caption follows the number on the same line; the island's centre is
+/// too narrow for that, so there it goes underneath.
 private struct PrimaryMetricView: View {
     let state: ChargeActivityContentState
     let palette: WidgetPalette
     let size: CGFloat
     let isStale: Bool
+    var inlineCaption = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Label(label(for: state.selectedMetric),
-                  systemImage: symbol(for: state.selectedMetric))
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(palette.muted)
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
+        let layout = inlineCaption
+            ? AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 6))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+        layout {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Image(systemName: symbol(for: state.selectedMetric))
+                    .font(.system(size: size * 0.5, weight: .bold))
                 Text(verbatim: numericValue(for: state.selectedMetric, state: state)
                     .map(oneDecimal) ?? "—")
                     .font(.system(size: size, weight: .semibold, design: .rounded))
@@ -115,19 +123,13 @@ private struct PrimaryMetricView: View {
                                   design: .rounded))
             }
             .foregroundStyle(isStale ? palette.muted : palette.tint(for: state))
+            .lineLimit(1)
+            .layoutPriority(1)
 
-            if state.selectedMetric == .chargingPower, let source = state.reading.source {
-                Text(source.caption)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(palette.muted)
-                    .lineLimit(1)
-            } else if state.selectedMetric == .hottestTemperature,
-                      let name = state.hottestSensorName {
-                Text(verbatim: name)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(palette.muted)
-                    .lineLimit(1)
-            }
+            caption
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(palette.muted)
+                .lineLimit(1)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(label(for: state.selectedMetric))
@@ -135,46 +137,55 @@ private struct PrimaryMetricView: View {
                                                           state: state)))
         .accessibilityAddTraits(.updatesFrequently)
     }
-}
 
-private struct ExpandedMetricStrip: View {
-    let state: ChargeActivityContentState
-    let palette: WidgetPalette
-
-    var body: some View {
-        HStack(spacing: 6) {
-            SmallMetric(metric: .chargingPower, state: state, palette: palette)
-            SmallMetric(metric: .socTemperature, state: state, palette: palette)
-            SmallMetric(metric: .batteryTemperature, state: state, palette: palette)
-            SmallMetric(metric: .hottestTemperature, state: state, palette: palette)
+    @ViewBuilder
+    private var caption: some View {
+        switch state.selectedMetric {
+        case .chargingPower:
+            if let source = state.reading.source {
+                Text(source.caption)
+            }
+        case .hottestTemperature:
+            if let name = state.hottestSensorName {
+                Text(verbatim: name)
+                    .fontDesign(.monospaced)
+            } else {
+                Text(label(for: .hottestTemperature))
+            }
+        case .socTemperature, .batteryTemperature:
+            Text(label(for: state.selectedMetric))
         }
     }
 }
 
-private struct SmallMetric: View {
-    let metric: LiveActivityMetric
+/// The three readings that are not the primary one, one line each. A cell of icon,
+/// label and value stacked three high did not fit the Lock Screen's height, and
+/// repeated the primary reading besides.
+private struct SecondaryMetrics: View {
     let state: ChargeActivityContentState
     let palette: WidgetPalette
 
     var body: some View {
-        VStack(spacing: 2) {
-            Image(systemName: symbol(for: metric))
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(metricTint(metric, state: state, palette: palette))
-            Text(shortLabel(for: metric))
-                .font(.system(size: 9, weight: .medium, design: .rounded))
-                .foregroundStyle(palette.muted)
-                .lineLimit(1)
-            Text(verbatim: shortValue(for: metric, state: state))
+        HStack(spacing: 10) {
+            ForEach(LiveActivityMetric.allCases.filter { $0 != state.selectedMetric }) { metric in
+                HStack(spacing: 4) {
+                    Image(systemName: symbol(for: metric))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(metricTint(metric, state: state, palette: palette))
+                    Text(shortLabel(for: metric))
+                        .foregroundStyle(palette.muted)
+                    Text(verbatim: shortValue(for: metric, state: state))
+                        .monospacedDigit()
+                }
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .monospacedDigit()
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(label(for: metric))
+                .accessibilityValue(Text(verbatim: formattedValue(for: metric, state: state)))
+            }
         }
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label(for: metric))
-        .accessibilityValue(Text(verbatim: formattedValue(for: metric, state: state)))
     }
 }
 
@@ -188,24 +199,19 @@ private struct CompactMetricValue: View {
     }
 }
 
-/// Status, battery temperature, and when the charge began — or, once the app has
-/// stopped updating, a plain statement that the numbers above are paused.
+/// Status and when the charge began — or, once the app has stopped updating, a plain
+/// statement that the numbers above are paused. The temperatures are in the row above.
 struct ActivityFootnote: View {
     let context: ActivityViewContext<ChargeActivityAttributes>
     let palette: WidgetPalette
 
     var body: some View {
-        let reading = context.state.reading
         HStack(spacing: 6) {
             if context.isStale {
                 Label("Paused — open MiniWatts to resume", systemImage: "pause.circle")
                     .foregroundStyle(palette.loss)
             } else {
-                Text(reading.statusTitle)
-                if let temperature = reading.batteryTemperature {
-                    Text(verbatim: Formatting.temperature(temperature))
-                        .monospacedDigit()
-                }
+                Text(context.state.reading.statusTitle)
             }
             Spacer(minLength: 6)
             Text("Since \(Text(context.attributes.startedAt, style: .time))")
