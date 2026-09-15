@@ -182,6 +182,13 @@ final class TelemetryPictureInPictureController: NSObject {
         }
 
         let needsAttachment = sourceView !== view
+        if needsAttachment {
+            // Unlike the old sample-buffer route, a video-call ContentSource owns
+            // the exact UIView passed at construction time. Rebuild whenever
+            // SwiftUI replaces that inactive host so AVKit never points at a
+            // dismantled view.
+            discardPictureInPictureController()
+        }
         sourceView = view
         pendingSourceView = nil
         sourceViewWasDismantled = false
@@ -204,6 +211,7 @@ final class TelemetryPictureInPictureController: NSObject {
             sourceViewWasDismantled = true
             return
         }
+        discardPictureInPictureController()
         sourceView = nil
         sourceViewWasDismantled = false
         isPossible = false
