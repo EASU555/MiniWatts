@@ -121,7 +121,7 @@ final class TelemetryPictureInPictureController: NSObject {
         didSet {
             UserDefaults.standard.set(autoHideWhenDocked, forKey: Self.autoHideWhenDockedKey)
             if autoHideWhenDocked {
-                scheduleAutoHideIfDocked()
+                scheduleAutomaticHide()
             } else {
                 restoreVisiblePresentation()
             }
@@ -145,6 +145,11 @@ final class TelemetryPictureInPictureController: NSObject {
     @ObservationIgnored private var startTask: Task<Void, Never>?
     @ObservationIgnored private var startAttempt = 0
     @ObservationIgnored private var autoHideTask: Task<Void, Never>?
+    /// PowerMonitor installs these hooks from RootView so ActivityKit owns the
+    /// shared background-audio session before AVKit starts, then gets another
+    /// forced reconciliation after each PiP presentation transition.
+    @ObservationIgnored var prepareLiveActivityForStart: (() -> Bool)?
+    @ObservationIgnored var recoverLiveActivityAfterTransition: (() -> Void)?
     // Kept strongly while PiP is active so SwiftUI dismantling its representable
     // cannot also destroy the video-call source AVKit is still presenting.
     @ObservationIgnored private var sourceView: UIView?
@@ -227,13 +232,21 @@ final class TelemetryPictureInPictureController: NSObject {
         guard isSupported, hasSelectedContent, !keepsSensorSamplingActive else { return }
         errorMessage = nil
 
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
-            try session.setActive(true)
-        } catch {
-            errorMessage = "Picture in Picture audio mode could not start."
-            return
+        // Starting the video-call PiP content source can rebuild the shared audio
+        // graph. If the Live Activity keeper is already running, reapplying the
+        // category here can stop that graph and strand ActivityKit on stale data.
+        // Let PowerMonitor establish ownership first and only configure the session
+        // ourselves when there is no active Live Activity keeper.
+        let liveActivityOwnsAudioSession = prepareLiveActivityForStart?() ?? false
+        if !liveActivityOwnsAudioSession {
+            do {
+                let session = AVAudioSession.sharedInstance()
+                try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+                try session.setActive(true)
+            } catch {
+                errorMessage = "Picture in Picture audio mode could not start."
+                return
+            }
         }
 
         guard let sourceView, sourceView.window != nil else {
@@ -347,6 +360,8 @@ final class TelemetryPictureInPictureController: NSObject {
         isStarting = false
         isActive = true
         errorMessage = nil
+        scheduleAutomaticHide()
+        recoverLiveActivityAfterTransition?()
     }
 
     private func failStartAttempt(_ attempt: Int, message: LocalizedStringResource) {
@@ -418,7 +433,7 @@ final class TelemetryPictureInPictureController: NSObject {
                 guard let self,
                       let current = self.pictureInPictureController,
                       ObjectIdentifier(current) == controllerID else { return }
-                self.scheduleAutoHideIfDocked()
+                self.scheduleAutomaticHide(delay: .milliseconds(350))
             }
         }
         renderLatest()
@@ -458,21 +473,21 @@ final class TelemetryPictureInPictureController: NSObject {
         }
     }
 
-    private func scheduleAutoHideIfDocked() {
+    private func scheduleAutomaticHide(delay: Duration = .seconds(4)) {
         guard autoHideWhenDocked,
               isActive,
-              !isVisuallyHidden,
-              pictureInPictureController?.isPictureInPictureSuspended == true else { return }
+              !isVisuallyHidden else { return }
         autoHideTask?.cancel()
         autoHideTask = Task { @MainActor [weak self] in
-            // The suspension transition arrives while AVKit is still completing its
-            // side-dock animation. A short debounce prevents fighting that animation.
-            try? await Task.sleep(for: .milliseconds(350))
+            // Some iOS releases do not publish isPictureInPictureSuspended when the
+            // user swipes a video-call PiP to an edge. Use that signal when it does
+            // arrive, but retain this bounded fallback so the feature is reliable.
+            try? await Task.sleep(for: delay)
             guard !Task.isCancelled,
                   let self,
                   self.autoHideWhenDocked,
                   self.isActive,
-                  self.pictureInPictureController?.isPictureInPictureSuspended == true else { return }
+                  !self.isVisuallyHidden else { return }
             self.hideDockedPresentation()
         }
     }
@@ -485,6 +500,7 @@ final class TelemetryPictureInPictureController: NSObject {
             videoCallImageView?.isHidden = true
             videoCallContentController.view.layoutIfNeeded()
         }
+        recoverLiveActivityAfterTransition?()
     }
 
     private func restoreVisiblePresentation() {
@@ -540,6 +556,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         _ pictureInPictureController: AVPictureInPictureController
     ) {
         guard self.pictureInPictureController === pictureInPictureController else { return }
+        guard isStarting else { return }
         completeStartAttempt(startAttempt)
     }
 
@@ -561,6 +578,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         restoreVisiblePresentation()
         attachToPendingPreviewIfNeeded()
         refreshPossibleState()
+        recoverLiveActivityAfterTransition?()
     }
 
     func pictureInPictureController(

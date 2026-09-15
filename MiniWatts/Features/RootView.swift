@@ -31,6 +31,12 @@ struct RootView: View {
                 .allowsHitTesting(false)
         }
         .task {
+            pictureInPicture.prepareLiveActivityForStart = { [weak monitor] in
+                monitor?.prepareLiveActivityForPictureInPicture() ?? false
+            }
+            pictureInPicture.recoverLiveActivityAfterTransition = { [weak monitor] in
+                monitor?.recoverLiveActivityPresentation()
+            }
             monitor.onTick = { [weak monitor, pictureInPicture, widgetPublisher] snapshot in
                 guard let monitor else { return }
                 pictureInPicture.update(

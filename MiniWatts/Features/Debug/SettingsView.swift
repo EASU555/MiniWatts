@@ -98,7 +98,7 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                 }
 
-                Toggle("Hide after docking", isOn: autoHideWhenDocked)
+                Toggle("Automatically hide after opening", isOn: autoHideWhenDocked)
                     .tint(.mwAccent)
 
                 if pictureInPicture.isVisuallyHidden {
@@ -158,7 +158,7 @@ struct SettingsView: View {
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("With Hide after docking enabled, swipe the floating monitor to either screen edge. MiniWatts then shrinks the docked tab until it is invisible without stopping monitoring. Turn this option off to show it again.")
+                Text("With automatic hiding enabled, open Picture in Picture and swipe it to either screen edge. After four seconds MiniWatts shrinks it until it is invisible without stopping monitoring or Dynamic Island updates. Turn this option off to show it again.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
