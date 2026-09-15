@@ -286,8 +286,8 @@ tick keeps reading sensors.
   that is not in the hierarchy and closes the window when the source goes away, which
   rules out hosting it in the Settings sheet, the obvious place for a preview. Settings
   shows a plain SwiftUI copy of the frame instead.
-- **Frames are rendered, not captured.** `ImageRenderer` draws `FloatingMeterFrame` at
-  320 × 180 @2× into a pooled BGRA `CVPixelBuffer`, then a `CMSampleBuffer` tagged
+- **Frames are rendered, not captured.** `ImageRenderer` draws `FloatingMeterTelemetryFrame`
+  at 640 × 360 @1× into a pooled BGRA `CVPixelBuffer`, then a `CMSampleBuffer` tagged
   `DisplayImmediately` — there is no timebase on the layer, each frame is shown when it
   arrives. A failed renderer stays failed until it is flushed and silently swallows
   every frame after, which looks exactly like a frozen reading, so the status is
