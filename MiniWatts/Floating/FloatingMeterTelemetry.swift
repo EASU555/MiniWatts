@@ -247,7 +247,7 @@ struct FloatingMeterTelemetryFrame: View {
     private func temperatureContent(compact: Bool) -> some View {
         switch temperatureSelection {
         case .all:
-            temperatureGrid
+            temperatureGrid(compact: compact)
         case .soc:
             temperatureFocus("SoC", value: data?.socTemperature,
                              symbol: "cpu", compact: compact)
@@ -264,36 +264,62 @@ struct FloatingMeterTelemetryFrame: View {
         }
     }
 
-    private var temperatureGrid: some View {
-        HStack(spacing: 8) {
-            temperatureCell("SoC", value: data?.socTemperature, symbol: "cpu")
-            temperatureCell("Battery", value: data?.batteryTemperature,
-                            symbol: "battery.75percent")
-            temperatureCell("Charger", value: data?.chargerTemperature,
-                            symbol: "powerplug.fill")
-            temperatureCell("Hottest", value: data?.hottestTemperature,
-                            symbol: "thermometer.high", detail: data?.hottestSensorName)
+    /// Beside the power readout the four readings go 2 × 2: in one row each cell was a
+    /// narrow strip with most of its height empty. The temperature page has the whole
+    /// width to itself, so it keeps the single row.
+    @ViewBuilder
+    private func temperatureGrid(compact: Bool) -> some View {
+        let soc = temperatureCell("SoC", value: data?.socTemperature,
+                                  symbol: "cpu", compact: compact)
+        let battery = temperatureCell("Battery", value: data?.batteryTemperature,
+                                      symbol: "battery.75percent", compact: compact)
+        let charger = temperatureCell("Charger", value: data?.chargerTemperature,
+                                      symbol: "powerplug.fill", compact: compact)
+        let hottest = temperatureCell("Hottest", value: data?.hottestTemperature,
+                                      symbol: "thermometer.high", detail: data?.hottestSensorName,
+                                      compact: compact)
+        if compact {
+            Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+                GridRow { soc; battery }
+                GridRow { charger; hottest }
+            }
+        } else {
+            HStack(spacing: 8) { soc; battery; charger; hottest }
         }
     }
 
     private func temperatureCell(_ title: LocalizedStringKey,
                                  value: Double?,
                                  symbol: String,
-                                 detail: String? = nil) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: symbol)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(temperatureColor(value))
-            Text(title)
+                                 detail: String? = nil,
+                                 compact: Bool) -> some View {
+        VStack(spacing: compact ? 4 : 8) {
+            if compact {
+                // A wide, short cell: the icon sits beside its title, not above it.
+                Label {
+                    Text(title)
+                        .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: symbol)
+                        .foregroundStyle(temperatureColor(value))
+                }
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary)
                 .lineLimit(1)
+            } else {
+                Image(systemName: symbol)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(temperatureColor(value))
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
             // A single concatenated Text keeps the decimal and degree sign on one
             // typographic baseline and prevents narrow cells wrapping after '.'.
             (Text(verbatim: formatted(value))
-                .font(.system(size: 29, weight: .bold, design: .rounded))
+                .font(.system(size: compact ? 34 : 29, weight: .bold, design: .rounded))
              + Text(verbatim: "°")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(.system(size: compact ? 16 : 14, weight: .semibold, design: .rounded))
                 .foregroundColor(.secondary))
                 .monospacedDigit()
                 .lineLimit(1)
@@ -306,7 +332,7 @@ struct FloatingMeterTelemetryFrame: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, compact ? 8 : 12)
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.white.opacity(0.065), in: RoundedRectangle(cornerRadius: 14))
