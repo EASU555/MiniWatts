@@ -2155,6 +2155,66 @@
         }
       }
     },
+    "Hide status" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏状态"
+          }
+        }
+      }
+    },
+    "Automatic hiding is off" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动隐藏已关闭"
+          }
+        }
+      }
+    },
+    "Waiting for side docking" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待滑入侧边"
+          }
+        }
+      }
+    },
+    "Side docking detected" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已检测到侧边停靠"
+          }
+        }
+      }
+    },
+    "PiP content controller unavailable" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法取得画中画内容控制器"
+          }
+        }
+      }
+    },
+    "Hide request applied" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已应用隐藏请求"
+          }
+        }
+      }
+    },
     "The floating monitor is hidden. Monitoring and Dynamic Island updates are still running." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2165,12 +2225,12 @@
         }
       }
     },
-    "With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts collapses only AVKit's docked window; the video stream and Dynamic Island continue unchanged. Turn this option off to show the window again." : {
+    "With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts collapses the existing sample-buffer content controller; the video stream and Dynamic Island continue unchanged. Turn this option off to show the window again." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "开启“打开后自动隐藏”后，将画中画滑向任一屏幕边缘。MiniWatts 只会收起 AVKit 的停靠窗口；视频流和灵动岛会继续运行。关闭此选项即可重新显示窗口。"
+            "value" : "开启“打开后自动隐藏”后，将画中画滑向任一屏幕边缘。MiniWatts 会收起现有的采样缓冲内容控制器；视频流和灵动岛会继续运行。关闭此选项即可重新显示窗口。"
           }
         }
       }

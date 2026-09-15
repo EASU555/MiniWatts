@@ -14,6 +14,24 @@ nonisolated enum TelemetryPictureInPictureLayout: String, CaseIterable, Identifi
     var id: Self { self }
 }
 
+nonisolated enum TelemetryPictureInPictureHideStatus: Hashable {
+    case disabled
+    case waitingForDock
+    case dockDetected
+    case contentControllerUnavailable
+    case hideApplied
+
+    var label: LocalizedStringResource {
+        switch self {
+        case .disabled: "Automatic hiding is off"
+        case .waitingForDock: "Waiting for side docking"
+        case .dockDetected: "Side docking detected"
+        case .contentControllerUnavailable: "PiP content controller unavailable"
+        case .hideApplied: "Hide request applied"
+        }
+    }
+}
+
 nonisolated enum TelemetryTemperatureSelection: String, CaseIterable, Identifiable {
     case all
     case soc
@@ -121,8 +139,10 @@ final class TelemetryPictureInPictureController: NSObject {
         didSet {
             UserDefaults.standard.set(autoHideWhenDocked, forKey: Self.autoHideWhenDockedKey)
             if autoHideWhenDocked {
+                hideStatus = .waitingForDock
                 scheduleWindowHideIfDocked()
             } else {
+                hideStatus = .disabled
                 restorePictureInPictureWindow()
             }
         }
@@ -132,6 +152,7 @@ final class TelemetryPictureInPictureController: NSObject {
     private(set) var isStarting = false
     private(set) var isPossible = false
     private(set) var isVisuallyHidden = false
+    private(set) var hideStatus = TelemetryPictureInPictureHideStatus.waitingForDock
     private(set) var errorMessage: LocalizedStringResource?
 
     @ObservationIgnored private(set) var displayLayer = AVSampleBufferDisplayLayer()
@@ -161,6 +182,7 @@ final class TelemetryPictureInPictureController: NSObject {
             .flatMap(TelemetryTemperatureSelection.init(rawValue:)) ?? .all
         autoHideWhenDocked = defaults.object(forKey: Self.autoHideWhenDockedKey) as? Bool ?? true
         super.init()
+        hideStatus = autoHideWhenDocked ? .waitingForDock : .disabled
 
         configure(displayLayer)
         configurePlaybackTimebase()
@@ -300,8 +322,10 @@ final class TelemetryPictureInPictureController: NSObject {
                       let current = self.pictureInPictureController,
                       ObjectIdentifier(current) == controllerID else { return }
                 if isDocked {
+                    self.hideStatus = .dockDetected
                     self.scheduleWindowHideIfDocked()
                 } else {
+                    self.hideStatus = self.autoHideWhenDocked ? .waitingForDock : .disabled
                     self.restorePictureInPictureWindow()
                 }
             }
@@ -364,25 +388,40 @@ final class TelemetryPictureInPictureController: NSObject {
                       self.autoHideWhenDocked,
                       self.isActive,
                       self.pictureInPictureController?.isPictureInPictureSuspended == true else { return }
-                if self.collapsePictureInPictureHostedWindow() { return }
+                if self.collapsePictureInPictureContentController() { return }
                 try? await Task.sleep(for: .milliseconds(100))
             }
         }
     }
 
     @discardableResult
-    private func collapsePictureInPictureHostedWindow() -> Bool {
-        guard updateHostedWindowSize(Self.hiddenHostedWindowSize) else { return false }
+    private func collapsePictureInPictureContentController() -> Bool {
+        guard let contentController = currentPictureInPictureContentController() else {
+            hideStatus = .contentControllerUnavailable
+            return false
+        }
+        UIView.performWithoutAnimation {
+            contentController.preferredContentSize = Self.hiddenHostedWindowSize
+            contentController.view.alpha = 0
+            contentController.view.isUserInteractionEnabled = false
+            contentController.view.layoutIfNeeded()
+        }
         setSystemControlsHidden(true)
         isVisuallyHidden = true
+        hideStatus = .hideApplied
         return true
     }
 
     private func restorePictureInPictureWindow() {
         windowHideTask?.cancel()
         windowHideTask = nil
-        if isVisuallyHidden {
-            _ = updateHostedWindowSize(Self.frameSize)
+        if let contentController = currentPictureInPictureContentController() {
+            UIView.performWithoutAnimation {
+                contentController.preferredContentSize = Self.frameSize
+                contentController.view.alpha = 1
+                contentController.view.isUserInteractionEnabled = true
+                contentController.view.layoutIfNeeded()
+            }
         }
         setSystemControlsHidden(false)
         isVisuallyHidden = false
@@ -395,47 +434,17 @@ final class TelemetryPictureInPictureController: NSObject {
         pictureInPictureController.setValue(hidden ? 2 : 0, forKey: "controlsStyle")
     }
 
-    /// `AVPictureInPictureController` delegates the actual system-hosted window to
-    /// a Pegasus proxy. Calling its own size update reaches the remote window; changing
-    /// the local `_window` alpha does not. The private bridge is isolated here because
-    /// MiniWatts is already a sideload-only app that depends on private IOKit APIs.
-    @discardableResult
-    private func updateHostedWindowSize(_ size: CGSize) -> Bool {
-        guard let proxy = currentPictureInPictureProxy() else { return false }
-        let beginSelector = NSSelectorFromString("hostedWindowSizeChangeBegan")
-        let updateSelector = NSSelectorFromString(
-            "updateHostedWindowSize:animationType:initialSpringVelocity:synchronizationFence:"
-        )
-        let endSelector = NSSelectorFromString("hostedWindowSizeChangeEnded")
-        guard proxy.responds(to: updateSelector),
-              let implementation = proxy.method(for: updateSelector) else { return false }
-
-        typealias UpdateHostedWindowSize = @convention(c) (
-            AnyObject,
-            Selector,
-            CGSize,
-            Int64,
-            Double,
-            AnyObject?
-        ) -> Void
-        let update = unsafeBitCast(implementation, to: UpdateHostedWindowSize.self)
-        if proxy.responds(to: beginSelector) {
-            proxy.perform(beginSelector)
-        }
-        update(proxy, updateSelector, size, 0, 0, nil)
-        if proxy.responds(to: endSelector) {
-            proxy.perform(endSelector)
-        }
-        return true
-    }
-
-    private func currentPictureInPictureProxy() -> NSObject? {
+    /// The sample-buffer route has its own internal content controller. Updating
+    /// that controller follows the same preferred-content-size path that made the
+    /// original video-call experiment collapse cleanly, without replacing the
+    /// sample-buffer content source that is proven to coexist with Live Activity.
+    private func currentPictureInPictureContentController() -> UIViewController? {
         guard let pictureInPictureController else { return nil }
         guard let ivar = class_getInstanceVariable(
             AVPictureInPictureController.self,
-            "_pictureInPictureProxy"
+            "_pictureInPictureViewController"
         ) else { return nil }
-        return object_getIvar(pictureInPictureController, ivar) as? NSObject
+        return object_getIvar(pictureInPictureController, ivar) as? UIViewController
     }
 
     private func configure(_ layer: AVSampleBufferDisplayLayer) {
@@ -582,6 +591,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         restorePictureInPictureWindow()
         isStarting = false
         isActive = true
+        hideStatus = autoHideWhenDocked ? .waitingForDock : .disabled
         errorMessage = nil
     }
 

@@ -104,6 +104,12 @@ struct SettingsView: View {
                 Toggle("Automatically hide after opening", isOn: autoHideWhenDocked)
                     .tint(.mwAccent)
 
+                LabeledContent("Hide status") {
+                    Text(pictureInPicture.hideStatus.label)
+                        .foregroundStyle(Color.mwMuted)
+                }
+                .font(.caption)
+
                 if pictureInPicture.isVisuallyHidden {
                     EmptyNote(
                         text: "The floating monitor is hidden. Monitoring and Dynamic Island updates are still running.",
@@ -161,7 +167,7 @@ struct SettingsView: View {
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts collapses only AVKit's docked window; the video stream and Dynamic Island continue unchanged. Turn this option off to show the window again.")
+                Text("With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts collapses the existing sample-buffer content controller; the video stream and Dynamic Island continue unchanged. Turn this option off to show the window again.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
