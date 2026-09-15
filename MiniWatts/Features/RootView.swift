@@ -46,7 +46,9 @@ struct RootView: View {
         .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
             case .active:
+                pictureInPicture.recoverAfterEnteringForeground()
                 monitor.start()
+                monitor.recoverLiveActivityPresentation()
             case .background:
                 widgetPublisher.flush(
                     ChargeReading(monitor.snapshot),

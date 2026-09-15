@@ -45,13 +45,17 @@ by several entries.
   `headline` lives here rather than on the snapshot: its last fallback is the %-rate
   estimate, which is derived across several snapshots and so is not a snapshot's to give.
 - `Core/LiveActivity/` — the shared ActivityKit attributes and the app-side controller.
-  The controller starts on a plug event, updates at most every five seconds and gives
-  every update a 15-second `staleDate`. `MiniWattsLiveActivity/` is the WidgetKit
-  extension that renders the Lock Screen and Dynamic Island presentations.
+  The personal build starts it only from the Settings toggle, attempts one-second
+  updates and gives each update a 30-second `staleDate`. It re-adopts ActivityKit's
+  system-owned activity if the local reference is lost and replaces an activity that
+  remains stuck in `.pending`. `MiniWattsLiveActivity/` is the WidgetKit extension
+  that renders the Lock Screen and Dynamic Island presentations.
 - `Features/PictureInPicture/` — converts the current snapshot to a 640×360 SwiftUI
   instrument frame, then enqueues it on `AVSampleBufferDisplayLayer` for a user-started
   `AVPictureInPictureController`. Power and temperatures are independently selectable;
-  the combined mode can be one page or a four-second two-page rotation.
+  the combined mode can be one page or a four-second two-page rotation. Start attempts
+  have a bounded watchdog and discard a wedged AVKit controller, so a missing delegate
+  callback cannot leave Settings spinning until process restart.
 - `Design/` — palette (`Color.mw(light:dark:)`, no asset catalog entries), `Panel`/
   `Metric`/`Pill`/`BarRow`, `PowerRing`, Swift Charts wrappers, `PhoneHeatMap`.
 - `Features/` — one folder per tab, plus Settings. `DebugView` (Raw data) is
@@ -82,9 +86,11 @@ A charge session ends when the **charger is unplugged**, not when the app leaves
 foreground. Three things make that work and they are easy to undo by accident:
 
 - `RootView` calls `monitor.pause()` on `.background` only, except while the user-started
-  floating Picture in Picture monitor is active. PiP owns the app's `audio` background
-  mode and keeps the same one-second tick alive until the floating window closes. It
-  used to call a `stop()`
+  floating Picture in Picture monitor or manually enabled Live Activity has an active
+  background-audio session. Either mode keeps the same one-second tick alive until the
+  user closes or disables it. The shared audio keeper must remain idempotent: resetting
+  the session category every tick races AVKit's PiP start transition. The app used to
+  call a `stop()`
   that closed the session on anything that was not `.active`, and `.inactive` fires for
   a pulled-down Control Center, the app switcher, an incoming call and the screen
   locking — so an overnight charge was recorded as a scatter of two-minute fragments.
@@ -94,9 +100,10 @@ foreground. Three things make that work and they are easy to undo by accident:
   session across however long the app was away.
 - Settings has *keep the screen on while charging*, default on, applied in `RootView`
   (`isIdleTimerDisabled`) and gated on the phone being plugged in. Sensors can only be
-  read in the foreground unless PiP has deliberately established its playback background
-  session, so without either mode the screen locks and a full charge cannot be recorded.
-  UIKit stays in the view layer; `Core` only holds the preference.
+  read in the foreground unless PiP or the personal build's Live Activity keeper has
+  deliberately established a playback background session, so without either mode the
+  screen locks and a full charge cannot be recorded. UIKit stays in the view layer;
+  `Core` only holds the preference.
 
 `SessionStore` encodes and writes on its own serial queue, coalescing bursts, and the
 load in `PowerMonitor.init` is a `Task`. At the ceiling — 60 sessions × 1,500 samples —

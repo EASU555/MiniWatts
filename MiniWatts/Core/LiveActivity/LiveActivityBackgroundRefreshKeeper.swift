@@ -34,8 +34,24 @@ final class LiveActivityBackgroundRefreshKeeper: NSObject {
     func setActive(_ shouldRun: Bool) -> Bool {
         self.shouldRun = shouldRun
         guard shouldRun else {
-            stopAudioGraph()
+            if isRunning || engine?.isRunning == true || player?.isPlaying == true {
+                stopAudioGraph()
+            }
             return false
+        }
+
+        // PowerMonitor calls this health check on every one-second sensor tick.
+        // Reapplying the AVAudioSession category and activation while the graph is
+        // already healthy races AVKit's PiP start transition on some devices. Keep
+        // the common path idempotent; lifecycle notifications below still force a
+        // rebuild after real interruptions and media-service resets.
+        if !needsRebuild,
+           let engine,
+           let player,
+           engine.isRunning,
+           player.isPlaying {
+            isRunning = true
+            return true
         }
 
         if needsRebuild || engine == nil || player == nil || silence == nil {
