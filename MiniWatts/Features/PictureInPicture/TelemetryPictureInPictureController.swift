@@ -3,6 +3,7 @@ import AVKit
 import CoreMedia
 import CoreVideo
 import Observation
+import ObjectiveC.runtime
 import SwiftUI
 import UIKit
 
@@ -83,6 +84,7 @@ final class TelemetryPictureInPictureController: NSObject {
     private static let temperatureSelectionKey = "pictureInPictureTemperatureSelection"
     private static let autoHideWhenDockedKey = "pictureInPictureAutoHideWhenDocked"
     private static let frameSize = CGSize(width: 640, height: 360)
+    private static let hiddenHostedWindowSize = CGSize(width: 640, height: 0.1)
 
     var showPower: Bool {
         didSet {
@@ -138,7 +140,6 @@ final class TelemetryPictureInPictureController: NSObject {
     @ObservationIgnored private var pictureInPictureSuspendedObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimebase: CMTimebase?
     @ObservationIgnored private var windowHideTask: Task<Void, Never>?
-    @ObservationIgnored private weak var hiddenPictureInPictureWindow: UIWindow?
     // Kept strongly while PiP is active so SwiftUI dismantling its representable
     // cannot also destroy the layer tree AVKit is still presenting.
     @ObservationIgnored private var sourceView: UIView?
@@ -353,9 +354,9 @@ final class TelemetryPictureInPictureController: NSObject {
               pictureInPictureController?.isPictureInPictureSuspended == true else { return }
         windowHideTask?.cancel()
         windowHideTask = Task { @MainActor [weak self] in
-            // Wait for the system edge-stash animation, then resolve AVKit's own
-            // hosted window. No video format, content source, audio session or
-            // Live Activity state is changed by this operation.
+            // Wait for the system edge-stash animation, then resize the remote
+            // hosted window through AVKit's own Pegasus proxy. No video format,
+            // content source, audio session or Live Activity state is changed.
             try? await Task.sleep(for: .milliseconds(350))
             for _ in 0..<20 {
                 guard !Task.isCancelled,
@@ -363,18 +364,16 @@ final class TelemetryPictureInPictureController: NSObject {
                       self.autoHideWhenDocked,
                       self.isActive,
                       self.pictureInPictureController?.isPictureInPictureSuspended == true else { return }
-                if self.hidePictureInPictureWindow() { return }
+                if self.collapsePictureInPictureHostedWindow() { return }
                 try? await Task.sleep(for: .milliseconds(100))
             }
         }
     }
 
     @discardableResult
-    private func hidePictureInPictureWindow() -> Bool {
-        guard let window = currentPictureInPictureWindow() else { return false }
-        hiddenPictureInPictureWindow = window
-        window.alpha = 0
-        window.layer.opacity = 0
+    private func collapsePictureInPictureHostedWindow() -> Bool {
+        guard updateHostedWindowSize(Self.hiddenHostedWindowSize) else { return false }
+        setSystemControlsHidden(true)
         isVisuallyHidden = true
         return true
     }
@@ -382,22 +381,61 @@ final class TelemetryPictureInPictureController: NSObject {
     private func restorePictureInPictureWindow() {
         windowHideTask?.cancel()
         windowHideTask = nil
-        if let window = hiddenPictureInPictureWindow ?? currentPictureInPictureWindow() {
-            window.alpha = 1
-            window.layer.opacity = 1
+        if isVisuallyHidden {
+            _ = updateHostedWindowSize(Self.frameSize)
         }
-        hiddenPictureInPictureWindow = nil
+        setSystemControlsHidden(false)
         isVisuallyHidden = false
     }
 
-    /// AVKit exposes its hosted PiP window internally. The project is already a
-    /// sideload-only utility using private IOKit APIs, so this private selector is
-    /// deliberately isolated to the optional edge-hide feature.
-    private func currentPictureInPictureWindow() -> UIWindow? {
+    private func setSystemControlsHidden(_ hidden: Bool) {
+        guard let pictureInPictureController else { return }
+        let selector = NSSelectorFromString("setControlsStyle:")
+        guard pictureInPictureController.responds(to: selector) else { return }
+        pictureInPictureController.setValue(hidden ? 2 : 0, forKey: "controlsStyle")
+    }
+
+    /// `AVPictureInPictureController` delegates the actual system-hosted window to
+    /// a Pegasus proxy. Calling its own size update reaches the remote window; changing
+    /// the local `_window` alpha does not. The private bridge is isolated here because
+    /// MiniWatts is already a sideload-only app that depends on private IOKit APIs.
+    @discardableResult
+    private func updateHostedWindowSize(_ size: CGSize) -> Bool {
+        guard let proxy = currentPictureInPictureProxy() else { return false }
+        let beginSelector = NSSelectorFromString("hostedWindowSizeChangeBegan")
+        let updateSelector = NSSelectorFromString(
+            "updateHostedWindowSize:animationType:initialSpringVelocity:synchronizationFence:"
+        )
+        let endSelector = NSSelectorFromString("hostedWindowSizeChangeEnded")
+        guard proxy.responds(to: updateSelector),
+              let implementation = proxy.method(for: updateSelector) else { return false }
+
+        typealias UpdateHostedWindowSize = @convention(c) (
+            AnyObject,
+            Selector,
+            CGSize,
+            Int64,
+            Double,
+            AnyObject?
+        ) -> Void
+        let update = unsafeBitCast(implementation, to: UpdateHostedWindowSize.self)
+        if proxy.responds(to: beginSelector) {
+            proxy.perform(beginSelector)
+        }
+        update(proxy, updateSelector, size, 0, 0, nil)
+        if proxy.responds(to: endSelector) {
+            proxy.perform(endSelector)
+        }
+        return true
+    }
+
+    private func currentPictureInPictureProxy() -> NSObject? {
         guard let pictureInPictureController else { return nil }
-        let selector = NSSelectorFromString("_window")
-        guard pictureInPictureController.responds(to: selector) else { return nil }
-        return pictureInPictureController.perform(selector)?.takeUnretainedValue() as? UIWindow
+        guard let ivar = class_getInstanceVariable(
+            AVPictureInPictureController.self,
+            "_pictureInPictureProxy"
+        ) else { return nil }
+        return object_getIvar(pictureInPictureController, ivar) as? NSObject
     }
 
     private func configure(_ layer: AVSampleBufferDisplayLayer) {

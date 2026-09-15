@@ -161,7 +161,7 @@ struct SettingsView: View {
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts makes only AVKit's docked window transparent; the video stream and Dynamic Island continue unchanged. Turn this option off to show the window again.")
+                Text("With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts collapses only AVKit's docked window; the video stream and Dynamic Island continue unchanged. Turn this option off to show the window again.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
