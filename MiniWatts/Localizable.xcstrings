@@ -2245,12 +2245,12 @@
         }
       }
     },
-    "With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts first checks the system and internal PiP state, then uses a four-second fallback if iOS reports neither. The video stream and Dynamic Island continue unchanged. Turn this option off to show the window again." : {
+    "With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts discovers the PiP adapter, proxy, content controller and hosted window used by the current iOS version, then uses a four-second fallback if iOS reports no docking state. The video stream and Dynamic Island continue unchanged. Turn this option off to show the window again." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "开启“打开后自动隐藏”后，将画中画滑向任一屏幕边缘。MiniWatts 会先检查系统及画中画内部状态；若 iOS 均未上报，则使用四秒保底隐藏。视频流和灵动岛会继续运行。关闭此选项即可重新显示窗口。"
+            "value" : "开启“打开后自动隐藏”后，将画中画滑向任一屏幕边缘。MiniWatts 会自动查找当前 iOS 使用的画中画适配器、代理、内容控制器与托管窗口；若 iOS 未上报停靠状态，则使用四秒保底隐藏。视频流和灵动岛会继续运行。关闭此选项即可重新显示窗口。"
           }
         }
       }

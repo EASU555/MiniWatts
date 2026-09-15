@@ -442,13 +442,33 @@ final class TelemetryPictureInPictureController: NSObject {
     private func collapsePictureInPicturePresentation(
         status: TelemetryPictureInPictureHideStatus
     ) -> Bool {
-        var changedPresentation = updateHostedWindowSize(Self.hiddenHostedWindowSize)
-        if let contentController = currentPictureInPictureContentController() {
+        let runtimeObjects = pictureInPictureRuntimeObjects()
+        var changedPresentation = updateHostedWindowSize(
+            Self.hiddenHostedWindowSize,
+            runtimeObjects: runtimeObjects
+        )
+        let preferredSizeSelector = NSSelectorFromString("setPreferredContentSize:")
+        for object in runtimeObjects where object.responds(to: preferredSizeSelector) {
+            setPreferredContentSize(
+                Self.hiddenHostedWindowSize,
+                on: object,
+                selector: preferredSizeSelector
+            )
+            changedPresentation = true
+        }
+        for contentController in runtimeObjects.compactMap({ $0 as? UIViewController }) {
             UIView.performWithoutAnimation {
                 contentController.preferredContentSize = Self.hiddenHostedWindowSize
                 contentController.view.alpha = 0
                 contentController.view.isUserInteractionEnabled = false
                 contentController.view.layoutIfNeeded()
+            }
+            changedPresentation = true
+        }
+        for window in pictureInPictureRuntimeWindows(in: runtimeObjects) {
+            UIView.performWithoutAnimation {
+                window.alpha = 0
+                window.isUserInteractionEnabled = false
             }
             changedPresentation = true
         }
@@ -465,7 +485,16 @@ final class TelemetryPictureInPictureController: NSObject {
         windowHideTask?.cancel()
         windowHideTask = nil
         let needsRemoteRestore = isVisuallyHidden
-        if let contentController = currentPictureInPictureContentController() {
+        let runtimeObjects = pictureInPictureRuntimeObjects()
+        let preferredSizeSelector = NSSelectorFromString("setPreferredContentSize:")
+        for object in runtimeObjects where object.responds(to: preferredSizeSelector) {
+            setPreferredContentSize(
+                Self.frameSize,
+                on: object,
+                selector: preferredSizeSelector
+            )
+        }
+        for contentController in runtimeObjects.compactMap({ $0 as? UIViewController }) {
             UIView.performWithoutAnimation {
                 contentController.preferredContentSize = Self.frameSize
                 contentController.view.alpha = 1
@@ -473,8 +502,14 @@ final class TelemetryPictureInPictureController: NSObject {
                 contentController.view.layoutIfNeeded()
             }
         }
+        for window in pictureInPictureRuntimeWindows(in: runtimeObjects) {
+            UIView.performWithoutAnimation {
+                window.alpha = 1
+                window.isUserInteractionEnabled = true
+            }
+        }
         if needsRemoteRestore {
-            _ = updateHostedWindowSize(Self.frameSize)
+            _ = updateHostedWindowSize(Self.frameSize, runtimeObjects: runtimeObjects)
         }
         setSystemControlsHidden(false)
         isVisuallyHidden = false
@@ -492,21 +527,19 @@ final class TelemetryPictureInPictureController: NSObject {
     /// original video-call experiment collapse cleanly, without replacing the
     /// sample-buffer content source that is proven to coexist with Live Activity.
     private func currentPictureInPictureContentController() -> UIViewController? {
-        guard let pictureInPictureController else { return nil }
-        guard let ivar = class_getInstanceVariable(
-            AVPictureInPictureController.self,
-            "_pictureInPictureViewController"
-        ) else { return nil }
-        return object_getIvar(pictureInPictureController, ivar) as? UIViewController
+        pictureInPictureRuntimeObjects().first {
+            $0 is UIViewController
+                && NSStringFromClass(type(of: $0)).localizedCaseInsensitiveContains(
+                    "PictureInPicture"
+                )
+        } as? UIViewController
     }
 
     private func currentPictureInPictureProxy() -> NSObject? {
-        guard let pictureInPictureController,
-              let ivar = class_getInstanceVariable(
-                AVPictureInPictureController.self,
-                "_pictureInPictureProxy"
-              ) else { return nil }
-        return object_getIvar(pictureInPictureController, ivar) as? NSObject
+        let selector = NSSelectorFromString(
+            "updateHostedWindowSize:animationType:initialSpringVelocity:synchronizationFence:"
+        )
+        return pictureInPictureRuntimeObjects().first { $0.responds(to: selector) }
     }
 
     private func isPictureInPictureProxySuspended() -> Bool {
@@ -532,12 +565,13 @@ final class TelemetryPictureInPictureController: NSObject {
     }
 
     @discardableResult
-    private func updateHostedWindowSize(_ size: CGSize) -> Bool {
-        guard let proxy = currentPictureInPictureProxy() else { return false }
+    private func updateHostedWindowSize(
+        _ size: CGSize,
+        runtimeObjects: [NSObject]? = nil
+    ) -> Bool {
         let selector = NSSelectorFromString(
             "updateHostedWindowSize:animationType:initialSpringVelocity:synchronizationFence:"
         )
-        guard proxy.responds(to: selector) else { return false }
         typealias Update = @convention(c) (
             AnyObject,
             Selector,
@@ -546,9 +580,95 @@ final class TelemetryPictureInPictureController: NSObject {
             Double,
             AnyObject?
         ) -> Void
-        let update = unsafeBitCast(proxy.method(for: selector), to: Update.self)
-        update(proxy, selector, size, 0, 0, nil)
-        return true
+        var didUpdate = false
+        for object in runtimeObjects ?? pictureInPictureRuntimeObjects()
+        where object.responds(to: selector) {
+            let update = unsafeBitCast(object.method(for: selector), to: Update.self)
+            update(object, selector, size, 0, 0, nil)
+            didUpdate = true
+        }
+        return didUpdate
+    }
+
+    private func setPreferredContentSize(
+        _ size: CGSize,
+        on object: NSObject,
+        selector: Selector
+    ) {
+        typealias Setter = @convention(c) (AnyObject, Selector, CGSize) -> Void
+        let setter = unsafeBitCast(object.method(for: selector), to: Setter.self)
+        setter(object, selector, size)
+    }
+
+    /// AVKit 26 inserted AVPictureInPicturePlatformAdapter between the public
+    /// controller and Pegasus. Walk only PiP-named runtime objects so this works
+    /// with both the old direct ivars and the new adapter without following the
+    /// delegate back into MiniWatts' complete object graph.
+    private func pictureInPictureRuntimeObjects() -> [NSObject] {
+        guard let pictureInPictureController else { return [] }
+        let root = pictureInPictureController as NSObject
+        var result = [root]
+        var queue: [(NSObject, Int)] = [(root, 0)]
+        var visited: Set<ObjectIdentifier> = [ObjectIdentifier(root), ObjectIdentifier(self)]
+
+        while !queue.isEmpty {
+            let (object, depth) = queue.removeFirst()
+            guard depth < 5 else { continue }
+            var runtimeClass: AnyClass? = object_getClass(object)
+            while let currentClass = runtimeClass, currentClass != NSObject.self {
+                var count: UInt32 = 0
+                guard let ivars = class_copyIvarList(currentClass, &count) else {
+                    runtimeClass = class_getSuperclass(currentClass)
+                    continue
+                }
+                defer { free(ivars) }
+                for index in 0..<Int(count) {
+                    let ivar = ivars[index]
+                    guard let encoding = ivar_getTypeEncoding(ivar), encoding.pointee == 64,
+                          let namePointer = ivar_getName(ivar) else { continue }
+                    let ivarName = String(cString: namePointer).lowercased()
+                    guard !ivarName.contains("delegate") else { continue }
+                    guard let child = object_getIvar(object, ivar) as? NSObject else { continue }
+                    let identifier = ObjectIdentifier(child)
+                    guard visited.insert(identifier).inserted else { continue }
+                    let className = NSStringFromClass(type(of: child))
+                    let isPiPObject = className.localizedCaseInsensitiveContains("PictureInPicture")
+                        || className.localizedCaseInsensitiveContains("PGHostedWindow")
+                    guard isPiPObject || child is UIWindow || child is UIViewController else {
+                        continue
+                    }
+                    result.append(child)
+                    queue.append((child, depth + 1))
+                }
+                runtimeClass = class_getSuperclass(currentClass)
+            }
+        }
+        return result
+    }
+
+    private func pictureInPictureRuntimeWindows(in objects: [NSObject]) -> [UIWindow] {
+        var windows = objects.compactMap { object -> UIWindow? in
+            guard let window = object as? UIWindow else { return nil }
+            let className = NSStringFromClass(type(of: window))
+            guard className.localizedCaseInsensitiveContains("PictureInPicture")
+                    || className.localizedCaseInsensitiveContains("PGHosted") else { return nil }
+            return window
+        }
+        guard let pictureInPictureController else { return windows }
+        let selector = NSSelectorFromString("_window")
+        if pictureInPictureController.responds(to: selector) {
+            typealias Getter = @convention(c) (AnyObject, Selector) -> AnyObject?
+            let getter = unsafeBitCast(
+                pictureInPictureController.method(for: selector),
+                to: Getter.self
+            )
+            if let window = getter(pictureInPictureController, selector) as? UIWindow,
+               window !== sourceView?.window,
+               !windows.contains(where: { $0 === window }) {
+                windows.append(window)
+            }
+        }
+        return windows
     }
 
     private func configure(_ layer: AVSampleBufferDisplayLayer) {
