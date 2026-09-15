@@ -142,13 +142,7 @@ final class TelemetryPictureInPictureController: NSObject {
     var autoHideWhenDocked: Bool {
         didSet {
             UserDefaults.standard.set(autoHideWhenDocked, forKey: Self.autoHideWhenDockedKey)
-            if autoHideWhenDocked {
-                hideStatus = .waitingForDock
-                startAutomaticHideMonitoring()
-            } else {
-                hideStatus = .disabled
-                restorePictureInPictureWindow()
-            }
+            hideStatus = .disabled
         }
     }
 
@@ -185,9 +179,10 @@ final class TelemetryPictureInPictureController: NSObject {
             .flatMap(TelemetryPictureInPictureLayout.init(rawValue:)) ?? .together
         temperatureSelection = defaults.string(forKey: Self.temperatureSelectionKey)
             .flatMap(TelemetryTemperatureSelection.init(rawValue:)) ?? .all
-        autoHideWhenDocked = defaults.object(forKey: Self.autoHideWhenDockedKey) as? Bool ?? true
+        autoHideWhenDocked = false
         super.init()
-        hideStatus = autoHideWhenDocked ? .waitingForDock : .disabled
+        UserDefaults.standard.set(false, forKey: Self.autoHideWhenDockedKey)
+        hideStatus = .disabled
 
         configure(displayLayer)
         configurePlaybackTimebase()
@@ -327,9 +322,9 @@ final class TelemetryPictureInPictureController: NSObject {
                       let current = self.pictureInPictureController,
                       ObjectIdentifier(current) == controllerID else { return }
                 if isDocked {
-                    self.scheduleWindowHide(status: .hiddenAfterPublicDetection)
+                    self.hideStatus = .disabled
                 } else if !self.isVisuallyHidden {
-                    self.hideStatus = self.autoHideWhenDocked ? .waitingForDock : .disabled
+                    self.hideStatus = .disabled
                 }
             }
         }
@@ -477,28 +472,6 @@ final class TelemetryPictureInPictureController: NSObject {
         dockingMonitorTask = nil
         windowHideTask?.cancel()
         windowHideTask = nil
-        let needsRemoteRestore = isVisuallyHidden
-        let runtimeObjects = pictureInPictureRuntimeObjects()
-        let preferredSizeSelector = NSSelectorFromString("setPreferredContentSize:")
-        for object in runtimeObjects where object.responds(to: preferredSizeSelector) {
-            setPreferredContentSize(
-                Self.frameSize,
-                on: object,
-                selector: preferredSizeSelector
-            )
-        }
-        for contentController in runtimeObjects.compactMap({ $0 as? UIViewController }) {
-            UIView.performWithoutAnimation {
-                contentController.preferredContentSize = Self.frameSize
-                contentController.view.alpha = 1
-                contentController.view.isUserInteractionEnabled = true
-                contentController.view.layoutIfNeeded()
-            }
-        }
-        if needsRemoteRestore {
-            _ = updateHostedWindowSize(Self.frameSize, runtimeObjects: runtimeObjects)
-        }
-        setSystemControlsHidden(false)
         isVisuallyHidden = false
     }
 
@@ -798,9 +771,8 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         restorePictureInPictureWindow()
         isStarting = false
         isActive = true
-        hideStatus = autoHideWhenDocked ? .waitingForDock : .disabled
+        hideStatus = .disabled
         errorMessage = nil
-        startAutomaticHideMonitoring()
     }
 
     func pictureInPictureController(

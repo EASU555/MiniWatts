@@ -2245,12 +2245,12 @@
         }
       }
     },
-    "With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts discovers only AVKit's PiP adapter, proxy and content controller, then uses a four-second fallback if iOS reports no docking state. App windows are never modified. The video stream and Dynamic Island continue unchanged. Turn this option off to show the window again." : {
+    "Swipe Picture in Picture to either screen edge to park it. The remaining arrow is the system PiP restore control and cannot be removed by the app; MiniWatts leaves the system window untouched so the app, video stream and Dynamic Island remain stable." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "开启“打开后自动隐藏”后，将画中画滑向任一屏幕边缘。MiniWatts 只查找 AVKit 的画中画适配器、代理和内容控制器；若 iOS 未上报停靠状态，则使用四秒保底隐藏，绝不会修改 App 自身窗口。视频流和灵动岛会继续运行。关闭此选项即可重新显示窗口。"
+            "value" : "将画中画滑向任一屏幕边缘即可停靠。留下的箭头是系统画中画恢复入口，App 无法移除；MiniWatts 不再修改系统窗口，以保证 App、视频流和灵动岛稳定运行。"
           }
         }
       }

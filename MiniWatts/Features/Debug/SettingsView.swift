@@ -20,8 +20,7 @@ struct SettingsView: View {
                             showPower: $pictureInPicture.showPower,
                             showTemperatures: $pictureInPicture.showTemperatures,
                             layout: $pictureInPicture.layout,
-                            temperatureSelection: $pictureInPicture.temperatureSelection,
-                            autoHideWhenDocked: $pictureInPicture.autoHideWhenDocked
+                            temperatureSelection: $pictureInPicture.temperatureSelection
                         )
                         capacityPanel(capacity: $monitor.configuredBatteryWattHours)
                         devicePanel
@@ -57,8 +56,7 @@ struct SettingsView: View {
         showPower: Binding<Bool>,
         showTemperatures: Binding<Bool>,
         layout: Binding<TelemetryPictureInPictureLayout>,
-        temperatureSelection: Binding<TelemetryTemperatureSelection>,
-        autoHideWhenDocked: Binding<Bool>
+        temperatureSelection: Binding<TelemetryTemperatureSelection>
     ) -> some View {
         Panel("Floating monitor", systemImage: "pip") {
             VStack(alignment: .leading, spacing: 12) {
@@ -99,22 +97,6 @@ struct SettingsView: View {
                         Text("Separate pages").tag(TelemetryPictureInPictureLayout.separatePages)
                     }
                     .pickerStyle(.segmented)
-                }
-
-                Toggle("Automatically hide after opening", isOn: autoHideWhenDocked)
-                    .tint(.mwAccent)
-
-                LabeledContent("Hide status") {
-                    Text(pictureInPicture.hideStatus.label)
-                        .foregroundStyle(Color.mwMuted)
-                }
-                .font(.caption)
-
-                if pictureInPicture.isVisuallyHidden {
-                    EmptyNote(
-                        text: "The floating monitor is hidden. Monitoring and Dynamic Island updates are still running.",
-                        systemImage: "eye.slash"
-                    )
                 }
 
                 if !showPower.wrappedValue && !showTemperatures.wrappedValue {
@@ -167,7 +149,7 @@ struct SettingsView: View {
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts discovers only AVKit's PiP adapter, proxy and content controller, then uses a four-second fallback if iOS reports no docking state. App windows are never modified. The video stream and Dynamic Island continue unchanged. Turn this option off to show the window again.")
+                Text("Swipe Picture in Picture to either screen edge to park it. The remaining arrow is the system PiP restore control and cannot be removed by the app; MiniWatts leaves the system window untouched so the app, video stream and Dynamic Island remain stable.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
