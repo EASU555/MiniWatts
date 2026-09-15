@@ -2165,12 +2165,12 @@
         }
       }
     },
-    "With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts hides the docked surface without changing the video stream or Dynamic Island lifecycle. Turn this option off to show it again." : {
+    "With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts makes only AVKit's docked window transparent; the video stream and Dynamic Island continue unchanged. Turn this option off to show the window again." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "开启“打开后自动隐藏”后，将画中画滑向任一屏幕边缘。MiniWatts 会隐藏停靠画面，但不会改变视频流或灵动岛生命周期；关闭此选项即可重新显示。"
+            "value" : "开启“打开后自动隐藏”后，将画中画滑向任一屏幕边缘。MiniWatts 只会让 AVKit 的停靠窗口透明；视频流和灵动岛会继续运行。关闭此选项即可重新显示窗口。"
           }
         }
       }

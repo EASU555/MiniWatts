@@ -81,6 +81,7 @@ final class TelemetryPictureInPictureController: NSObject {
     private static let showTemperaturesKey = "pictureInPictureShowTemperatures"
     private static let layoutKey = "pictureInPictureLayout"
     private static let temperatureSelectionKey = "pictureInPictureTemperatureSelection"
+    private static let autoHideWhenDockedKey = "pictureInPictureAutoHideWhenDocked"
     private static let frameSize = CGSize(width: 640, height: 360)
 
     var showPower: Bool {
@@ -114,15 +115,30 @@ final class TelemetryPictureInPictureController: NSObject {
         }
     }
 
+    var autoHideWhenDocked: Bool {
+        didSet {
+            UserDefaults.standard.set(autoHideWhenDocked, forKey: Self.autoHideWhenDockedKey)
+            if autoHideWhenDocked {
+                scheduleWindowHideIfDocked()
+            } else {
+                restorePictureInPictureWindow()
+            }
+        }
+    }
+
     private(set) var isActive = false
     private(set) var isStarting = false
     private(set) var isPossible = false
+    private(set) var isVisuallyHidden = false
     private(set) var errorMessage: LocalizedStringResource?
 
     @ObservationIgnored private(set) var displayLayer = AVSampleBufferDisplayLayer()
     @ObservationIgnored private var pictureInPictureController: AVPictureInPictureController?
     @ObservationIgnored private var pictureInPicturePossibleObservation: NSKeyValueObservation?
+    @ObservationIgnored private var pictureInPictureSuspendedObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimebase: CMTimebase?
+    @ObservationIgnored private var windowHideTask: Task<Void, Never>?
+    @ObservationIgnored private weak var hiddenPictureInPictureWindow: UIWindow?
     // Kept strongly while PiP is active so SwiftUI dismantling its representable
     // cannot also destroy the layer tree AVKit is still presenting.
     @ObservationIgnored private var sourceView: UIView?
@@ -142,6 +158,7 @@ final class TelemetryPictureInPictureController: NSObject {
             .flatMap(TelemetryPictureInPictureLayout.init(rawValue:)) ?? .together
         temperatureSelection = defaults.string(forKey: Self.temperatureSelectionKey)
             .flatMap(TelemetryTemperatureSelection.init(rawValue:)) ?? .all
+        autoHideWhenDocked = defaults.object(forKey: Self.autoHideWhenDockedKey) as? Bool ?? true
         super.init()
 
         configure(displayLayer)
@@ -205,6 +222,7 @@ final class TelemetryPictureInPictureController: NSObject {
     func start() {
         guard isSupported, hasSelectedContent, !keepsSensorSamplingActive else { return }
         errorMessage = nil
+        restorePictureInPictureWindow()
 
         do {
             let session = AVAudioSession.sharedInstance()
@@ -246,6 +264,7 @@ final class TelemetryPictureInPictureController: NSObject {
     }
 
     func stop() {
+        restorePictureInPictureWindow()
         pictureInPictureController?.stopPictureInPicture()
     }
 
@@ -269,10 +288,28 @@ final class TelemetryPictureInPictureController: NSObject {
                 self?.isPossible = possible
             }
         }
+        pictureInPictureSuspendedObservation = controller.observe(
+            \.isPictureInPictureSuspended,
+            options: [.initial, .new]
+        ) { [weak self, weak controller] _, change in
+            let isDocked = change.newValue ?? false
+            Task { @MainActor [weak self, weak controller] in
+                guard let self,
+                      let controller,
+                      self.pictureInPictureController === controller else { return }
+                if isDocked {
+                    self.scheduleWindowHideIfDocked()
+                } else {
+                    self.restorePictureInPictureWindow()
+                }
+            }
+        }
     }
 
     private func rebuildRenderingPipeline() {
+        restorePictureInPictureWindow()
         pictureInPicturePossibleObservation = nil
+        pictureInPictureSuspendedObservation = nil
         pictureInPictureController = nil
         isPossible = false
 
@@ -306,6 +343,60 @@ final class TelemetryPictureInPictureController: NSObject {
             sourceView = nil
             isPossible = false
         }
+    }
+
+    private func scheduleWindowHideIfDocked() {
+        guard autoHideWhenDocked,
+              isActive,
+              !isVisuallyHidden,
+              pictureInPictureController?.isPictureInPictureSuspended == true else { return }
+        windowHideTask?.cancel()
+        windowHideTask = Task { @MainActor [weak self] in
+            // Wait for the system edge-stash animation, then resolve AVKit's own
+            // hosted window. No video format, content source, audio session or
+            // Live Activity state is changed by this operation.
+            try? await Task.sleep(for: .milliseconds(350))
+            for _ in 0..<20 {
+                guard !Task.isCancelled,
+                      let self,
+                      self.autoHideWhenDocked,
+                      self.isActive,
+                      self.pictureInPictureController?.isPictureInPictureSuspended == true else { return }
+                if self.hidePictureInPictureWindow() { return }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+        }
+    }
+
+    @discardableResult
+    private func hidePictureInPictureWindow() -> Bool {
+        guard let window = currentPictureInPictureWindow() else { return false }
+        hiddenPictureInPictureWindow = window
+        window.alpha = 0
+        window.layer.opacity = 0
+        isVisuallyHidden = true
+        return true
+    }
+
+    private func restorePictureInPictureWindow() {
+        windowHideTask?.cancel()
+        windowHideTask = nil
+        if let window = hiddenPictureInPictureWindow ?? currentPictureInPictureWindow() {
+            window.alpha = 1
+            window.layer.opacity = 1
+        }
+        hiddenPictureInPictureWindow = nil
+        isVisuallyHidden = false
+    }
+
+    /// AVKit exposes its hosted PiP window internally. The project is already a
+    /// sideload-only utility using private IOKit APIs, so this private selector is
+    /// deliberately isolated to the optional edge-hide feature.
+    private func currentPictureInPictureWindow() -> UIWindow? {
+        guard let pictureInPictureController else { return nil }
+        let selector = NSSelectorFromString("_window")
+        guard pictureInPictureController.responds(to: selector) else { return nil }
+        return pictureInPictureController.perform(selector)?.takeUnretainedValue() as? UIWindow
     }
 
     private func configure(_ layer: AVSampleBufferDisplayLayer) {
@@ -449,6 +540,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
     func pictureInPictureControllerWillStartPictureInPicture(
         _ pictureInPictureController: AVPictureInPictureController
     ) {
+        restorePictureInPictureWindow()
         isStarting = false
         isActive = true
         errorMessage = nil
@@ -468,6 +560,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
     func pictureInPictureControllerDidStopPictureInPicture(
         _ pictureInPictureController: AVPictureInPictureController
     ) {
+        restorePictureInPictureWindow()
         isStarting = false
         isActive = false
         displayLayer.sampleBufferRenderer.flush()
