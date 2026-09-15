@@ -167,7 +167,7 @@ struct SettingsView: View {
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts discovers the PiP adapter, proxy, content controller and hosted window used by the current iOS version, then uses a four-second fallback if iOS reports no docking state. The video stream and Dynamic Island continue unchanged. Turn this option off to show the window again.")
+                Text("With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts discovers only AVKit's PiP adapter, proxy and content controller, then uses a four-second fallback if iOS reports no docking state. App windows are never modified. The video stream and Dynamic Island continue unchanged. Turn this option off to show the window again.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)

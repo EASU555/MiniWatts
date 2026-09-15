@@ -465,13 +465,6 @@ final class TelemetryPictureInPictureController: NSObject {
             }
             changedPresentation = true
         }
-        for window in pictureInPictureRuntimeWindows(in: runtimeObjects) {
-            UIView.performWithoutAnimation {
-                window.alpha = 0
-                window.isUserInteractionEnabled = false
-            }
-            changedPresentation = true
-        }
         guard changedPresentation else { return false }
         setSystemControlsHidden(true)
         isVisuallyHidden = true
@@ -500,12 +493,6 @@ final class TelemetryPictureInPictureController: NSObject {
                 contentController.view.alpha = 1
                 contentController.view.isUserInteractionEnabled = true
                 contentController.view.layoutIfNeeded()
-            }
-        }
-        for window in pictureInPictureRuntimeWindows(in: runtimeObjects) {
-            UIView.performWithoutAnimation {
-                window.alpha = 1
-                window.isUserInteractionEnabled = true
             }
         }
         if needsRemoteRestore {
@@ -601,9 +588,10 @@ final class TelemetryPictureInPictureController: NSObject {
     }
 
     /// AVKit 26 inserted AVPictureInPicturePlatformAdapter between the public
-    /// controller and Pegasus. Walk only PiP-named runtime objects so this works
-    /// with both the old direct ivars and the new adapter without following the
-    /// delegate back into MiniWatts' complete object graph.
+    /// controller and Pegasus. Follow only objects whose class name itself contains
+    /// `PictureInPicture`; never follow UIKit controllers or windows back into the
+    /// app. That strict boundary is what prevents the hide operation from touching
+    /// MiniWatts' own scene.
     private func pictureInPictureRuntimeObjects() -> [NSObject] {
         guard let pictureInPictureController else { return [] }
         let root = pictureInPictureController as NSObject
@@ -632,9 +620,7 @@ final class TelemetryPictureInPictureController: NSObject {
                     let identifier = ObjectIdentifier(child)
                     guard visited.insert(identifier).inserted else { continue }
                     let className = NSStringFromClass(type(of: child))
-                    let isPiPObject = className.localizedCaseInsensitiveContains("PictureInPicture")
-                        || className.localizedCaseInsensitiveContains("PGHostedWindow")
-                    guard isPiPObject || child is UIWindow || child is UIViewController else {
+                    guard className.localizedCaseInsensitiveContains("PictureInPicture") else {
                         continue
                     }
                     result.append(child)
@@ -642,33 +628,30 @@ final class TelemetryPictureInPictureController: NSObject {
                 }
                 runtimeClass = class_getSuperclass(currentClass)
             }
-        }
-        return result
-    }
 
-    private func pictureInPictureRuntimeWindows(in objects: [NSObject]) -> [UIWindow] {
-        var windows = objects.compactMap { object -> UIWindow? in
-            guard let window = object as? UIWindow else { return nil }
-            let className = NSStringFromClass(type(of: window))
-            guard className.localizedCaseInsensitiveContains("PictureInPicture")
-                    || className.localizedCaseInsensitiveContains("PGHosted") else { return nil }
-            return window
-        }
-        guard let pictureInPictureController else { return windows }
-        let selector = NSSelectorFromString("_window")
-        if pictureInPictureController.responds(to: selector) {
-            typealias Getter = @convention(c) (AnyObject, Selector) -> AnyObject?
-            let getter = unsafeBitCast(
-                pictureInPictureController.method(for: selector),
-                to: Getter.self
-            )
-            if let window = getter(pictureInPictureController, selector) as? UIWindow,
-               window !== sourceView?.window,
-               !windows.contains(where: { $0 === window }) {
-                windows.append(window)
+            for getterName in [
+                "viewController",
+                "contentViewController",
+                "activeContentViewController",
+                "activeVideoCallContentViewController",
+                "pictureInPictureViewController"
+            ] {
+                let selector = NSSelectorFromString(getterName)
+                guard object.responds(to: selector) else { continue }
+                typealias Getter = @convention(c) (AnyObject, Selector) -> AnyObject?
+                let getter = unsafeBitCast(object.method(for: selector), to: Getter.self)
+                guard let child = getter(object, selector) as? NSObject else { continue }
+                let identifier = ObjectIdentifier(child)
+                guard visited.insert(identifier).inserted else { continue }
+                let className = NSStringFromClass(type(of: child))
+                guard className.localizedCaseInsensitiveContains("PictureInPicture") else {
+                    continue
+                }
+                result.append(child)
+                queue.append((child, depth + 1))
             }
         }
-        return windows
+        return result
     }
 
     private func configure(_ layer: AVSampleBufferDisplayLayer) {
