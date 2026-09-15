@@ -174,7 +174,11 @@ struct SettingsView: View {
                               || (!floatingMeter.isRunning && !floatingMeter.hasSelectedContent))
                 }
 
-                Text("The floating monitor redraws once per second. Choose all temperatures or one component; the iOS system thermal state is always shown. Together shows power and temperatures at the same time; Separate pages alternates between them every four seconds.")
+                Text("Puts the reading in a floating window that stays on top of other apps and keeps updating once a second. It is the only place iOS lets an app keep a number moving while it is off screen: a widget is refreshed a few times an hour, and the Lock Screen activity only moves while MiniWatts itself is running.")
+                    .font(.caption)
+                    .foregroundStyle(Color.mwMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Choose all temperatures or one component; the iOS system thermal state is always shown. Together shows power and temperatures at the same time; Separate pages alternates between them every four seconds.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)

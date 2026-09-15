@@ -41,7 +41,7 @@ nonisolated struct FloatingMeterData: Hashable {
     let externalConnected: Bool
     let isWireless: Bool
     let watts: Double?
-    let powerIsBatterySide: Bool
+    let source: ChargeReading.Source?
     let batteryPercent: Int?
     let socTemperature: Double?
     let batteryTemperature: Double?
@@ -56,7 +56,7 @@ nonisolated struct FloatingMeterData: Hashable {
         externalConnected = snapshot.externalConnected
         isWireless = reading.isWireless
         watts = reading.watts
-        powerIsBatterySide = reading.source == .intoBattery || reading.source == .fromBattery
+        source = reading.source
         batteryPercent = snapshot.percent
         socTemperature = snapshot.socTemperature
         batteryTemperature = snapshot.batteryTemperature
@@ -214,7 +214,7 @@ struct FloatingMeterTelemetryFrame: View {
 
     private func powerReadout(compact: Bool) -> some View {
         VStack(alignment: compact ? .leading : .center, spacing: 8) {
-            Label("Charging power", systemImage: "bolt.fill")
+            Label(powerTitle, systemImage: "bolt.fill")
                 .font(.system(size: compact ? 17 : 21, weight: .semibold, design: .rounded))
                 .foregroundStyle(.cyan)
             HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -226,7 +226,7 @@ struct FloatingMeterTelemetryFrame: View {
                     .font(.system(size: compact ? 22 : 30, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
             }
-            Text(powerSourceText)
+            powerCaption
                 .font(.system(size: 15, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -347,10 +347,20 @@ struct FloatingMeterTelemetryFrame: View {
         .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
     }
 
-    private var powerSourceText: LocalizedStringKey {
-        guard data?.externalConnected == true else { return "Not charging" }
-        if data?.powerIsBatterySide == true { return "Into battery" }
-        return data?.isWireless == true ? "From wireless charger" : "From charger"
+    /// Unplugged, the figure is what the battery supplies, not charging power.
+    private var powerTitle: LocalizedStringKey {
+        data?.externalConnected == false ? "Power" : "Charging power"
+    }
+
+    /// Worded by `ReadingWording`, so the window describes a reading the same way as
+    /// the widget and the live activity.
+    @ViewBuilder
+    private var powerCaption: some View {
+        if let source = data?.source {
+            Text(source.caption)
+        } else if let data, !data.externalConnected {
+            Text("On battery")
+        }
     }
 
     private func formatted(_ value: Double?) -> String {
@@ -392,9 +402,12 @@ struct FloatingMeterTelemetryFrame: View {
     }
 }
 
-/// Hosts the sample-buffer layer that Picture in Picture reads from. The stage is
-/// deliberately kept in the root view hierarchy; the Settings preview above is a
-/// separate SwiftUI rendering and never moves the active PiP source layer.
+/// Holds the layer Picture in Picture draws from.
+///
+/// It has to be in the window hierarchy — the system will not open a window for a
+/// layer that is not on screen — and it has to stay there, because PiP stops when
+/// its source goes away. `RootView` keeps it behind the tab bar at a few points
+/// across; the frames people actually look at are the ones in the PiP window.
 struct FloatingMeterStage: UIViewRepresentable {
     let controller: FloatingMeterController
 

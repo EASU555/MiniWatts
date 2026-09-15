@@ -36,8 +36,7 @@ struct RootView: View {
             // stops updating views once the app is off screen, and off screen is
             // exactly where the floating meter earns its keep. Each consumer
             // throttles itself; this only hands over the reading.
-            monitor.onTick = { [weak monitor, liveActivity, widgets, floatingMeter] snapshot in
-                guard let monitor else { return }
+            monitor.onTick = { [liveActivity, widgets, floatingMeter] snapshot in
                 let reading = ChargeReading(snapshot)
                 floatingMeter.render(snapshot: snapshot,
                                      thermalState: monitor.thermal.state)

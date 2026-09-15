@@ -2235,26 +2235,6 @@
         }
       }
     },
-    "Not charging" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未在充电"
-          }
-        }
-      }
-    },
-    "From wireless charger" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "来自无线充电器"
-          }
-        }
-      }
-    },
     "Temperature display" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2355,12 +2335,12 @@
         }
       }
     },
-    "The floating monitor redraws once per second. Choose all temperatures or one component; the iOS system thermal state is always shown. Together shows power and temperatures at the same time; Separate pages alternates between them every four seconds." : {
+    "Choose all temperatures or one component; the iOS system thermal state is always shown. Together shows power and temperatures at the same time; Separate pages alternates between them every four seconds." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "悬浮监视器每秒刷新一次。温度可选择全部部件或单独一个部件，且始终显示 iOS 系统发热状态。同屏模式同时显示功率和温度；分页轮播模式每四秒切换一次。"
+            "value" : "温度可选择全部部件或单独一个部件，且始终显示 iOS 系统发热状态。同屏模式同时显示功率和温度；分页轮播模式每四秒切换一次。"
           }
         }
       }
