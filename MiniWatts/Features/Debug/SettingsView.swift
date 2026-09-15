@@ -150,7 +150,7 @@ struct SettingsView: View {
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Swipe Picture in Picture to either screen edge to park it. The remaining arrow is the system PiP restore control and cannot be removed by the app; MiniWatts leaves the system window untouched so the app, video stream and Dynamic Island remain stable.")
+                Text("Swipe Picture in Picture to either screen edge to park it. MiniWatts hides the standard playback controls; iOS handles docking and decides whether the restore indicator fades after the window is idle.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -203,7 +203,7 @@ struct SettingsView: View {
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Turning this on starts the Live Activity immediately. This personal build uses an ultra-low-frequency audio carrier to keep local sensor sampling alive after you leave the app. iOS can still stop the process, and removes every Dynamic Island Live Activity after eight hours.")
+                Text("Turning this on starts the Live Activity immediately. It refreshes while MiniWatts is open, or in the background while the floating monitor is running. A Live Activity by itself doesn't keep sensor sampling active.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -215,10 +215,6 @@ struct SettingsView: View {
 
                 if !monitor.liveActivitiesAvailable {
                     EmptyNote(text: "Live Activities are disabled in iOS Settings.",
-                              systemImage: "exclamationmark.circle")
-                } else if enabled.wrappedValue
-                            && !monitor.liveActivityBackgroundRefreshActive {
-                    EmptyNote(text: "Background refresh could not start. The reading may pause after you leave MiniWatts.",
                               systemImage: "exclamationmark.circle")
                 }
             }
@@ -233,7 +229,7 @@ struct SettingsView: View {
                         .font(.system(size: 14, weight: .medium))
                 }
                 .tint(.mwAccent)
-                Text("With this on, the screen stays awake while charging. Live Activity and floating-monitor background refresh work independently of this setting.")
+                Text("With this on, the screen stays awake while charging. The floating monitor can continue sensor sampling after MiniWatts enters the background; a Live Activity alone cannot.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)

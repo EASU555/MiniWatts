@@ -1545,6 +1545,16 @@
         }
       }
     },
+    "With this on, the screen stays awake while charging. The floating monitor can continue sensor sampling after MiniWatts enters the background; a Live Activity alone cannot." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开后会在充电时保持屏幕常亮。MiniWatts 进入后台后，悬浮监视器可继续维持传感器采样；仅开启实时活动无法做到这一点。"
+          }
+        }
+      }
+    },
     "With this on, the screen stays awake while charging. Live Activity and floating-monitor background refresh work independently of this setting." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2075,6 +2085,16 @@
         }
       }
     },
+    "Turning this on starts the Live Activity immediately. It refreshes while MiniWatts is open, or in the background while the floating monitor is running. A Live Activity by itself doesn't keep sensor sampling active." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开后会立即启动实时活动。MiniWatts 打开时会持续刷新；悬浮监视器运行时也可在后台刷新。仅开启实时活动本身无法维持传感器采样。"
+          }
+        }
+      }
+    },
     "Turning this on starts the Live Activity immediately. This personal build uses an ultra-low-frequency audio carrier to keep local sensor sampling alive after you leave the app. iOS can still stop the process, and removes every Dynamic Island Live Activity after eight hours." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2291,6 +2311,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "悬浮监视器已隐藏；监测和灵动岛更新仍在继续。"
+          }
+        }
+      }
+    },
+    "Swipe Picture in Picture to either screen edge to park it. MiniWatts hides the standard playback controls; iOS handles docking and decides whether the restore indicator fades after the window is idle." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将画中画滑向任一屏幕边缘即可停靠。MiniWatts 会隐藏标准播放控件；停靠动作以及静置后恢复指示是否淡出均由 iOS 决定。"
           }
         }
       }

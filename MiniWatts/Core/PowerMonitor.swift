@@ -32,9 +32,6 @@ final class PowerMonitor {
     /// and registers for power-source change notifications — so if accessories are
     /// reachable at all from a sandboxed app, they show up here.
     private(set) var powerSources: [[String: Any]] = []
-    /// True only while the inaudible media session that permits local Live
-    /// Activity sensor updates in the background is actually running.
-    private(set) var liveActivityBackgroundRefreshActive = false
     /// False until the session file has been read. Nothing is written before then:
     /// the load is asynchronous now, and a save that landed first would overwrite
     /// the whole history with an empty array.
@@ -60,7 +57,6 @@ final class PowerMonitor {
                                              selectedMetric: liveActivityMetric,
                                              enabled: liveActivityEnabled,
                                              forceUpdate: true)
-            refreshLiveActivityBackgroundExecution()
         }
     }
 
@@ -133,7 +129,6 @@ final class PowerMonitor {
     private let energy = EnergyAccumulator()
     private let store = SessionStore()
     private let liveActivityController = ChargingLiveActivityController()
-    private let liveActivityBackgroundKeeper = LiveActivityBackgroundRefreshKeeper()
 
     private var task: Task<Void, Never>?
     private var tick = 0
@@ -216,7 +211,6 @@ final class PowerMonitor {
     /// resumed session reports honest totals and `integratedSeconds` records how much of
     /// the wall clock was actually watched.
     func pause() {
-        guard !liveActivityBackgroundRefreshActive else { return }
         task?.cancel()
         task = nil
         persist()
@@ -261,15 +255,8 @@ final class PowerMonitor {
                                          leadingItem: liveActivityLeadingItem,
                                          selectedMetric: liveActivityMetric,
                                          enabled: liveActivityEnabled)
-        refreshLiveActivityBackgroundExecution()
         lastExternalConnected = current.externalConnected
         onTick?(current)
-    }
-
-    private func refreshLiveActivityBackgroundExecution() {
-        liveActivityBackgroundRefreshActive = liveActivityBackgroundKeeper.setActive(
-            liveActivityEnabled && liveActivityController.isRunning
-        )
     }
 
     private func appendLive(_ snapshot: PowerSnapshot) {

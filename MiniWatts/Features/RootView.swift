@@ -60,8 +60,8 @@ struct RootView: View {
                     ChargeReading(monitor.snapshot),
                     lastSession: monitor.sessions.first
                 )
-                // PiP and a manually enabled Live Activity are deliberate local
-                // background-sampling modes. Otherwise the tick stops.
+                // PiP is the one user-visible background-sampling mode. A Live
+                // Activity alone doesn't grant the app continuous execution time.
                 if !keepsBackgroundSamplingActive {
                     monitor.pause()
                 }
@@ -96,14 +96,13 @@ struct RootView: View {
 
     private var keepsBackgroundSamplingActive: Bool {
         pictureInPicture.keepsSensorSamplingActive
-            || monitor.liveActivityBackgroundRefreshActive
     }
 }
 
 /// Always-visible identifier for sideload test packages. This is intentionally
 /// hard-coded so screenshots can be matched to the exact personal build.
 struct PersonalBuildBadge: View {
-    static let number = 38
+    static let number = 39
 
     var body: some View {
         Text(verbatim: "B\(Self.number)")
