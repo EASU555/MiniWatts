@@ -1,4 +1,3 @@
-import AVFoundation
 import SwiftUI
 import UIKit
 
@@ -36,8 +35,8 @@ struct TelemetryPictureInPicturePreview: UIViewRepresentable {
     }
 }
 
-/// A SwiftUI-only copy of the latest frame for Settings. The real AVFoundation
-/// layer stays hosted by RootView for the lifetime of the app.
+/// A SwiftUI-only copy of the latest frame for Settings. The real AVKit video-call
+/// source stays hosted by RootView for the lifetime of the app.
 struct TelemetryPictureInPictureInlinePreview: View {
     let controller: TelemetryPictureInPictureController
 
@@ -63,7 +62,7 @@ final class TelemetryPictureInPictureSourceView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .black
-        clipsToBounds = true
+        clipsToBounds = false
     }
 
     required init?(coder: NSCoder) {

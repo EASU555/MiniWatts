@@ -20,7 +20,8 @@ struct SettingsView: View {
                             showPower: $pictureInPicture.showPower,
                             showTemperatures: $pictureInPicture.showTemperatures,
                             layout: $pictureInPicture.layout,
-                            temperatureSelection: $pictureInPicture.temperatureSelection
+                            temperatureSelection: $pictureInPicture.temperatureSelection,
+                            autoHideWhenDocked: $pictureInPicture.autoHideWhenDocked
                         )
                         capacityPanel(capacity: $monitor.configuredBatteryWattHours)
                         devicePanel
@@ -53,7 +54,8 @@ struct SettingsView: View {
         showPower: Binding<Bool>,
         showTemperatures: Binding<Bool>,
         layout: Binding<TelemetryPictureInPictureLayout>,
-        temperatureSelection: Binding<TelemetryTemperatureSelection>
+        temperatureSelection: Binding<TelemetryTemperatureSelection>,
+        autoHideWhenDocked: Binding<Bool>
     ) -> some View {
         Panel("Floating monitor", systemImage: "pip") {
             VStack(alignment: .leading, spacing: 12) {
@@ -94,6 +96,16 @@ struct SettingsView: View {
                         Text("Separate pages").tag(TelemetryPictureInPictureLayout.separatePages)
                     }
                     .pickerStyle(.segmented)
+                }
+
+                Toggle("Hide after docking", isOn: autoHideWhenDocked)
+                    .tint(.mwAccent)
+
+                if pictureInPicture.isVisuallyHidden {
+                    EmptyNote(
+                        text: "The floating monitor is hidden. Monitoring and Dynamic Island updates are still running.",
+                        systemImage: "eye.slash"
+                    )
                 }
 
                 if !showPower.wrappedValue && !showTemperatures.wrappedValue {
@@ -142,6 +154,11 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text("Start Picture in Picture here before leaving MiniWatts. Sensor sampling stays active while the floating window is open and stops when you close it.")
+                    .font(.caption)
+                    .foregroundStyle(Color.mwMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("With Hide after docking enabled, swipe the floating monitor to either screen edge. MiniWatts then shrinks the docked tab until it is invisible without stopping monitoring. Turn this option off to show it again.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)

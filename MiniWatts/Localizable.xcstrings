@@ -2145,6 +2145,36 @@
         }
       }
     },
+    "Hide after docking" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "吸附侧边后自动隐藏"
+          }
+        }
+      }
+    },
+    "The floating monitor is hidden. Monitoring and Dynamic Island updates are still running." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "悬浮监视器已隐藏；监测和灵动岛更新仍在继续。"
+          }
+        }
+      }
+    },
+    "With Hide after docking enabled, swipe the floating monitor to either screen edge. MiniWatts then shrinks the docked tab until it is invisible without stopping monitoring. Turn this option off to show it again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启“吸附侧边后自动隐藏”后，将悬浮监视器滑向任一屏幕边缘。MiniWatts 会把吸附标签缩小至不可见，但不会停止监测；关闭此选项即可重新显示。"
+          }
+        }
+      }
+    },
     "Picture in Picture preview" : {
       "localizations" : {
         "zh-Hans" : {
