@@ -167,7 +167,7 @@ struct SettingsView: View {
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts collapses the existing sample-buffer content controller; the video stream and Dynamic Island continue unchanged. Turn this option off to show the window again.")
+                Text("With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts first checks the system and internal PiP state, then uses a four-second fallback if iOS reports neither. The video stream and Dynamic Island continue unchanged. Turn this option off to show the window again.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)

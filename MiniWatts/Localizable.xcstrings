@@ -2185,32 +2185,52 @@
         }
       }
     },
-    "Side docking detected" : {
+    "Hidden after system detection" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已检测到侧边停靠"
+            "value" : "系统检测后已隐藏"
           }
         }
       }
     },
-    "PiP content controller unavailable" : {
+    "Hidden after internal PiP detection" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法取得画中画内容控制器"
+            "value" : "画中画内部检测后已隐藏"
           }
         }
       }
     },
-    "Hide request applied" : {
+    "Hidden after edge-position detection" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已应用隐藏请求"
+            "value" : "边缘位置检测后已隐藏"
+          }
+        }
+      }
+    },
+    "Hidden by four-second fallback" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "四秒保底已隐藏"
+          }
+        }
+      }
+    },
+    "PiP hide controls unavailable" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画中画隐藏接口不可用"
           }
         }
       }
@@ -2225,12 +2245,12 @@
         }
       }
     },
-    "With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts collapses the existing sample-buffer content controller; the video stream and Dynamic Island continue unchanged. Turn this option off to show the window again." : {
+    "With automatic hiding enabled, swipe Picture in Picture to either screen edge. MiniWatts first checks the system and internal PiP state, then uses a four-second fallback if iOS reports neither. The video stream and Dynamic Island continue unchanged. Turn this option off to show the window again." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "开启“打开后自动隐藏”后，将画中画滑向任一屏幕边缘。MiniWatts 会收起现有的采样缓冲内容控制器；视频流和灵动岛会继续运行。关闭此选项即可重新显示窗口。"
+            "value" : "开启“打开后自动隐藏”后，将画中画滑向任一屏幕边缘。MiniWatts 会先检查系统及画中画内部状态；若 iOS 均未上报，则使用四秒保底隐藏。视频流和灵动岛会继续运行。关闭此选项即可重新显示窗口。"
           }
         }
       }

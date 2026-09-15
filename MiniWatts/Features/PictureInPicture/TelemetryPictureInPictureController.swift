@@ -17,17 +17,21 @@ nonisolated enum TelemetryPictureInPictureLayout: String, CaseIterable, Identifi
 nonisolated enum TelemetryPictureInPictureHideStatus: Hashable {
     case disabled
     case waitingForDock
-    case dockDetected
-    case contentControllerUnavailable
-    case hideApplied
+    case hiddenAfterPublicDetection
+    case hiddenAfterProxyDetection
+    case hiddenAfterPositionDetection
+    case hiddenAfterDelay
+    case hideUnavailable
 
     var label: LocalizedStringResource {
         switch self {
         case .disabled: "Automatic hiding is off"
         case .waitingForDock: "Waiting for side docking"
-        case .dockDetected: "Side docking detected"
-        case .contentControllerUnavailable: "PiP content controller unavailable"
-        case .hideApplied: "Hide request applied"
+        case .hiddenAfterPublicDetection: "Hidden after system detection"
+        case .hiddenAfterProxyDetection: "Hidden after internal PiP detection"
+        case .hiddenAfterPositionDetection: "Hidden after edge-position detection"
+        case .hiddenAfterDelay: "Hidden by four-second fallback"
+        case .hideUnavailable: "PiP hide controls unavailable"
         }
     }
 }
@@ -140,7 +144,7 @@ final class TelemetryPictureInPictureController: NSObject {
             UserDefaults.standard.set(autoHideWhenDocked, forKey: Self.autoHideWhenDockedKey)
             if autoHideWhenDocked {
                 hideStatus = .waitingForDock
-                scheduleWindowHideIfDocked()
+                startAutomaticHideMonitoring()
             } else {
                 hideStatus = .disabled
                 restorePictureInPictureWindow()
@@ -160,6 +164,7 @@ final class TelemetryPictureInPictureController: NSObject {
     @ObservationIgnored private var pictureInPicturePossibleObservation: NSKeyValueObservation?
     @ObservationIgnored private var pictureInPictureSuspendedObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimebase: CMTimebase?
+    @ObservationIgnored private var dockingMonitorTask: Task<Void, Never>?
     @ObservationIgnored private var windowHideTask: Task<Void, Never>?
     // Kept strongly while PiP is active so SwiftUI dismantling its representable
     // cannot also destroy the layer tree AVKit is still presenting.
@@ -322,11 +327,9 @@ final class TelemetryPictureInPictureController: NSObject {
                       let current = self.pictureInPictureController,
                       ObjectIdentifier(current) == controllerID else { return }
                 if isDocked {
-                    self.hideStatus = .dockDetected
-                    self.scheduleWindowHideIfDocked()
-                } else {
+                    self.scheduleWindowHide(status: .hiddenAfterPublicDetection)
+                } else if !self.isVisuallyHidden {
                     self.hideStatus = self.autoHideWhenDocked ? .waitingForDock : .disabled
-                    self.restorePictureInPictureWindow()
                 }
             }
         }
@@ -371,50 +374,97 @@ final class TelemetryPictureInPictureController: NSObject {
         }
     }
 
-    private func scheduleWindowHideIfDocked() {
+    private func startAutomaticHideMonitoring() {
         guard autoHideWhenDocked,
               isActive,
-              !isVisuallyHidden,
-              pictureInPictureController?.isPictureInPictureSuspended == true else { return }
-        windowHideTask?.cancel()
-        windowHideTask = Task { @MainActor [weak self] in
-            // Wait for the system edge-stash animation, then resize the remote
-            // hosted window through AVKit's own Pegasus proxy. No video format,
-            // content source, audio session or Live Activity state is changed.
-            try? await Task.sleep(for: .milliseconds(350))
+              !isVisuallyHidden else { return }
+        dockingMonitorTask?.cancel()
+        dockingMonitorTask = Task { @MainActor [weak self] in
+            // Side-stashing a PiP window is not the state represented by AVKit's
+            // public `isPictureInPictureSuspended` API on every iOS release. Poll
+            // the public controller, its Pegasus proxy and the hosted content view.
+            // If none exposes the gesture, retain the four-second on-device fallback
+            // that previously made the side tab collapse reliably.
             for _ in 0..<20 {
+                try? await Task.sleep(for: .milliseconds(200))
                 guard !Task.isCancelled,
                       let self,
                       self.autoHideWhenDocked,
                       self.isActive,
-                      self.pictureInPictureController?.isPictureInPictureSuspended == true else { return }
-                if self.collapsePictureInPictureContentController() { return }
+                      !self.isVisuallyHidden else { return }
+
+                if self.pictureInPictureController?.isPictureInPictureSuspended == true {
+                    self.scheduleWindowHide(status: .hiddenAfterPublicDetection)
+                    return
+                }
+                if self.isPictureInPictureProxySuspended() {
+                    self.scheduleWindowHide(status: .hiddenAfterProxyDetection)
+                    return
+                }
+                if self.isPictureInPictureContentOffscreen() {
+                    self.scheduleWindowHide(status: .hiddenAfterPositionDetection)
+                    return
+                }
+            }
+
+            guard !Task.isCancelled,
+                  let self,
+                  self.autoHideWhenDocked,
+                  self.isActive,
+                  !self.isVisuallyHidden else { return }
+            self.scheduleWindowHide(status: .hiddenAfterDelay, delay: .zero)
+        }
+    }
+
+    private func scheduleWindowHide(
+        status: TelemetryPictureInPictureHideStatus,
+        delay: Duration = .milliseconds(350)
+    ) {
+        guard autoHideWhenDocked, isActive, !isVisuallyHidden else { return }
+        windowHideTask?.cancel()
+        windowHideTask = Task { @MainActor [weak self] in
+            // Let an observed edge-stash animation settle before changing only the
+            // PiP presentation. The stream, audio session and Live Activity remain.
+            try? await Task.sleep(for: delay)
+            for _ in 0..<20 {
+                guard !Task.isCancelled,
+                      let self,
+                      self.autoHideWhenDocked,
+                      self.isActive else { return }
+                if self.collapsePictureInPicturePresentation(status: status) { return }
                 try? await Task.sleep(for: .milliseconds(100))
             }
+            self?.hideStatus = .hideUnavailable
         }
     }
 
     @discardableResult
-    private func collapsePictureInPictureContentController() -> Bool {
-        guard let contentController = currentPictureInPictureContentController() else {
-            hideStatus = .contentControllerUnavailable
-            return false
+    private func collapsePictureInPicturePresentation(
+        status: TelemetryPictureInPictureHideStatus
+    ) -> Bool {
+        var changedPresentation = updateHostedWindowSize(Self.hiddenHostedWindowSize)
+        if let contentController = currentPictureInPictureContentController() {
+            UIView.performWithoutAnimation {
+                contentController.preferredContentSize = Self.hiddenHostedWindowSize
+                contentController.view.alpha = 0
+                contentController.view.isUserInteractionEnabled = false
+                contentController.view.layoutIfNeeded()
+            }
+            changedPresentation = true
         }
-        UIView.performWithoutAnimation {
-            contentController.preferredContentSize = Self.hiddenHostedWindowSize
-            contentController.view.alpha = 0
-            contentController.view.isUserInteractionEnabled = false
-            contentController.view.layoutIfNeeded()
-        }
+        guard changedPresentation else { return false }
         setSystemControlsHidden(true)
         isVisuallyHidden = true
-        hideStatus = .hideApplied
+        hideStatus = status
         return true
     }
 
     private func restorePictureInPictureWindow() {
+        dockingMonitorTask?.cancel()
+        dockingMonitorTask = nil
         windowHideTask?.cancel()
         windowHideTask = nil
+        let needsRemoteRestore = isVisuallyHidden
         if let contentController = currentPictureInPictureContentController() {
             UIView.performWithoutAnimation {
                 contentController.preferredContentSize = Self.frameSize
@@ -422,6 +472,9 @@ final class TelemetryPictureInPictureController: NSObject {
                 contentController.view.isUserInteractionEnabled = true
                 contentController.view.layoutIfNeeded()
             }
+        }
+        if needsRemoteRestore {
+            _ = updateHostedWindowSize(Self.frameSize)
         }
         setSystemControlsHidden(false)
         isVisuallyHidden = false
@@ -445,6 +498,57 @@ final class TelemetryPictureInPictureController: NSObject {
             "_pictureInPictureViewController"
         ) else { return nil }
         return object_getIvar(pictureInPictureController, ivar) as? UIViewController
+    }
+
+    private func currentPictureInPictureProxy() -> NSObject? {
+        guard let pictureInPictureController,
+              let ivar = class_getInstanceVariable(
+                AVPictureInPictureController.self,
+                "_pictureInPictureProxy"
+              ) else { return nil }
+        return object_getIvar(pictureInPictureController, ivar) as? NSObject
+    }
+
+    private func isPictureInPictureProxySuspended() -> Bool {
+        guard let proxy = currentPictureInPictureProxy() else { return false }
+        let selector = NSSelectorFromString("isPictureInPictureSuspended")
+        guard proxy.responds(to: selector) else { return false }
+        typealias Getter = @convention(c) (AnyObject, Selector) -> Bool
+        let getter = unsafeBitCast(proxy.method(for: selector), to: Getter.self)
+        return getter(proxy, selector)
+    }
+
+    private func isPictureInPictureContentOffscreen() -> Bool {
+        guard let view = currentPictureInPictureContentController()?.viewIfLoaded,
+              let window = view.window,
+              view.bounds.width > 20,
+              view.bounds.height > 20 else { return false }
+        let frame = view.convert(view.bounds, to: window.screen.coordinateSpace)
+        let visible = frame.intersection(window.screen.bounds)
+        guard !visible.isNull else { return true }
+        let fullArea = frame.width * frame.height
+        let visibleArea = visible.width * visible.height
+        return fullArea > 0 && visibleArea / fullArea < 0.2
+    }
+
+    @discardableResult
+    private func updateHostedWindowSize(_ size: CGSize) -> Bool {
+        guard let proxy = currentPictureInPictureProxy() else { return false }
+        let selector = NSSelectorFromString(
+            "updateHostedWindowSize:animationType:initialSpringVelocity:synchronizationFence:"
+        )
+        guard proxy.responds(to: selector) else { return false }
+        typealias Update = @convention(c) (
+            AnyObject,
+            Selector,
+            CGSize,
+            Int64,
+            Double,
+            AnyObject?
+        ) -> Void
+        let update = unsafeBitCast(proxy.method(for: selector), to: Update.self)
+        update(proxy, selector, size, 0, 0, nil)
+        return true
     }
 
     private func configure(_ layer: AVSampleBufferDisplayLayer) {
@@ -593,6 +697,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         isActive = true
         hideStatus = autoHideWhenDocked ? .waitingForDock : .disabled
         errorMessage = nil
+        startAutomaticHideMonitoring()
     }
 
     func pictureInPictureController(
