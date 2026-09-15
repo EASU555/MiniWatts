@@ -39,6 +39,9 @@ struct RootView: View {
             .allowsHitTesting(false)
         }
         .task {
+            pictureInPicture.backgroundPulse = { [weak monitor] in
+                monitor?.refreshIfDue()
+            }
             monitor.onTick = { [weak monitor, pictureInPicture, widgetPublisher] snapshot in
                 guard let monitor else { return }
                 pictureInPicture.update(
@@ -102,7 +105,7 @@ struct RootView: View {
 /// Always-visible identifier for sideload test packages. This is intentionally
 /// hard-coded so screenshots can be matched to the exact personal build.
 struct PersonalBuildBadge: View {
-    static let number = 41
+    static let number = 42
 
     var body: some View {
         Text(verbatim: "B\(Self.number)")

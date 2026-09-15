@@ -151,6 +151,9 @@ final class TelemetryPictureInPictureController: NSObject {
     @ObservationIgnored private var pictureInPictureController: AVPictureInPictureController?
     @ObservationIgnored private var pictureInPicturePossibleObservation: NSKeyValueObservation?
     @ObservationIgnored private var pictureInPictureSuspendedObservation: NSKeyValueObservation?
+    @ObservationIgnored private var backgroundPulseDisplayLink: CADisplayLink?
+    @ObservationIgnored private var lastBackgroundPulseTimestamp: CFTimeInterval = 0
+    @ObservationIgnored private var hiddenPulsePhase = false
     @ObservationIgnored private var playbackTimebase: CMTimebase?
     @ObservationIgnored private var pendingPipelineRebuild = false
     // Kept strongly while PiP is active so SwiftUI dismantling its representable
@@ -162,6 +165,7 @@ final class TelemetryPictureInPictureController: NSObject {
     /// Remember the new host and reattach only after PiP has stopped.
     @ObservationIgnored private weak var pendingSourceView: UIView?
     @ObservationIgnored private var sourceViewWasDismantled = false
+    @ObservationIgnored var backgroundPulse: (() -> Void)?
     private(set) var latestData: TelemetryFrameData?
 
     override init() {
@@ -293,6 +297,7 @@ final class TelemetryPictureInPictureController: NSObject {
     }
 
     func stop() {
+        stopBackgroundPulseDriver()
         pictureInPictureController?.stopPictureInPicture()
     }
 
@@ -481,6 +486,42 @@ final class TelemetryPictureInPictureController: NSObject {
         }
     }
 
+    private func startBackgroundPulseDriver() {
+        guard contentMode == .hiddenCarrier, backgroundPulseDisplayLink == nil else { return }
+        let displayLink = CADisplayLink(
+            target: self,
+            selector: #selector(handleBackgroundPulse(_:))
+        )
+        displayLink.preferredFramesPerSecond = 1
+        displayLink.add(to: .main, forMode: .common)
+        backgroundPulseDisplayLink = displayLink
+        lastBackgroundPulseTimestamp = 0
+    }
+
+    private func stopBackgroundPulseDriver() {
+        backgroundPulseDisplayLink?.invalidate()
+        backgroundPulseDisplayLink = nil
+        lastBackgroundPulseTimestamp = 0
+    }
+
+    @objc private func handleBackgroundPulse(_ displayLink: CADisplayLink) {
+        guard contentMode == .hiddenCarrier,
+              isActive,
+              UIApplication.shared.applicationState == .background else { return }
+        guard lastBackgroundPulseTimestamp == 0
+                || displayLink.timestamp - lastBackgroundPulseTimestamp >= 0.8 else { return }
+        lastBackgroundPulseTimestamp = displayLink.timestamp
+
+        // Keep the system-hosted 0.1 pt surface participating in compositing. The
+        // alpha difference is below visibility, but avoids a permanently unchanged
+        // transparent layer being collapsed into a low-frequency background path.
+        hiddenPulsePhase.toggle()
+        videoCallContentView?.layer.backgroundColor = UIColor.black
+            .withAlphaComponent(hiddenPulsePhase ? 0.001 : 0.002)
+            .cgColor
+        backgroundPulse?()
+    }
+
     private func attachToPendingPreviewIfNeeded() {
         guard !keepsSensorSamplingActive else { return }
         if let pendingSourceView, sourceView !== pendingSourceView {
@@ -656,6 +697,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         isStarting = false
         isActive = true
         errorMessage = nil
+        startBackgroundPulseDriver()
     }
 
     func pictureInPictureController(
@@ -664,6 +706,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
     ) {
         isStarting = false
         isActive = false
+        stopBackgroundPulseDriver()
         errorMessage = "Picture in Picture could not start."
         displayLayer.sampleBufferRenderer.flush()
         if pendingPipelineRebuild {
@@ -678,6 +721,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
     ) {
         isStarting = false
         isActive = false
+        stopBackgroundPulseDriver()
         if contentMode == .hiddenCarrier {
             applyVideoCallGeometry(hidden: false)
         }

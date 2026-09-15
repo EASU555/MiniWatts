@@ -50,6 +50,10 @@ nonisolated struct MiniWattsActivityAttributes: ActivityAttributes {
         let batteryTemperature: Double?
         let hottestTemperature: Double?
         let hottestSensorName: String?
+        /// Optional so an activity persisted by an older personal build still
+        /// decodes. A fresh value also makes every one-second sensor sample a
+        /// distinct ActivityKit state even when its rounded reading is unchanged.
+        let sampledAt: Date?
         /// Optional so an activity created by an earlier personal build still
         /// decodes; nil preserves the original status-symbol presentation.
         let leadingItem: LiveActivityLeadingItem?

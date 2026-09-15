@@ -131,6 +131,7 @@ final class PowerMonitor {
     private let liveActivityController = ChargingLiveActivityController()
 
     private var task: Task<Void, Never>?
+    private var lastRefreshStartedAt = Date.distantPast
     private var tick = 0
     private var lastSampleWrite: Date = .distantPast
     private var lastPersist: Date = .distantPast
@@ -216,9 +217,18 @@ final class PowerMonitor {
         persist()
     }
 
+    /// A hidden video-call PiP can keep a compositor callback alive more reliably
+    /// than a sleeping task in the background. Coalesce both drivers here so they
+    /// never perform the relatively expensive IOKit/HID read twice in one second.
+    func refreshIfDue(minimumInterval: TimeInterval = 0.8) {
+        guard Date.now.timeIntervalSince(lastRefreshStartedAt) >= minimumInterval else { return }
+        refresh()
+    }
+
     // MARK: Refresh
 
     func refresh() {
+        lastRefreshStartedAt = .now
         tick += 1
         thermal.update()
 

@@ -186,6 +186,7 @@ final class ChargingLiveActivityController {
             batteryTemperature: snapshot.batteryTemperature,
             hottestTemperature: snapshot.hottestSensor?.value,
             hottestSensorName: snapshot.hottestSensor?.name,
+            sampledAt: snapshot.date,
             leadingItem: leadingItem,
             selectedMetric: selectedMetric,
             isWireless: snapshot.isWirelessInput
