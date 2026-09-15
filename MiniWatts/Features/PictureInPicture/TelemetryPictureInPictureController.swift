@@ -151,6 +151,11 @@ final class TelemetryPictureInPictureController: NSObject {
     @ObservationIgnored private var pictureInPictureController: AVPictureInPictureController?
     @ObservationIgnored private var pictureInPicturePossibleObservation: NSKeyValueObservation?
     @ObservationIgnored private var pictureInPictureSuspendedObservation: NSKeyValueObservation?
+    /// AVKit can omit both terminal start callbacks when a previous PiP session was
+    /// interrupted by force-quitting the app. Bound every request so Settings never
+    /// remains on an endless spinner, then rebuild the controller once automatically.
+    @ObservationIgnored private var startTask: Task<Void, Never>?
+    @ObservationIgnored private var startAttempt = 0
     @ObservationIgnored private var backgroundPulseDisplayLink: CADisplayLink?
     @ObservationIgnored private var lastBackgroundPulseTimestamp: CFTimeInterval = 0
     @ObservationIgnored private var hiddenPulsePhase = false
@@ -276,29 +281,153 @@ final class TelemetryPictureInPictureController: NSObject {
         ensurePictureInPictureController()
 
         isStarting = true
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            // AVKit needs a committed, displayed frame before PiP becomes possible.
-            // KVO normally updates the state immediately; the bounded poll also
-            // covers devices that deliver the initial observation late.
-            for _ in 0..<20 {
-                refreshPossibleState()
-                if isPossible { break }
-                try? await Task.sleep(for: .milliseconds(100))
-            }
-            guard let controller = pictureInPictureController,
-                  controller.isPictureInPicturePossible else {
-                isStarting = false
-                errorMessage = "Picture in Picture is not ready. Keep the preview visible and try again."
-                return
-            }
-            controller.startPictureInPicture()
+        startAttempt &+= 1
+        let attempt = startAttempt
+        startTask?.cancel()
+        startTask = Task { @MainActor [weak self] in
+            await self?.performStart(attempt: attempt, repairsRemaining: 1)
         }
     }
 
     func stop() {
+        invalidateStartAttempt()
+        isStarting = false
         stopBackgroundPulseDriver()
         pictureInPictureController?.stopPictureInPicture()
+    }
+
+    /// Scene suspension pauses the watchdog together with the process. Reconcile
+    /// AVKit as soon as MiniWatts returns so an interrupted transition cannot carry
+    /// a stale loading state into the next start request.
+    func recoverAfterEnteringForeground() {
+        if isStarting {
+            if pictureInPictureController?.isPictureInPictureActive == true {
+                completeStartAttempt(startAttempt)
+            } else {
+                failStartAttempt(startAttempt, message: "Picture in Picture could not start.")
+            }
+            return
+        }
+
+        if isActive, pictureInPictureController?.isPictureInPictureActive != true {
+            isActive = false
+            stopBackgroundPulseDriver()
+            rebuildRenderingPipeline()
+            if contentMode == .liveReadings {
+                renderLatest()
+            }
+            ensurePictureInPictureController()
+            attachToPendingPreviewIfNeeded()
+        }
+    }
+
+    private func performStart(attempt: Int, repairsRemaining: Int) async {
+        // AVKit needs a committed, displayed source before PiP becomes possible.
+        // KVO usually updates immediately; this bounded poll covers late delivery.
+        for _ in 0..<40 {
+            guard isCurrentStartAttempt(attempt) else { return }
+            refreshPossibleState()
+            if isPossible { break }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        guard isCurrentStartAttempt(attempt) else { return }
+        guard let controller = pictureInPictureController,
+              controller.isPictureInPicturePossible else {
+            if repairsRemaining > 0 {
+                await repairAndRetryStart(
+                    attempt: attempt,
+                    repairsRemaining: repairsRemaining - 1
+                )
+                return
+            }
+            failStartAttempt(
+                attempt,
+                message: "Picture in Picture is not ready. Keep the preview visible and try again."
+            )
+            return
+        }
+
+        controller.startPictureInPicture()
+
+        // A controller left behind by a force-quit can accept start without sending
+        // either didStart or failedToStart. Give that transition a finite deadline.
+        for _ in 0..<50 {
+            guard isCurrentStartAttempt(attempt) else { return }
+            if controller.isPictureInPictureActive {
+                completeStartAttempt(attempt)
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+
+        guard repairsRemaining > 0 else {
+            failStartAttempt(attempt, message: "Picture in Picture could not start.")
+            return
+        }
+        await repairAndRetryStart(
+            attempt: attempt,
+            repairsRemaining: repairsRemaining - 1
+        )
+    }
+
+    private func repairAndRetryStart(attempt: Int, repairsRemaining: Int) async {
+        guard isCurrentStartAttempt(attempt) else { return }
+        pictureInPictureController?.stopPictureInPicture()
+        let session = AVAudioSession.sharedInstance()
+        try? session.setActive(false, options: [.notifyOthersOnDeactivation])
+        rebuildRenderingPipeline()
+        if contentMode == .liveReadings {
+            renderLatest()
+        }
+
+        // Let AVKit finish releasing the previous system session before asking the
+        // freshly built controller to claim PiP again.
+        try? await Task.sleep(for: .milliseconds(350))
+        guard isCurrentStartAttempt(attempt) else { return }
+        do {
+            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try session.setActive(true)
+        } catch {
+            failStartAttempt(attempt, message: "Picture in Picture audio mode could not start.")
+            return
+        }
+        ensurePictureInPictureController()
+        await performStart(attempt: attempt, repairsRemaining: repairsRemaining)
+    }
+
+    private func isCurrentStartAttempt(_ attempt: Int) -> Bool {
+        !Task.isCancelled && isStarting && startAttempt == attempt
+    }
+
+    private func completeStartAttempt(_ attempt: Int) {
+        guard startAttempt == attempt else { return }
+        invalidateStartAttempt()
+        isStarting = false
+        isActive = true
+        errorMessage = nil
+        startBackgroundPulseDriver()
+    }
+
+    private func failStartAttempt(_ attempt: Int, message: LocalizedStringResource) {
+        guard startAttempt == attempt else { return }
+        invalidateStartAttempt()
+        isStarting = false
+        isActive = false
+        stopBackgroundPulseDriver()
+        errorMessage = message
+        displayLayer.sampleBufferRenderer.flush()
+        rebuildRenderingPipeline()
+        if contentMode == .liveReadings {
+            renderLatest()
+        }
+        ensurePictureInPictureController()
+        attachToPendingPreviewIfNeeded()
+    }
+
+    private func invalidateStartAttempt() {
+        startAttempt &+= 1
+        startTask?.cancel()
+        startTask = nil
     }
 
     /// The 0.1 pt path follows the public VideoCall PiP sizing mechanism used by
@@ -372,10 +501,7 @@ final class TelemetryPictureInPictureController: NSObject {
     }
 
     private func rebuildRenderingPipeline() {
-        pictureInPicturePossibleObservation = nil
-        pictureInPictureSuspendedObservation = nil
-        pictureInPictureController = nil
-        isPossible = false
+        discardPictureInPictureController()
 
         displayLayer.removeFromSuperlayer()
         videoCallSourceView?.removeFromSuperview()
@@ -396,6 +522,14 @@ final class TelemetryPictureInPictureController: NSObject {
             attachActiveSurface(to: sourceView)
             layoutActiveSurface(in: sourceView.bounds)
         }
+    }
+
+    private func discardPictureInPictureController() {
+        pictureInPicturePossibleObservation = nil
+        pictureInPictureSuspendedObservation = nil
+        pictureInPictureController?.delegate = nil
+        pictureInPictureController = nil
+        isPossible = false
     }
 
     private func configureVideoCallCarrier() {
@@ -694,31 +828,45 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
     func pictureInPictureControllerWillStartPictureInPicture(
         _ pictureInPictureController: AVPictureInPictureController
     ) {
-        isStarting = false
-        isActive = true
+        guard self.pictureInPictureController === pictureInPictureController else { return }
+        // `willStart` is not a terminal result. Keep the watchdog alive until AVKit
+        // confirms didStart; otherwise a half-finished transition can look active
+        // internally while no system PiP window was actually created.
         errorMessage = nil
-        startBackgroundPulseDriver()
+    }
+
+    func pictureInPictureControllerDidStartPictureInPicture(
+        _ pictureInPictureController: AVPictureInPictureController
+    ) {
+        guard self.pictureInPictureController === pictureInPictureController else { return }
+        if isStarting {
+            completeStartAttempt(startAttempt)
+        } else {
+            isActive = true
+            errorMessage = nil
+            startBackgroundPulseDriver()
+        }
     }
 
     func pictureInPictureController(
         _ pictureInPictureController: AVPictureInPictureController,
         failedToStartPictureInPictureWithError error: any Error
     ) {
-        isStarting = false
-        isActive = false
-        stopBackgroundPulseDriver()
-        errorMessage = "Picture in Picture could not start."
-        displayLayer.sampleBufferRenderer.flush()
-        if pendingPipelineRebuild {
-            pendingPipelineRebuild = false
-            rebuildRenderingPipeline()
+        guard self.pictureInPictureController === pictureInPictureController else { return }
+        if isStarting {
+            failStartAttempt(startAttempt, message: "Picture in Picture could not start.")
+        } else {
+            isActive = false
+            stopBackgroundPulseDriver()
+            errorMessage = "Picture in Picture could not start."
         }
-        attachToPendingPreviewIfNeeded()
     }
 
     func pictureInPictureControllerDidStopPictureInPicture(
         _ pictureInPictureController: AVPictureInPictureController
     ) {
+        guard self.pictureInPictureController === pictureInPictureController else { return }
+        invalidateStartAttempt()
         isStarting = false
         isActive = false
         stopBackgroundPulseDriver()
