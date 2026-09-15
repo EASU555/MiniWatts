@@ -2105,6 +2105,56 @@
         }
       }
     },
+    "Show live readings in the floating window" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在悬浮窗显示实时读数"
+          }
+        }
+      }
+    },
+    "Native carrier mode shows a blank Picture in Picture window. It follows the standard AVPlayerLayer path so you can test whether iOS fully fades the side restore indicator while sensor sampling and Dynamic Island updates continue." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原生载体模式会显示一个空白画中画窗口，并完全采用标准 AVPlayerLayer 路线，用于测试 iOS 是否会在传感器采样和灵动岛更新继续运行时彻底淡出侧边恢复指示。"
+          }
+        }
+      }
+    },
+    "Native Picture in Picture carrier" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原生画中画载体"
+          }
+        }
+      }
+    },
+    "Native Picture in Picture carrier is missing." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缺少原生画中画载体。"
+          }
+        }
+      }
+    },
+    "Stop Picture in Picture before changing modes. Swipe the window to either screen edge to park it; iOS handles docking and decides whether the restore indicator fades after the window is idle." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换模式前请先停止画中画。将窗口滑向任一屏幕边缘即可停靠；停靠动作以及静置后恢复指示是否淡出均由 iOS 决定。"
+          }
+        }
+      }
+    },
     "Live Activity" : {
       "localizations" : {
         "zh-Hans" : {

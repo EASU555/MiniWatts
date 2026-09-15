@@ -43,16 +43,25 @@ struct TelemetryPictureInPictureInlinePreview: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let scale = min(geometry.size.width / 640, geometry.size.height / 360)
-            TelemetryVideoFrameView(
-                data: controller.latestData,
-                showPower: controller.showPower,
-                showTemperatures: controller.showTemperatures,
-                layout: controller.layout,
-                temperatureSelection: controller.temperatureSelection
-            )
-            .frame(width: 640, height: 360)
-            .scaleEffect(scale, anchor: .topLeading)
+            if controller.contentMode == .liveReadings {
+                let scale = min(geometry.size.width / 640, geometry.size.height / 360)
+                TelemetryVideoFrameView(
+                    data: controller.latestData,
+                    showPower: controller.showPower,
+                    showTemperatures: controller.showTemperatures,
+                    layout: controller.layout,
+                    temperatureSelection: controller.temperatureSelection
+                )
+                .frame(width: 640, height: 360)
+                .scaleEffect(scale, anchor: .topLeading)
+            } else {
+                ZStack {
+                    Color.black
+                    Label("Native Picture in Picture carrier", systemImage: "pip")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .background(.black)
         .environment(\.colorScheme, .dark)

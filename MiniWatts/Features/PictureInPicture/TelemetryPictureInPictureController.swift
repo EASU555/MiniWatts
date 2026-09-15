@@ -13,6 +13,13 @@ nonisolated enum TelemetryPictureInPictureLayout: String, CaseIterable, Identifi
     var id: Self { self }
 }
 
+nonisolated enum TelemetryPictureInPictureContentMode: String, CaseIterable, Identifiable {
+    case liveReadings
+    case nativeCarrier
+
+    var id: Self { self }
+}
+
 nonisolated enum TelemetryTemperatureSelection: String, CaseIterable, Identifiable {
     case all
     case soc
@@ -71,9 +78,9 @@ nonisolated struct TelemetryFrameData: Hashable {
     }
 }
 
-/// Turns telemetry into a one-frame-per-second video stream and hands that stream to
-/// the system Picture in Picture controller. PiP is user initiated; while it remains
-/// active, RootView keeps PowerMonitor's sensor tick alive in the background.
+/// Owns either the one-frame-per-second telemetry stream or a standard looping
+/// AVPlayer carrier. PiP is user initiated; while either route remains active,
+/// RootView keeps PowerMonitor's sensor tick alive in the background.
 @Observable
 @MainActor
 final class TelemetryPictureInPictureController: NSObject {
@@ -81,6 +88,7 @@ final class TelemetryPictureInPictureController: NSObject {
     private static let showTemperaturesKey = "pictureInPictureShowTemperatures"
     private static let layoutKey = "pictureInPictureLayout"
     private static let temperatureSelectionKey = "pictureInPictureTemperatureSelection"
+    private static let contentModeKey = "pictureInPictureContentMode"
     private static let frameSize = CGSize(width: 640, height: 360)
 
     var showPower: Bool {
@@ -114,15 +122,32 @@ final class TelemetryPictureInPictureController: NSObject {
         }
     }
 
+    var contentMode: TelemetryPictureInPictureContentMode {
+        didSet {
+            UserDefaults.standard.set(contentMode.rawValue, forKey: Self.contentModeKey)
+            guard contentMode != oldValue else { return }
+            if keepsSensorSamplingActive {
+                pendingPipelineRebuild = true
+                stop()
+            } else {
+                rebuildRenderingPipeline()
+            }
+        }
+    }
+
     private(set) var isActive = false
     private(set) var isStarting = false
     private(set) var isPossible = false
     private(set) var errorMessage: LocalizedStringResource?
 
     @ObservationIgnored private(set) var displayLayer = AVSampleBufferDisplayLayer()
+    @ObservationIgnored private var nativePlayer: AVQueuePlayer?
+    @ObservationIgnored private var nativeLooper: AVPlayerLooper?
+    @ObservationIgnored private var nativePlayerLayer: AVPlayerLayer?
     @ObservationIgnored private var pictureInPictureController: AVPictureInPictureController?
     @ObservationIgnored private var pictureInPicturePossibleObservation: NSKeyValueObservation?
     @ObservationIgnored private var playbackTimebase: CMTimebase?
+    @ObservationIgnored private var pendingPipelineRebuild = false
     // Kept strongly while PiP is active so SwiftUI dismantling its representable
     // cannot also destroy the layer tree AVKit is still presenting.
     @ObservationIgnored private var sourceView: UIView?
@@ -142,6 +167,8 @@ final class TelemetryPictureInPictureController: NSObject {
             .flatMap(TelemetryPictureInPictureLayout.init(rawValue:)) ?? .together
         temperatureSelection = defaults.string(forKey: Self.temperatureSelectionKey)
             .flatMap(TelemetryTemperatureSelection.init(rawValue:)) ?? .all
+        contentMode = defaults.string(forKey: Self.contentModeKey)
+            .flatMap(TelemetryPictureInPictureContentMode.init(rawValue:)) ?? .liveReadings
         super.init()
 
         configure(displayLayer)
@@ -152,7 +179,9 @@ final class TelemetryPictureInPictureController: NSObject {
         AVPictureInPictureController.isPictureInPictureSupported()
     }
 
-    var hasSelectedContent: Bool { showPower || showTemperatures }
+    var hasSelectedContent: Bool {
+        contentMode == .nativeCarrier || showPower || showTemperatures
+    }
     var keepsSensorSamplingActive: Bool { isActive || isStarting }
 
     func attach(to view: UIView) {
@@ -161,15 +190,19 @@ final class TelemetryPictureInPictureController: NSObject {
             return
         }
 
-        let needsAttachment = sourceView !== view || displayLayer.superlayer !== view.layer
+        let activeLayer: CALayer? = contentMode == .liveReadings
+            ? displayLayer
+            : nativePlayerLayer
+        let needsAttachment = sourceView !== view || activeLayer?.superlayer !== view.layer
         sourceView = view
         pendingSourceView = nil
         sourceViewWasDismantled = false
         if needsAttachment {
             displayLayer.removeFromSuperlayer()
-            view.layer.addSublayer(displayLayer)
+            nativePlayerLayer?.removeFromSuperlayer()
+            attachActiveLayer(to: view)
         }
-        displayLayer.frame = view.bounds
+        layoutActiveLayer(in: view.bounds)
         ensurePictureInPictureController()
         if needsAttachment {
             renderLatest()
@@ -178,7 +211,7 @@ final class TelemetryPictureInPictureController: NSObject {
 
     func layoutSource(in bounds: CGRect, hostedBy view: UIView) {
         guard sourceView === view else { return }
-        displayLayer.frame = bounds
+        layoutActiveLayer(in: bounds)
     }
 
     func detach(from view: UIView) {
@@ -191,6 +224,7 @@ final class TelemetryPictureInPictureController: NSObject {
             return
         }
         displayLayer.removeFromSuperlayer()
+        nativePlayerLayer?.removeFromSuperlayer()
         sourceView = nil
         sourceViewWasDismantled = false
         isPossible = false
@@ -198,6 +232,7 @@ final class TelemetryPictureInPictureController: NSObject {
 
     func update(snapshot: PowerSnapshot, thermalState: ProcessInfo.ThermalState) {
         latestData = TelemetryFrameData(snapshot: snapshot, thermalState: thermalState)
+        guard contentMode == .liveReadings else { return }
         guard sourceView != nil || keepsSensorSamplingActive else { return }
         renderLatest()
     }
@@ -221,7 +256,11 @@ final class TelemetryPictureInPictureController: NSObject {
         // to enter PiP even after the preview begins displaying frames.
         sourceView?.layoutIfNeeded()
         rebuildRenderingPipeline()
-        renderLatest()
+        if contentMode == .liveReadings {
+            renderLatest()
+        } else {
+            nativePlayer?.play()
+        }
         ensurePictureInPictureController()
 
         isStarting = true
@@ -247,15 +286,26 @@ final class TelemetryPictureInPictureController: NSObject {
 
     func stop() {
         pictureInPictureController?.stopPictureInPicture()
+        nativePlayer?.pause()
     }
 
     private func ensurePictureInPictureController() {
         guard pictureInPictureController == nil, isSupported else { return }
-        let source = AVPictureInPictureController.ContentSource(
-            sampleBufferDisplayLayer: displayLayer,
-            playbackDelegate: self
-        )
-        let controller = AVPictureInPictureController(contentSource: source)
+        let controller: AVPictureInPictureController
+        switch contentMode {
+        case .liveReadings:
+            let source = AVPictureInPictureController.ContentSource(
+                sampleBufferDisplayLayer: displayLayer,
+                playbackDelegate: self
+            )
+            controller = AVPictureInPictureController(contentSource: source)
+        case .nativeCarrier:
+            guard let nativePlayerLayer,
+                  let nativeController = AVPictureInPictureController(
+                    playerLayer: nativePlayerLayer
+                  ) else { return }
+            controller = nativeController
+        }
         controller.delegate = self
         controller.requiresLinearPlayback = true
         controller.canStartPictureInPictureAutomaticallyFromInline = false
@@ -282,16 +332,68 @@ final class TelemetryPictureInPictureController: NSObject {
         isPossible = false
 
         displayLayer.removeFromSuperlayer()
-        let replacement = AVSampleBufferDisplayLayer()
-        configure(replacement)
-        displayLayer = replacement
-        playbackTimebase = nil
-        configurePlaybackTimebase()
+        nativePlayerLayer?.removeFromSuperlayer()
+
+        switch contentMode {
+        case .liveReadings:
+            tearDownNativeCarrier()
+            let replacement = AVSampleBufferDisplayLayer()
+            configure(replacement)
+            displayLayer = replacement
+            playbackTimebase = nil
+            configurePlaybackTimebase()
+        case .nativeCarrier:
+            configureNativeCarrier()
+        }
 
         if let sourceView {
-            sourceView.layer.addSublayer(replacement)
-            replacement.frame = sourceView.bounds
+            attachActiveLayer(to: sourceView)
+            layoutActiveLayer(in: sourceView.bounds)
         }
+    }
+
+    private func configureNativeCarrier() {
+        guard nativePlayer == nil else { return }
+        guard let url = Bundle.main.url(forResource: "BlankPiP", withExtension: "mp4") else {
+            errorMessage = "Native Picture in Picture carrier is missing."
+            return
+        }
+        let item = AVPlayerItem(url: url)
+        let player = AVQueuePlayer()
+        player.isMuted = true
+        player.actionAtItemEnd = .none
+        let looper = AVPlayerLooper(player: player, templateItem: item)
+        let layer = AVPlayerLayer(player: player)
+        layer.videoGravity = .resizeAspect
+        layer.backgroundColor = UIColor.black.cgColor
+        nativePlayer = player
+        nativeLooper = looper
+        nativePlayerLayer = layer
+    }
+
+    private func tearDownNativeCarrier() {
+        nativePlayer?.pause()
+        nativePlayerLayer?.removeFromSuperlayer()
+        nativePlayerLayer = nil
+        nativeLooper = nil
+        nativePlayer = nil
+    }
+
+    private func attachActiveLayer(to view: UIView) {
+        switch contentMode {
+        case .liveReadings:
+            view.layer.addSublayer(displayLayer)
+        case .nativeCarrier:
+            configureNativeCarrier()
+            if let nativePlayerLayer {
+                view.layer.addSublayer(nativePlayerLayer)
+            }
+        }
+    }
+
+    private func layoutActiveLayer(in bounds: CGRect) {
+        displayLayer.frame = bounds
+        nativePlayerLayer?.frame = bounds
     }
 
     private func attachToPendingPreviewIfNeeded() {
@@ -301,9 +403,12 @@ final class TelemetryPictureInPictureController: NSObject {
             sourceView = pendingSourceView
             sourceViewWasDismantled = false
             displayLayer.removeFromSuperlayer()
-            pendingSourceView.layer.addSublayer(displayLayer)
-            displayLayer.frame = pendingSourceView.bounds
-            renderLatest()
+            nativePlayerLayer?.removeFromSuperlayer()
+            attachActiveLayer(to: pendingSourceView)
+            layoutActiveLayer(in: pendingSourceView.bounds)
+            if contentMode == .liveReadings {
+                renderLatest()
+            }
         } else if sourceViewWasDismantled {
             self.pendingSourceView = nil
             sourceViewWasDismantled = false
@@ -348,6 +453,7 @@ final class TelemetryPictureInPictureController: NSObject {
     }
 
     private func renderLatest() {
+        guard contentMode == .liveReadings else { return }
         let content = TelemetryVideoFrameView(
             data: latestData,
             showPower: showPower,
@@ -472,8 +578,13 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
     ) {
         isStarting = false
         isActive = false
+        nativePlayer?.pause()
         errorMessage = "Picture in Picture could not start."
         displayLayer.sampleBufferRenderer.flush()
+        if pendingPipelineRebuild {
+            pendingPipelineRebuild = false
+            rebuildRenderingPipeline()
+        }
         attachToPendingPreviewIfNeeded()
     }
 
@@ -482,7 +593,12 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
     ) {
         isStarting = false
         isActive = false
+        nativePlayer?.pause()
         displayLayer.sampleBufferRenderer.flush()
+        if pendingPipelineRebuild {
+            pendingPipelineRebuild = false
+            rebuildRenderingPipeline()
+        }
         attachToPendingPreviewIfNeeded()
         refreshPossibleState()
     }

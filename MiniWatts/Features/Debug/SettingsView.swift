@@ -18,6 +18,7 @@ struct SettingsView: View {
                                           leadingItem: $monitor.liveActivityLeadingItem,
                                           metric: $monitor.liveActivityMetric)
                         pictureInPicturePanel(
+                            contentMode: $pictureInPicture.contentMode,
                             showPower: $pictureInPicture.showPower,
                             showTemperatures: $pictureInPicture.showTemperatures,
                             layout: $pictureInPicture.layout,
@@ -54,6 +55,7 @@ struct SettingsView: View {
     }
 
     private func pictureInPicturePanel(
+        contentMode: Binding<TelemetryPictureInPictureContentMode>,
         showPower: Binding<Bool>,
         showTemperatures: Binding<Bool>,
         layout: Binding<TelemetryPictureInPictureLayout>,
@@ -61,6 +63,13 @@ struct SettingsView: View {
     ) -> some View {
         Panel("Floating monitor", systemImage: "pip") {
             VStack(alignment: .leading, spacing: 12) {
+                Toggle("Show live readings in the floating window", isOn: Binding(
+                    get: { contentMode.wrappedValue == .liveReadings },
+                    set: { contentMode.wrappedValue = $0 ? .liveReadings : .nativeCarrier }
+                ))
+                .tint(.mwAccent)
+                .disabled(pictureInPicture.keepsSensorSamplingActive)
+
                 TelemetryPictureInPictureInlinePreview(controller: pictureInPicture)
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -70,39 +79,44 @@ struct SettingsView: View {
                     }
                     .accessibilityLabel("Picture in Picture preview")
 
-                Toggle("Charging power", isOn: showPower)
-                    .tint(.mwAccent)
-                Toggle("Component temperatures", isOn: showTemperatures)
-                    .tint(.mwAccent)
+                if contentMode.wrappedValue == .liveReadings {
+                    Toggle("Charging power", isOn: showPower)
+                        .tint(.mwAccent)
+                    Toggle("Component temperatures", isOn: showTemperatures)
+                        .tint(.mwAccent)
 
-                if showTemperatures.wrappedValue {
-                    HStack {
-                        Text("Temperature display")
-                            .font(.subheadline)
-                        Spacer()
-                        Picker("Temperature display", selection: temperatureSelection) {
-                            Text("All components").tag(TelemetryTemperatureSelection.all)
-                            Text("SoC temperature").tag(TelemetryTemperatureSelection.soc)
-                            Text("Battery temperature").tag(TelemetryTemperatureSelection.battery)
-                            Text("Charger temperature").tag(TelemetryTemperatureSelection.charger)
-                            Text("Hottest component").tag(TelemetryTemperatureSelection.hottest)
+                    if showTemperatures.wrappedValue {
+                        HStack {
+                            Text("Temperature display")
+                                .font(.subheadline)
+                            Spacer()
+                            Picker("Temperature display", selection: temperatureSelection) {
+                                Text("All components").tag(TelemetryTemperatureSelection.all)
+                                Text("SoC temperature").tag(TelemetryTemperatureSelection.soc)
+                                Text("Battery temperature").tag(TelemetryTemperatureSelection.battery)
+                                Text("Charger temperature").tag(TelemetryTemperatureSelection.charger)
+                                Text("Hottest component").tag(TelemetryTemperatureSelection.hottest)
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
                         }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
                     }
-                }
 
-                if showPower.wrappedValue && showTemperatures.wrappedValue {
-                    Picker("Layout", selection: layout) {
-                        Text("Together").tag(TelemetryPictureInPictureLayout.together)
-                        Text("Separate pages").tag(TelemetryPictureInPictureLayout.separatePages)
+                    if showPower.wrappedValue && showTemperatures.wrappedValue {
+                        Picker("Layout", selection: layout) {
+                            Text("Together").tag(TelemetryPictureInPictureLayout.together)
+                            Text("Separate pages").tag(TelemetryPictureInPictureLayout.separatePages)
+                        }
+                        .pickerStyle(.segmented)
                     }
-                    .pickerStyle(.segmented)
-                }
 
-                if !showPower.wrappedValue && !showTemperatures.wrappedValue {
-                    EmptyNote(text: "Select at least one item to display.",
-                              systemImage: "exclamationmark.circle")
+                    if !showPower.wrappedValue && !showTemperatures.wrappedValue {
+                        EmptyNote(text: "Select at least one item to display.",
+                                  systemImage: "exclamationmark.circle")
+                    }
+                } else {
+                    EmptyNote(text: "Native carrier mode shows a blank Picture in Picture window. It follows the standard AVPlayerLayer path so you can test whether iOS fully fades the side restore indicator while sensor sampling and Dynamic Island updates continue.",
+                              systemImage: "pip")
                 }
 
                 Button {
@@ -140,17 +154,19 @@ struct SettingsView: View {
                     EmptyNote(text: errorMessage, systemImage: "exclamationmark.circle")
                 }
 
-                Text("The floating monitor redraws once per second. Choose all temperatures or one component; the iOS system thermal state is always shown. Together shows power and temperatures at the same time; Separate pages alternates between them every four seconds.")
-                    .font(.caption)
-                    .foregroundStyle(Color.mwMuted)
-                    .fixedSize(horizontal: false, vertical: true)
+                if contentMode.wrappedValue == .liveReadings {
+                    Text("The floating monitor redraws once per second. Choose all temperatures or one component; the iOS system thermal state is always shown. Together shows power and temperatures at the same time; Separate pages alternates between them every four seconds.")
+                        .font(.caption)
+                        .foregroundStyle(Color.mwMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 Text("Start Picture in Picture here before leaving MiniWatts. Sensor sampling stays active while the floating window is open and stops when you close it.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Swipe Picture in Picture to either screen edge to park it. MiniWatts hides the standard playback controls; iOS handles docking and decides whether the restore indicator fades after the window is idle.")
+                Text("Stop Picture in Picture before changing modes. Swipe the window to either screen edge to park it; iOS handles docking and decides whether the restore indicator fades after the window is idle.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
