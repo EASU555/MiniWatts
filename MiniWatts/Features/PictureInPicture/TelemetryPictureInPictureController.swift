@@ -143,6 +143,7 @@ final class TelemetryPictureInPictureController: NSObject {
     /// so Settings can never remain stuck in its loading state.
     @ObservationIgnored private var startTask: Task<Void, Never>?
     @ObservationIgnored private var startAttempt = 0
+    @ObservationIgnored private var startsThroughBackgroundTransition = false
     @ObservationIgnored private var autoHideTask: Task<Void, Never>?
     /// PowerMonitor installs these hooks from RootView so ActivityKit owns the
     /// shared background-audio session before AVKit starts, then gets another
@@ -239,6 +240,7 @@ final class TelemetryPictureInPictureController: NSObject {
         // Let PowerMonitor establish ownership first and only configure the session
         // ourselves when there is no active Live Activity keeper.
         let liveActivityOwnsAudioSession = prepareLiveActivityForStart?() ?? false
+        startsThroughBackgroundTransition = liveActivityOwnsAudioSession
         if !liveActivityOwnsAudioSession {
             do {
                 let session = AVAudioSession.sharedInstance()
@@ -281,6 +283,8 @@ final class TelemetryPictureInPictureController: NSObject {
     func stop() {
         invalidateStartAttempt()
         isStarting = false
+        startsThroughBackgroundTransition = false
+        pictureInPictureController?.canStartPictureInPictureAutomaticallyFromInline = false
         pictureInPictureController?.stopPictureInPicture()
     }
 
@@ -337,7 +341,28 @@ final class TelemetryPictureInPictureController: NSObject {
             return
         }
 
-        controller.startPictureInPicture()
+        if startsThroughBackgroundTransition {
+            // A manually started PiP from the foreground becomes this app's active
+            // system presentation and iOS suppresses its own Live Activity UI. Arm
+            // AVKit first, then let the background transition start PiP in the same
+            // order used by ordinary video apps. The private suspend selector is
+            // confined to this sideload-only build and simply performs the same
+            // scene transition as swiping Home.
+            controller.canStartPictureInPictureAutomaticallyFromInline = true
+            let suspendSelector = NSSelectorFromString("suspend")
+            guard UIApplication.shared.responds(to: suspendSelector) else {
+                failStartAttempt(
+                    attempt,
+                    message: "Picture in Picture could not enter the background automatically."
+                )
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(250))
+            guard isCurrentStartAttempt(attempt) else { return }
+            UIApplication.shared.perform(suspendSelector)
+        } else {
+            controller.startPictureInPicture()
+        }
 
         // Some iOS builds occasionally deliver neither didStart nor failedToStart
         // after accepting the request. Bound that transition and discard the wedged
@@ -362,6 +387,8 @@ final class TelemetryPictureInPictureController: NSObject {
         invalidateStartAttempt()
         isStarting = false
         isActive = true
+        startsThroughBackgroundTransition = false
+        pictureInPictureController?.canStartPictureInPictureAutomaticallyFromInline = false
         errorMessage = nil
         scheduleAutomaticHide()
         recoverLiveActivityAfterTransition?()
@@ -372,6 +399,7 @@ final class TelemetryPictureInPictureController: NSObject {
         invalidateStartAttempt()
         isStarting = false
         isActive = false
+        startsThroughBackgroundTransition = false
         errorMessage = message
         discardPictureInPictureController()
         displayLayer.sampleBufferRenderer.flush()

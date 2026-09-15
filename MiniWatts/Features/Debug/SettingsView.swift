@@ -153,7 +153,7 @@ struct SettingsView: View {
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Start Picture in Picture here before leaving MiniWatts. Sensor sampling stays active while the floating window is open and stops when you close it.")
+                Text("Start Picture in Picture here before leaving MiniWatts. When Dynamic Island is enabled, MiniWatts moves to the background first so iOS can start both system presentations in the correct order. Sensor sampling stays active while the floating window is open.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
