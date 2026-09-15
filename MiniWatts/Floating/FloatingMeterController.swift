@@ -21,6 +21,11 @@ import SwiftUI
 /// the app, and Settings — where the button lives — is a sheet that comes and goes.
 @Observable
 final class FloatingMeterController {
+    private static let showPowerKey = "floatingMeterShowPower"
+    private static let showTemperaturesKey = "floatingMeterShowTemperatures"
+    private static let layoutKey = "floatingMeterLayout"
+    private static let temperatureSelectionKey = "floatingMeterTemperatureSelection"
+
     enum Status: Equatable {
         /// No PiP on this device.
         case unsupported
@@ -39,15 +44,47 @@ final class FloatingMeterController {
     /// on screen, so the button waits for this.
     private(set) var isReady = false
 
+    var showPower: Bool {
+        didSet {
+            UserDefaults.standard.set(showPower, forKey: Self.showPowerKey)
+            renderLatest()
+        }
+    }
+
+    var showTemperatures: Bool {
+        didSet {
+            UserDefaults.standard.set(showTemperatures, forKey: Self.showTemperaturesKey)
+            renderLatest()
+        }
+    }
+
+    var layout: FloatingMeterLayout {
+        didSet {
+            UserDefaults.standard.set(layout.rawValue, forKey: Self.layoutKey)
+            renderLatest()
+        }
+    }
+
+    var temperatureSelection: FloatingTemperatureSelection {
+        didSet {
+            UserDefaults.standard.set(temperatureSelection.rawValue,
+                                      forKey: Self.temperatureSelectionKey)
+            renderLatest()
+        }
+    }
+
+    private(set) var latestData: FloatingMeterData?
+
     var isRunning: Bool { status == .running || status == .starting }
+    var hasSelectedContent: Bool { showPower || showTemperatures }
 
     /// The layer PiP draws from, hosted off screen by `RootView`.
     let layer = AVSampleBufferDisplayLayer()
 
-    /// 16:9, rendered at 2× — the window is around 160 pt wide, and PiP takes the
-    /// frame's own dimensions as its aspect ratio.
-    private static let frameSize = CGSize(width: 320, height: 180)
-    private static let frameScale: CGFloat = 2
+    /// PiP takes the frame's own dimensions as its aspect ratio. Rendering directly
+    /// at 640×360 also gives the four compact temperature columns enough layout
+    /// room to keep decimal values on one line.
+    private static let frameSize = CGSize(width: 640, height: 360)
 
     private var controller: AVPictureInPictureController?
     private var proxy: Proxy?
@@ -56,6 +93,13 @@ final class FloatingMeterController {
     private var lastFrame = Date.distantPast
 
     init() {
+        let defaults = UserDefaults.standard
+        showPower = defaults.object(forKey: Self.showPowerKey) as? Bool ?? true
+        showTemperatures = defaults.object(forKey: Self.showTemperaturesKey) as? Bool ?? true
+        layout = defaults.string(forKey: Self.layoutKey)
+            .flatMap(FloatingMeterLayout.init(rawValue:)) ?? .together
+        temperatureSelection = defaults.string(forKey: Self.temperatureSelectionKey)
+            .flatMap(FloatingTemperatureSelection.init(rawValue:)) ?? .all
         status = AVPictureInPictureController.isPictureInPictureSupported() ? .idle : .unsupported
         layer.videoGravity = .resizeAspect
     }
@@ -64,13 +108,18 @@ final class FloatingMeterController {
 
     /// Paints one reading. Called from the one-second tick, which keeps running
     /// while the window is open — that is the whole point of the window.
-    func render(_ reading: ChargeReading) {
+    func render(snapshot: PowerSnapshot, thermalState: ProcessInfo.ThermalState) {
         guard status != .unsupported else { return }
+        latestData = FloatingMeterData(snapshot: snapshot, thermalState: thermalState)
         // The tick is already once a second; this only guards against a burst.
         guard Date.now.timeIntervalSince(lastFrame) >= 0.4 else { return }
         lastFrame = .now
 
-        guard let sample = makeSample(reading) else { return }
+        renderLatest()
+    }
+
+    private func renderLatest() {
+        guard status != .unsupported, let sample = makeSample() else { return }
         let renderer = layer.sampleBufferRenderer
         // A failed renderer stays failed until it is flushed, and then swallows
         // every frame in silence — which looks exactly like a frozen reading.
@@ -89,7 +138,7 @@ final class FloatingMeterController {
     // MARK: Start and stop
 
     func start() {
-        guard status != .unsupported, !isRunning else { return }
+        guard status != .unsupported, hasSelectedContent, !isRunning else { return }
         guard let controller = makeController() else {
             status = .notReady
             return
@@ -163,10 +212,18 @@ final class FloatingMeterController {
 
     // MARK: Rendering
 
-    private func makeSample(_ reading: ChargeReading) -> CMSampleBuffer? {
-        let renderer = ImageRenderer(content: FloatingMeterFrame(reading: reading)
-            .frame(width: Self.frameSize.width, height: Self.frameSize.height))
-        renderer.scale = Self.frameScale
+    private func makeSample() -> CMSampleBuffer? {
+        let renderer = ImageRenderer(content: FloatingMeterTelemetryFrame(
+            data: latestData,
+            showPower: showPower,
+            showTemperatures: showTemperatures,
+            layout: layout,
+            temperatureSelection: temperatureSelection
+        )
+        .frame(width: Self.frameSize.width, height: Self.frameSize.height)
+        .environment(\.colorScheme, .dark)
+        .environment(\.locale, .current))
+        renderer.scale = 1
         renderer.isOpaque = true
         guard let image = renderer.cgImage else { return nil }
 

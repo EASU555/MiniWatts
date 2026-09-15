@@ -38,7 +38,8 @@ struct RootView: View {
             // throttles itself; this only hands over the reading.
             monitor.onTick = { [liveActivity, widgets, floatingMeter] snapshot in
                 let reading = ChargeReading(snapshot)
-                floatingMeter.render(reading)
+                floatingMeter.render(snapshot: snapshot,
+                                     thermalState: monitor.thermal.state)
                 liveActivity.sync(snapshot,
                                   selectedMetric: monitor.liveActivityMetric,
                                   enabled: monitor.showsLiveActivityWhileCharging,
