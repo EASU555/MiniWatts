@@ -26,7 +26,8 @@ nonisolated struct ZoneTemperatures: Identifiable, Hashable {
     var id: ThermalZone { zone }
 }
 
-/// One reading of everything the app can learn about power, merged from four sources:
+/// One reading of everything the app can learn about power, merged from five sources:
+/// - `systemBatteryPercent`: the public `UIDevice` battery level used by iOS apps
 /// - `registry`:   IOKit `IOPMPowerSource` (complete on the simulator, two keys on iOS)
 /// - `powerSource`: powerd's battery description
 /// - `adapterDetails`: powerd's adapter description, including the PD profile menu
@@ -41,6 +42,7 @@ nonisolated struct ZoneTemperatures: Identifiable, Hashable {
 /// computed: those are single hash lookups.
 nonisolated struct PowerSnapshot {
     let date: Date
+    let systemBatteryPercent: Int?
     let registry: [String: Any]
     let powerSource: [String: Any]?
     let adapterDetails: [String: Any]?
@@ -76,12 +78,14 @@ nonisolated struct PowerSnapshot {
     private let zoneHottest: [ThermalZone: HIDSensors.Reading]
 
     init(date: Date = .now,
+         systemBatteryPercent: Int? = nil,
          registry: [String: Any] = [:],
          powerSource: [String: Any]? = nil,
          adapterDetails: [String: Any]? = nil,
          sensors: [HIDSensors.Reading] = [],
          chargeStatus: [String: Any]? = nil) {
         self.date = date
+        self.systemBatteryPercent = systemBatteryPercent.flatMap(Self.validPercent)
         self.registry = registry
         self.powerSource = powerSource
         self.adapterDetails = adapterDetails
@@ -208,7 +212,16 @@ nonisolated struct PowerSnapshot {
 
     var isFinishingCharge: Bool { bool("Is Finishing Charge", in: powerSource) }
     var lowPowerMode: Bool { bool("LPM Active", in: powerSource) }
-    var percent: Int? { int("CurrentCapacity", in: registry) ?? int("Current Capacity", in: powerSource) }
+    /// The percentage displayed by iOS is authoritative. powerd is the fallback
+    /// for extension refreshes where `UIDevice` may not have produced a level yet.
+    /// The registry value comes last: on some systems `CurrentCapacity` is raw mAh,
+    /// not a percentage, so accepting it without a range check produced impossible
+    /// battery levels and corrupted charge-history start/end percentages.
+    var percent: Int? {
+        systemBatteryPercent
+            ?? int("Current Capacity", in: powerSource).flatMap(Self.validPercent)
+            ?? int("CurrentCapacity", in: registry).flatMap(Self.validPercent)
+    }
 
     /// e.g. "Charging On Hold". Privileged on iOS, so usually nil there.
     var chargeStatusText: String? { chargeStatus?["chargeStatus"] as? String }
@@ -415,6 +428,10 @@ nonisolated struct PowerSnapshot {
             return Int(Int32(truncatingIfNeeded: value))
         }
         return Int(value)
+    }
+
+    private static func validPercent(_ value: Int) -> Int? {
+        (0...100).contains(value) ? value : nil
     }
 
     private static func int(_ key: String, in dictionary: [String: Any]?) -> Int? {

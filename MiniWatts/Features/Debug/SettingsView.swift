@@ -310,6 +310,10 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 DetailRow(label: "Model identifier", value: monitor.deviceModelIdentifier)
                 DetailRow(label: "System", value: "iOS \(UIDevice.current.systemVersion)")
+                DetailRow(label: "Charge level",
+                          value: monitor.snapshot.percent.map {
+                              "\($0)% · \(String(localized: "System"))"
+                          })
                 DetailRow(label: "HID sensors",
                           value: monitor.sensorsAvailable
                               ? String(localized: "available") : String(localized: "unavailable"))

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 /// One point in the rolling live chart.
 nonisolated struct LiveSample: Identifiable, Hashable {
@@ -159,6 +160,9 @@ final class PowerMonitor {
             .flatMap(LiveActivityLeadingItem.init(rawValue:)) ?? .statusIcon
         liveActivityMetric = defaults.string(forKey: Self.liveActivityMetricKey)
             .flatMap(LiveActivityMetric.init(rawValue:)) ?? .chargingPower
+        // Use the same public battery percentage iOS exposes to applications.
+        // Without monitoring enabled, `batteryLevel` remains -1 (unknown).
+        UIDevice.current.isBatteryMonitoringEnabled = true
         collectDiagnostics()
         Task { await loadStoredSessions() }
     }
@@ -242,6 +246,7 @@ final class PowerMonitor {
         let internalBattery = sources.first { ($0["Type"] as? String) == "InternalBattery" } ?? sources.first
 
         let current = PowerSnapshot(date: .now,
+                                    systemBatteryPercent: Self.systemBatteryPercent,
                                     registry: registry,
                                     powerSource: internalBattery,
                                     adapterDetails: battery?.readAdapterDetails(),
@@ -267,6 +272,12 @@ final class PowerMonitor {
                                          enabled: liveActivityEnabled)
         lastExternalConnected = current.externalConnected
         onTick?(current)
+    }
+
+    private static var systemBatteryPercent: Int? {
+        let level = UIDevice.current.batteryLevel
+        guard level >= 0 else { return nil }
+        return min(max(Int((Double(level) * 100).rounded()), 0), 100)
     }
 
     private func appendLive(_ snapshot: PowerSnapshot) {
