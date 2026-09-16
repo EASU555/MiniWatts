@@ -311,9 +311,7 @@ struct SettingsView: View {
                 DetailRow(label: "Model identifier", value: monitor.deviceModelIdentifier)
                 DetailRow(label: "System", value: "iOS \(UIDevice.current.systemVersion)")
                 DetailRow(label: "Charge level",
-                          value: monitor.snapshot.percent.map {
-                              "\($0)% · \(monitor.snapshot.percentSource ?? String(localized: "System"))"
-                          })
+                          value: monitor.snapshot.percent.map { "\($0)% · UIDevice API" })
                 DetailRow(label: "HID sensors",
                           value: monitor.sensorsAvailable
                               ? String(localized: "available") : String(localized: "unavailable"))

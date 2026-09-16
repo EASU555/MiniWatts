@@ -212,29 +212,10 @@ nonisolated struct PowerSnapshot {
 
     var isFinishingCharge: Bool { bool("Is Finishing Charge", in: powerSource) }
     var lowPowerMode: Bool { bool("LPM Active", in: powerSource) }
-    /// powerd is the source behind the system power-source state and is polled with
-    /// every sample. Prefer it to `UIDevice.batteryLevel`, whose change notification
-    /// is rate-limited and can remain one percentage point behind the status bar.
-    /// The registry value comes last: on some systems `CurrentCapacity` is raw mAh,
-    /// not a percentage, so it is never accepted without a 0...100 range check.
-    var powerSourcePercent: Int? {
-        int("Current Capacity", in: powerSource).flatMap(Self.validPercent)
-    }
-
-    var registryPercent: Int? {
-        int("CurrentCapacity", in: registry).flatMap(Self.validPercent)
-    }
-
-    var percent: Int? {
-        powerSourcePercent ?? uiDeviceBatteryPercent ?? registryPercent
-    }
-
-    var percentSource: String? {
-        if powerSourcePercent != nil { return "powerd" }
-        if uiDeviceBatteryPercent != nil { return "UIDevice" }
-        if registryPercent != nil { return "IOKit" }
-        return nil
-    }
+    /// The battery percentage exposed by Apple's public UIKit API. Raw capacity
+    /// values from powerd and IOKit are intentionally not used as fallbacks: they
+    /// can represent a differently refreshed or differently scaled quantity.
+    var percent: Int? { uiDeviceBatteryPercent }
 
     /// e.g. "Charging On Hold". Privileged on iOS, so usually nil there.
     var chargeStatusText: String? { chargeStatus?["chargeStatus"] as? String }

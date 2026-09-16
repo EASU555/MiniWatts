@@ -107,9 +107,11 @@ struct AppVersionBadge: View {
     ) as? String ?? "—"
 
     var body: some View {
-        Text(verbatim: "v\(Self.version) · \(Self.build)")
+        Text(verbatim: "v\(Self.version)")
             .font(.caption2.monospaced().weight(.bold))
             .foregroundStyle(.white)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: true)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
             .background(Color.mwAccent, in: Capsule())
