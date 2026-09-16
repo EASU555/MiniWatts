@@ -54,30 +54,31 @@ final class PowerMonitor {
             UserDefaults.standard.set(liveActivityEnabled, forKey: Self.liveActivityEnabledKey)
             liveActivityController.reconcile(snapshot: snapshot,
                                              leadingItem: liveActivityLeadingItem,
-                                             selectedMetric: liveActivityMetric,
+                                             trailingItem: liveActivityTrailingItem,
                                              enabled: liveActivityEnabled,
                                              forceUpdate: true)
         }
     }
 
-    var liveActivityLeadingItem: LiveActivityLeadingItem {
+    var liveActivityLeadingItem: LiveActivityCompactItem {
         didSet {
             UserDefaults.standard.set(liveActivityLeadingItem.rawValue,
                                       forKey: Self.liveActivityLeadingItemKey)
             liveActivityController.reconcile(snapshot: snapshot,
                                              leadingItem: liveActivityLeadingItem,
-                                             selectedMetric: liveActivityMetric,
+                                             trailingItem: liveActivityTrailingItem,
                                              enabled: liveActivityEnabled,
                                              forceUpdate: true)
         }
     }
 
-    var liveActivityMetric: LiveActivityMetric {
+    var liveActivityTrailingItem: LiveActivityCompactItem {
         didSet {
-            UserDefaults.standard.set(liveActivityMetric.rawValue, forKey: Self.liveActivityMetricKey)
+            UserDefaults.standard.set(liveActivityTrailingItem.rawValue,
+                                      forKey: Self.liveActivityTrailingItemKey)
             liveActivityController.reconcile(snapshot: snapshot,
                                              leadingItem: liveActivityLeadingItem,
-                                             selectedMetric: liveActivityMetric,
+                                             trailingItem: liveActivityTrailingItem,
                                              enabled: liveActivityEnabled,
                                              forceUpdate: true)
         }
@@ -120,7 +121,9 @@ final class PowerMonitor {
     // preference. Build 12 changes this to an explicit persistent user action.
     private static let liveActivityEnabledKey = "liveActivityManualEnabled"
     private static let liveActivityLeadingItemKey = "liveActivityLeadingItem"
-    private static let liveActivityMetricKey = "liveActivityMetric"
+    private static let liveActivityTrailingItemKey = "liveActivityTrailingItem"
+    /// Build 43 and earlier stored the right side as a metric-only choice here.
+    private static let legacyLiveActivityMetricKey = "liveActivityMetric"
     private static let liveWindow = 180
 
     private let battery = IOKitBattery()
@@ -156,9 +159,11 @@ final class PowerMonitor {
         keepScreenAwakeWhileCharging = defaults.object(forKey: Self.keepAwakeKey) as? Bool ?? true
         liveActivityEnabled = defaults.object(forKey: Self.liveActivityEnabledKey) as? Bool ?? false
         liveActivityLeadingItem = defaults.string(forKey: Self.liveActivityLeadingItemKey)
-            .flatMap(LiveActivityLeadingItem.init(rawValue:)) ?? .statusIcon
-        liveActivityMetric = defaults.string(forKey: Self.liveActivityMetricKey)
-            .flatMap(LiveActivityMetric.init(rawValue:)) ?? .chargingPower
+            .flatMap(LiveActivityCompactItem.init(rawValue:)) ?? .statusIcon
+        let storedTrailingItem = defaults.string(forKey: Self.liveActivityTrailingItemKey)
+            ?? defaults.string(forKey: Self.legacyLiveActivityMetricKey)
+        liveActivityTrailingItem = storedTrailingItem
+            .flatMap(LiveActivityCompactItem.init(rawValue:)) ?? .chargingPower
         collectDiagnostics()
         Task { await loadStoredSessions() }
     }
@@ -263,7 +268,7 @@ final class PowerMonitor {
         updateSession(current)
         liveActivityController.reconcile(snapshot: current,
                                          leadingItem: liveActivityLeadingItem,
-                                         selectedMetric: liveActivityMetric,
+                                         trailingItem: liveActivityTrailingItem,
                                          enabled: liveActivityEnabled)
         lastExternalConnected = current.externalConnected
         onTick?(current)

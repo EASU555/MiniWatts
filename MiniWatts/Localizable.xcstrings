@@ -2085,6 +2085,26 @@
         }
       }
     },
+    "Both sides offer the same choices. Pick any icon and reading for either side, or choose Do not show to leave one side empty. The right reading is primary when expanded; if it is hidden or an icon, the left reading is used." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左右两侧提供完全相同的选项。任一侧都可以选择图标和读数，也可以选择“不显示”将该侧留空。长按展开后优先使用右侧读数；右侧留空或选择状态图标时，则使用左侧读数。"
+          }
+        }
+      }
+    },
+    "Do not show" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不显示"
+          }
+        }
+      }
+    },
     "Turning this on starts the Live Activity immediately. It refreshes while MiniWatts is open, or in the background while the floating monitor is running. A Live Activity by itself doesn't keep sensor sampling active." : {
       "localizations" : {
         "zh-Hans" : {

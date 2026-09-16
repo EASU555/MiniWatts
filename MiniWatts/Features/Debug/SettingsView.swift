@@ -16,7 +16,7 @@ struct SettingsView: View {
                         recordingPanel(keepAwake: $monitor.keepScreenAwakeWhileCharging)
                         liveActivityPanel(enabled: $monitor.liveActivityEnabled,
                                           leadingItem: $monitor.liveActivityLeadingItem,
-                                          metric: $monitor.liveActivityMetric)
+                                          trailingItem: $monitor.liveActivityTrailingItem)
                         pictureInPicturePanel(
                             contentMode: $pictureInPicture.contentMode,
                             showPower: $pictureInPicture.showPower,
@@ -197,8 +197,8 @@ struct SettingsView: View {
     }
 
     private func liveActivityPanel(enabled: Binding<Bool>,
-                                   leadingItem: Binding<LiveActivityLeadingItem>,
-                                   metric: Binding<LiveActivityMetric>) -> some View {
+                                   leadingItem: Binding<LiveActivityCompactItem>,
+                                   trailingItem: Binding<LiveActivityCompactItem>) -> some View {
         Panel("Live Activity", systemImage: "platter.filled.top.iphone") {
             VStack(alignment: .leading, spacing: 12) {
                 Toggle(isOn: enabled) {
@@ -207,36 +207,10 @@ struct SettingsView: View {
                 }
                 .tint(.mwAccent)
 
-                HStack {
-                    Text("Left side")
-                        .font(.subheadline)
-                    Spacer()
-                    Picker("Left side", selection: leadingItem) {
-                        Text("Status icon").tag(LiveActivityLeadingItem.statusIcon)
-                        Text("Charging power").tag(LiveActivityLeadingItem.chargingPower)
-                        Text("SoC temperature").tag(LiveActivityLeadingItem.socTemperature)
-                        Text("Battery temperature").tag(LiveActivityLeadingItem.batteryTemperature)
-                        Text("Hottest component").tag(LiveActivityLeadingItem.hottestTemperature)
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                }
+                compactLiveActivityPicker("Left side", selection: leadingItem)
+                compactLiveActivityPicker("Right side", selection: trailingItem)
 
-                HStack {
-                    Text("Right side")
-                        .font(.subheadline)
-                    Spacer()
-                    Picker("Right side", selection: metric) {
-                        Text("Charging power").tag(LiveActivityMetric.chargingPower)
-                        Text("SoC temperature").tag(LiveActivityMetric.socTemperature)
-                        Text("Battery temperature").tag(LiveActivityMetric.batteryTemperature)
-                        Text("Hottest component").tag(LiveActivityMetric.hottestTemperature)
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                }
-
-                Text("Choose the compact Dynamic Island's left and right contents independently. For example, use status icon + power, or power + temperature. The right-side choice is also the primary readout when expanded.")
+                Text("Both sides offer the same choices. Pick any icon and reading for either side, or choose Do not show to leave one side empty. The right reading is primary when expanded; if it is hidden or an icon, the left reading is used.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -256,6 +230,27 @@ struct SettingsView: View {
                               systemImage: "exclamationmark.circle")
                 }
             }
+        }
+    }
+
+    private func compactLiveActivityPicker(
+        _ title: LocalizedStringKey,
+        selection: Binding<LiveActivityCompactItem>
+    ) -> some View {
+        HStack {
+            Text(title)
+                .font(.subheadline)
+            Spacer()
+            Picker(title, selection: selection) {
+                Text("Do not show").tag(LiveActivityCompactItem.none)
+                Text("Status icon").tag(LiveActivityCompactItem.statusIcon)
+                Text("Charging power").tag(LiveActivityCompactItem.chargingPower)
+                Text("SoC temperature").tag(LiveActivityCompactItem.socTemperature)
+                Text("Battery temperature").tag(LiveActivityCompactItem.batteryTemperature)
+                Text("Hottest component").tag(LiveActivityCompactItem.hottestTemperature)
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
         }
     }
 

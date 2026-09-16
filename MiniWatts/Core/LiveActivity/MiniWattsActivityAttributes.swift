@@ -12,10 +12,11 @@ nonisolated enum LiveActivityMetric: String, Codable, CaseIterable, Identifiable
     var id: Self { self }
 }
 
-/// What appears in the compact Dynamic Island's leading slot. Keeping the
-/// status symbol as an explicit choice lets the user build either the familiar
-/// icon + reading layout or a denser reading + reading layout.
-nonisolated enum LiveActivityLeadingItem: String, Codable, CaseIterable, Identifiable, Sendable {
+/// What appears in either compact Dynamic Island slot. Both sides deliberately
+/// use the same type so every icon/readout — including an empty slot — is
+/// available on the left and the right.
+nonisolated enum LiveActivityCompactItem: String, Codable, CaseIterable, Identifiable, Sendable {
+    case none
     case statusIcon
     case chargingPower
     case socTemperature
@@ -26,11 +27,20 @@ nonisolated enum LiveActivityLeadingItem: String, Codable, CaseIterable, Identif
 
     var metric: LiveActivityMetric? {
         switch self {
-        case .statusIcon: nil
+        case .none, .statusIcon: nil
         case .chargingPower: .chargingPower
         case .socTemperature: .socTemperature
         case .batteryTemperature: .batteryTemperature
         case .hottestTemperature: .hottestTemperature
+        }
+    }
+
+    init(metric: LiveActivityMetric) {
+        switch metric {
+        case .chargingPower: self = .chargingPower
+        case .socTemperature: self = .socTemperature
+        case .batteryTemperature: self = .batteryTemperature
+        case .hottestTemperature: self = .hottestTemperature
         }
     }
 }
@@ -56,7 +66,10 @@ nonisolated struct MiniWattsActivityAttributes: ActivityAttributes {
         let sampledAt: Date?
         /// Optional so an activity created by an earlier personal build still
         /// decodes; nil preserves the original status-symbol presentation.
-        let leadingItem: LiveActivityLeadingItem?
+        let leadingItem: LiveActivityCompactItem?
+        /// Optional so activities created by build 43 and earlier keep decoding.
+        /// Their old right-side metric is recovered from `selectedMetric`.
+        let trailingItem: LiveActivityCompactItem?
         let selectedMetric: LiveActivityMetric
         let isWireless: Bool
     }
