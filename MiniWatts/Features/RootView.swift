@@ -30,14 +30,6 @@ struct RootView: View {
                 .opacity(0.02)
                 .allowsHitTesting(false)
         }
-        .overlay(alignment: .topLeading) {
-            GeometryReader { proxy in
-                AppVersionBadge()
-                    .padding(.leading, 8)
-                    .padding(.top, proxy.safeAreaInsets.top + 4)
-            }
-            .allowsHitTesting(false)
-        }
         .task {
             pictureInPicture.backgroundPulse = { [weak monitor] in
                 monitor?.refreshIfDue()
@@ -106,16 +98,22 @@ struct RootView: View {
 /// Always-visible release identifier so screenshots can be matched to the
 /// exact sideloaded version.
 struct AppVersionBadge: View {
-    static let version = "1.0.2"
+    private static let version = Bundle.main.object(
+        forInfoDictionaryKey: "CFBundleShortVersionString"
+    ) as? String ?? "—"
+
+    private static let build = Bundle.main.object(
+        forInfoDictionaryKey: "CFBundleVersion"
+    ) as? String ?? "—"
 
     var body: some View {
-        Text(verbatim: "v\(Self.version)")
+        Text(verbatim: "v\(Self.version) · \(Self.build)")
             .font(.caption2.monospaced().weight(.bold))
             .foregroundStyle(.white)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
             .background(Color.mwAccent, in: Capsule())
-            .accessibilityLabel("Version \(Self.version)")
+            .accessibilityLabel("Version \(Self.version), build \(Self.build)")
     }
 }
 
@@ -162,6 +160,10 @@ struct PageScaffold<Content: View>: View {
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    AppVersionBadge()
+                        .allowsHitTesting(false)
+                }
                 if let toolbar {
                     ToolbarItem(placement: .topBarTrailing) { toolbar }
                 }
