@@ -158,12 +158,26 @@ final class PowerMonitor {
         // and it cannot happen if the screen locks after thirty seconds.
         keepScreenAwakeWhileCharging = defaults.object(forKey: Self.keepAwakeKey) as? Bool ?? true
         liveActivityEnabled = defaults.object(forKey: Self.liveActivityEnabledKey) as? Bool ?? false
-        liveActivityLeadingItem = defaults.string(forKey: Self.liveActivityLeadingItemKey)
-            .flatMap(LiveActivityCompactItem.init(rawValue:)) ?? .statusIcon
+        let storedLeadingItem = defaults.string(forKey: Self.liveActivityLeadingItemKey)
+            .flatMap(LiveActivityCompactItem.init(rawValue:))
+        liveActivityLeadingItem = storedLeadingItem == LiveActivityCompactItem.none
+            ? .statusIcon
+            : storedLeadingItem ?? .statusIcon
         let storedTrailingItem = defaults.string(forKey: Self.liveActivityTrailingItemKey)
             ?? defaults.string(forKey: Self.legacyLiveActivityMetricKey)
-        liveActivityTrailingItem = storedTrailingItem
-            .flatMap(LiveActivityCompactItem.init(rawValue:)) ?? .chargingPower
+        let decodedTrailingItem = storedTrailingItem
+            .flatMap(LiveActivityCompactItem.init(rawValue:))
+        liveActivityTrailingItem = decodedTrailingItem == LiveActivityCompactItem.none
+            ? .chargingPower
+            : decodedTrailingItem ?? .chargingPower
+        if storedLeadingItem == LiveActivityCompactItem.none {
+            defaults.set(LiveActivityCompactItem.statusIcon.rawValue,
+                         forKey: Self.liveActivityLeadingItemKey)
+        }
+        if decodedTrailingItem == LiveActivityCompactItem.none {
+            defaults.set(LiveActivityCompactItem.chargingPower.rawValue,
+                         forKey: Self.liveActivityTrailingItemKey)
+        }
         collectDiagnostics()
         Task { await loadStoredSessions() }
     }

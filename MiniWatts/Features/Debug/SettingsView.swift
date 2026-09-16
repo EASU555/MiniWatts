@@ -210,7 +210,7 @@ struct SettingsView: View {
                 compactLiveActivityPicker("Left side", selection: leadingItem)
                 compactLiveActivityPicker("Right side", selection: trailingItem)
 
-                Text("Both sides offer the same choices. Pick any icon and reading for either side, or choose Do not show to leave one side empty. The right reading is primary when expanded; if it is hidden or an icon, the left reading is used.")
+                Text("Both sides offer the same icon and reading choices. The right reading is primary when expanded; if the right side is an icon, the left reading is used.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -242,8 +242,6 @@ struct SettingsView: View {
                 .font(.subheadline)
             Spacer()
             Picker(title, selection: selection) {
-                Label("Do not show", systemImage: "eye.slash")
-                    .tag(LiveActivityCompactItem.none)
                 Label("Charging status icon", systemImage: "bolt.circle.fill")
                     .tag(LiveActivityCompactItem.statusIcon)
                 Label("SoC icon", systemImage: "cpu")

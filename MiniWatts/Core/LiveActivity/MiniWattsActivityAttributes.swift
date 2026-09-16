@@ -16,6 +16,8 @@ nonisolated enum LiveActivityMetric: String, Codable, CaseIterable, Identifiable
 /// use the same type so every icon/readout — including an empty slot — is
 /// available on the left and the right.
 nonisolated enum LiveActivityCompactItem: String, Codable, CaseIterable, Identifiable, Sendable {
+    /// Kept only so an activity or preference written by build 45 can still be
+    /// decoded. Build 46 migrates it to a normal visible item and never offers it.
     case none
     case statusIcon
     case socIcon

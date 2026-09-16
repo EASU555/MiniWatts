@@ -49,14 +49,20 @@ struct MiniWattsChargingLiveActivity: Widget {
                 }
             } compactLeading: {
                 CompactItemContent(
-                    item: context.state.leadingItem ?? .statusIcon,
+                    item: resolvedCompactItem(
+                        context.state.leadingItem ?? .statusIcon,
+                        fallback: .statusIcon
+                    ),
                     state: context.state,
                     isStale: context.isStale
                 )
             } compactTrailing: {
                 CompactItemContent(
-                    item: context.state.trailingItem
-                        ?? LiveActivityCompactItem(metric: context.state.selectedMetric),
+                    item: resolvedCompactItem(
+                        context.state.trailingItem
+                            ?? LiveActivityCompactItem(metric: context.state.selectedMetric),
+                        fallback: .chargingPower
+                    ),
                     state: context.state,
                     isStale: context.isStale
                 )
@@ -67,22 +73,6 @@ struct MiniWattsChargingLiveActivity: Widget {
                     .accessibilityLabel(minimalAccessibilityLabel(isStale: context.isStale))
             }
             .keylineTint(color(for: context.state.selectedMetric))
-            // Empty compact slots use a zero-size view below. Removing their
-            // horizontal content margin as well prevents WidgetKit's default
-            // padding from extending the black capsule on an otherwise empty side.
-            .contentMargins(
-                .horizontal,
-                compactHorizontalMargin(for: context.state.leadingItem ?? .statusIcon),
-                for: .compactLeading
-            )
-            .contentMargins(
-                .horizontal,
-                compactHorizontalMargin(
-                    for: context.state.trailingItem
-                        ?? LiveActivityCompactItem(metric: context.state.selectedMetric)
-                ),
-                for: .compactTrailing
-            )
         }
     }
 }
@@ -225,11 +215,7 @@ private struct CompactItemContent: View {
     @ViewBuilder
     var body: some View {
         switch item {
-        case .none:
-            Color.clear
-                .frame(width: 0, height: 0)
-                .accessibilityHidden(true)
-        case .statusIcon:
+        case .none, .statusIcon:
             Image(systemName: isStale
                   ? "pause.fill"
                   : (state.isWireless ? "bolt.horizontal.circle.fill" : "bolt.circle.fill"))
@@ -274,6 +260,13 @@ private func preferredMinimalItem(
     return leading == .none ? .statusIcon : leading
 }
 
+private func resolvedCompactItem(
+    _ item: LiveActivityCompactItem,
+    fallback: LiveActivityCompactItem
+) -> LiveActivityCompactItem {
+    item == .none ? fallback : item
+}
+
 private func minimalSymbol(
     for state: MiniWattsActivityAttributes.ContentState,
     isStale: Bool
@@ -287,10 +280,6 @@ private func minimalSymbol(
 private func minimalColor(for state: MiniWattsActivityAttributes.ContentState) -> Color {
     let item = preferredMinimalItem(for: state)
     return item.symbolMetric.map(color(for:)) ?? .yellow
-}
-
-private func compactHorizontalMargin(for item: LiveActivityCompactItem) -> Double {
-    item == .none ? 0 : 4
 }
 
 private func numericValue(
