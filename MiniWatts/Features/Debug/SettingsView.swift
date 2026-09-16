@@ -47,7 +47,7 @@ struct SettingsView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     HStack(spacing: 8) {
                         Button("Done") { dismiss() }.tint(.mwAccent)
-                        PersonalBuildBadge()
+                        AppVersionBadge()
                     }
                 }
             }

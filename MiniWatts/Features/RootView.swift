@@ -32,7 +32,7 @@ struct RootView: View {
         }
         .overlay(alignment: .topLeading) {
             GeometryReader { proxy in
-                PersonalBuildBadge()
+                AppVersionBadge()
                     .padding(.leading, 8)
                     .padding(.top, proxy.safeAreaInsets.top + 4)
             }
@@ -103,19 +103,19 @@ struct RootView: View {
     }
 }
 
-/// Always-visible identifier for sideload test packages. This is intentionally
-/// hard-coded so screenshots can be matched to the exact personal build.
-struct PersonalBuildBadge: View {
-    static let number = 47
+/// Always-visible release identifier so screenshots can be matched to the
+/// exact sideloaded version.
+struct AppVersionBadge: View {
+    static let version = "1.0.2"
 
     var body: some View {
-        Text(verbatim: "B\(Self.number)")
+        Text(verbatim: "v\(Self.version)")
             .font(.caption2.monospaced().weight(.bold))
             .foregroundStyle(.white)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
             .background(Color.mwAccent, in: Capsule())
-            .accessibilityLabel("Personal build \(Self.number)")
+            .accessibilityLabel("Version \(Self.version)")
     }
 }
 
