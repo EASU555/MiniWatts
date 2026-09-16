@@ -2075,36 +2075,6 @@
         }
       }
     },
-    "Choose the compact Dynamic Island's left and right contents independently. For example, use status icon + power, or power + temperature. The right-side choice is also the primary readout when expanded." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可分别选择灵动岛紧凑状态左右两侧的内容，例如“状态图标 + 功率”或“功率 + 温度”。右侧选择同时作为长按展开后的主要读数。"
-          }
-        }
-      }
-    },
-    "Both sides offer the same icon and reading choices. The right reading is primary when expanded; if the right side is an icon, the left reading is used." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "左右两侧提供完全相同的图标和读数选项。长按展开后优先使用右侧读数；右侧选择图标时，则使用左侧读数。"
-          }
-        }
-      }
-    },
-    "Charging status icon" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "充电状态图标"
-          }
-        }
-      }
-    },
     "SoC icon" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2131,6 +2101,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最高温度图标"
+          }
+        }
+      }
+    },
+    "Choose the compact Dynamic Island's left and right contents independently. For example, use status icon + power, or power + temperature. The right-side choice is also the primary readout when expanded." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可分别选择灵动岛紧凑状态左右两侧的内容，例如“状态图标 + 功率”或“功率 + 温度”。右侧选择同时作为长按展开后的主要读数。"
           }
         }
       }

@@ -12,13 +12,10 @@ nonisolated enum LiveActivityMetric: String, Codable, CaseIterable, Identifiable
     var id: Self { self }
 }
 
-/// What appears in either compact Dynamic Island slot. Both sides deliberately
-/// use the same type so every icon/readout — including an empty slot — is
-/// available on the left and the right.
-nonisolated enum LiveActivityCompactItem: String, Codable, CaseIterable, Identifiable, Sendable {
-    /// Kept only so an activity or preference written by build 45 can still be
-    /// decoded. Build 46 migrates it to a normal visible item and never offers it.
-    case none
+/// What appears in the compact Dynamic Island's leading slot. Keeping the
+/// status symbol as an explicit choice lets the user build either the familiar
+/// icon + reading layout or a denser reading + reading layout.
+nonisolated enum LiveActivityLeadingItem: String, Codable, CaseIterable, Identifiable, Sendable {
     case statusIcon
     case socIcon
     case batteryTemperatureIcon
@@ -32,7 +29,7 @@ nonisolated enum LiveActivityCompactItem: String, Codable, CaseIterable, Identif
 
     var metric: LiveActivityMetric? {
         switch self {
-        case .none, .statusIcon, .socIcon, .batteryTemperatureIcon, .hottestTemperatureIcon: nil
+        case .statusIcon, .socIcon, .batteryTemperatureIcon, .hottestTemperatureIcon: nil
         case .chargingPower: .chargingPower
         case .socTemperature: .socTemperature
         case .batteryTemperature: .batteryTemperature
@@ -40,25 +37,13 @@ nonisolated enum LiveActivityCompactItem: String, Codable, CaseIterable, Identif
         }
     }
 
-    /// The metric whose SF Symbol and color represent this item. Icon-only items
-    /// deliberately don't return it from `metric`, because they shouldn't become
-    /// the expanded presentation's primary numeric readout.
-    var symbolMetric: LiveActivityMetric? {
+    var iconMetric: LiveActivityMetric? {
         switch self {
-        case .none, .statusIcon: nil
-        case .socIcon, .socTemperature: .socTemperature
-        case .batteryTemperatureIcon, .batteryTemperature: .batteryTemperature
-        case .hottestTemperatureIcon, .hottestTemperature: .hottestTemperature
-        case .chargingPower: .chargingPower
-        }
-    }
-
-    init(metric: LiveActivityMetric) {
-        switch metric {
-        case .chargingPower: self = .chargingPower
-        case .socTemperature: self = .socTemperature
-        case .batteryTemperature: self = .batteryTemperature
-        case .hottestTemperature: self = .hottestTemperature
+        case .socIcon: .socTemperature
+        case .batteryTemperatureIcon: .batteryTemperature
+        case .hottestTemperatureIcon: .hottestTemperature
+        case .statusIcon, .chargingPower, .socTemperature,
+             .batteryTemperature, .hottestTemperature: nil
         }
     }
 }
@@ -84,10 +69,7 @@ nonisolated struct MiniWattsActivityAttributes: ActivityAttributes {
         let sampledAt: Date?
         /// Optional so an activity created by an earlier personal build still
         /// decodes; nil preserves the original status-symbol presentation.
-        let leadingItem: LiveActivityCompactItem?
-        /// Optional so activities created by build 43 and earlier keep decoding.
-        /// Their old right-side metric is recovered from `selectedMetric`.
-        let trailingItem: LiveActivityCompactItem?
+        let leadingItem: LiveActivityLeadingItem?
         let selectedMetric: LiveActivityMetric
         let isWireless: Bool
     }

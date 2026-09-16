@@ -48,28 +48,21 @@ struct MiniWattsChargingLiveActivity: Widget {
                         .padding(.top, 4)
                 }
             } compactLeading: {
-                CompactItemContent(
-                    item: resolvedCompactItem(
-                        context.state.leadingItem ?? .statusIcon,
-                        fallback: .statusIcon
-                    ),
-                    state: context.state,
-                    isStale: context.isStale
-                )
+                CompactLeadingContent(state: context.state, isStale: context.isStale)
             } compactTrailing: {
-                CompactItemContent(
-                    item: resolvedCompactItem(
-                        context.state.trailingItem
-                            ?? LiveActivityCompactItem(metric: context.state.selectedMetric),
-                        fallback: .chargingPower
-                    ),
-                    state: context.state,
-                    isStale: context.isStale
-                )
-            } minimal: {
-                Image(systemName: minimalSymbol(for: context.state, isStale: context.isStale))
+                CompactMetricValue(state: context.state)
                     .foregroundStyle(context.isStale
-                                     ? Color.secondary : minimalColor(for: context.state))
+                                     ? Color.secondary : color(for: context.state.selectedMetric))
+                    .accessibilityLabel(label(for: context.state.selectedMetric))
+                    .accessibilityValue(Text(verbatim: formattedValue(
+                        for: context.state.selectedMetric,
+                        state: context.state
+                    )))
+            } minimal: {
+                Image(systemName: context.isStale
+                      ? "pause.fill" : symbol(for: context.state.selectedMetric))
+                    .foregroundStyle(context.isStale
+                                     ? Color.secondary : color(for: context.state.selectedMetric))
                     .accessibilityLabel(minimalAccessibilityLabel(isStale: context.isStale))
             }
             .keylineTint(color(for: context.state.selectedMetric))
@@ -207,79 +200,44 @@ private struct SmallMetric: View {
     }
 }
 
-private struct CompactItemContent: View {
-    let item: LiveActivityCompactItem
+private struct CompactMetricValue: View {
     let state: MiniWattsActivityAttributes.ContentState
-    let isStale: Bool
 
-    @ViewBuilder
     var body: some View {
-        switch item {
-        case .none, .statusIcon:
-            Image(systemName: isStale
-                  ? "pause.fill"
-                  : (state.isWireless ? "bolt.horizontal.circle.fill" : "bolt.circle.fill"))
-                .foregroundStyle(isStale ? Color.secondary : Color.yellow)
-                .accessibilityLabel(isStale
-                                    ? "Reading paused"
-                                    : (state.externalConnected == false ? "On battery" : "Charging"))
-        case .socIcon, .batteryTemperatureIcon, .hottestTemperatureIcon:
-            if let metric = item.symbolMetric {
-                Image(systemName: symbol(for: metric))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(isStale ? Color.secondary : color(for: metric))
-                    .accessibilityLabel(label(for: metric))
-            }
-        case .chargingPower, .socTemperature, .batteryTemperature, .hottestTemperature:
-            if let metric = item.metric {
-                HStack(spacing: 2) {
-                    Image(systemName: symbol(for: metric))
-                        .font(.caption2)
-                    Text(verbatim: shortValue(for: metric, state: state))
-                        .font(.caption2.monospacedDigit().weight(.bold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                }
-                .foregroundStyle(isStale ? Color.secondary : color(for: metric))
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(label(for: metric))
-                .accessibilityValue(Text(verbatim: formattedValue(for: metric, state: state)))
-                .accessibilityAddTraits(.updatesFrequently)
-            }
-        }
+        Text(verbatim: shortValue(for: state.selectedMetric, state: state))
+            .font(.caption.monospacedDigit().weight(.bold))
     }
 }
 
-private func preferredMinimalItem(
-    for state: MiniWattsActivityAttributes.ContentState
-) -> LiveActivityCompactItem {
-    let trailing = state.trailingItem
-        ?? LiveActivityCompactItem(metric: state.selectedMetric)
-    if trailing != .none { return trailing }
-    let leading = state.leadingItem ?? .statusIcon
-    return leading == .none ? .statusIcon : leading
-}
+private struct CompactLeadingContent: View {
+    let state: MiniWattsActivityAttributes.ContentState
+    let isStale: Bool
 
-private func resolvedCompactItem(
-    _ item: LiveActivityCompactItem,
-    fallback: LiveActivityCompactItem
-) -> LiveActivityCompactItem {
-    item == .none ? fallback : item
-}
-
-private func minimalSymbol(
-    for state: MiniWattsActivityAttributes.ContentState,
-    isStale: Bool
-) -> String {
-    guard !isStale else { return "pause.fill" }
-    let item = preferredMinimalItem(for: state)
-    if let metric = item.symbolMetric { return symbol(for: metric) }
-    return state.isWireless ? "bolt.horizontal.circle.fill" : "bolt.circle.fill"
-}
-
-private func minimalColor(for state: MiniWattsActivityAttributes.ContentState) -> Color {
-    let item = preferredMinimalItem(for: state)
-    return item.symbolMetric.map(color(for:)) ?? .yellow
+    var body: some View {
+        if isStale {
+            Image(systemName: "pause.fill")
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Reading paused")
+        } else if let metric = (state.leadingItem ?? .statusIcon).iconMetric {
+            Image(systemName: symbol(for: metric))
+                .foregroundStyle(color(for: metric))
+                .accessibilityLabel(label(for: metric))
+        } else if let metric = (state.leadingItem ?? .statusIcon).metric {
+            Text(verbatim: shortValue(for: metric, state: state))
+                .font(.caption2.monospacedDigit().weight(.bold))
+                .foregroundStyle(color(for: metric))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .accessibilityLabel(label(for: metric))
+                .accessibilityValue(Text(verbatim: formattedValue(for: metric, state: state)))
+        } else {
+            Image(systemName: state.isWireless
+                  ? "bolt.horizontal.circle.fill" : "bolt.circle.fill")
+                .foregroundStyle(.yellow)
+                .accessibilityLabel(state.externalConnected == false
+                                    ? "On battery" : "Charging")
+        }
+    }
 }
 
 private func numericValue(
