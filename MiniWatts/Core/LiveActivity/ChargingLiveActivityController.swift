@@ -14,17 +14,20 @@ final class ChargingLiveActivityController {
     /// scheduling jitter into a false "paused" state. Updates remain once per second;
     /// this only gives the system enough grace before declaring the reading stale.
     private static let staleInterval: TimeInterval = 30
+    /// ActivityKit can take a moment to publish a newly requested activity through
+    /// `Activity.activities`. Do not mistake that short hand-off for a vanished
+    /// activity and create a duplicate.
+    private static let requestGraceInterval: TimeInterval = 3
 
     private var activity: Activity<MiniWattsActivityAttributes>?
+    private var lastRequestAt = Date.distantPast
     private var lastUpdate = Date.distantPast
     private var lastLeadingItem: LiveActivityLeadingItem?
     private var lastMetric: LiveActivityMetric?
     private var pendingUpdate: ActivityContent<MiniWattsActivityAttributes.ContentState>?
     private var updateTask: Task<Void, Never>?
 
-    init() {
-        activity = Activity<MiniWattsActivityAttributes>.activities.first
-    }
+    init() { synchronizeActivityWithSystem() }
 
     static var areActivitiesEnabled: Bool {
         ActivityAuthorizationInfo().areActivitiesEnabled
@@ -42,13 +45,11 @@ final class ChargingLiveActivityController {
             return
         }
 
-        if let activity,
-           activity.activityState == .ended || activity.activityState == .dismissed {
-            self.activity = nil
-            lastUpdate = .distantPast
-            lastLeadingItem = nil
-            lastMetric = nil
-        }
+        // `activityState` on a retained Activity object can lag behind the system
+        // removing it. The static list is ActivityKit's source of truth for the
+        // app's current activities, so reconcile the cached reference every tick.
+        // This is what lets an enabled activity recover without killing the app.
+        synchronizeActivityWithSystem()
 
         let state = Self.contentState(from: snapshot,
                                       leadingItem: leadingItem,
@@ -58,11 +59,13 @@ final class ChargingLiveActivityController {
         if activity == nil {
             guard Self.areActivitiesEnabled else { return }
             do {
-                activity = try Activity.request(
+                let requested = try Activity.request(
                     attributes: MiniWattsActivityAttributes(startedAt: now),
                     content: content(for: state, at: now),
                     pushType: nil
                 )
+                activity = requested
+                lastRequestAt = now
                 lastUpdate = now
                 lastLeadingItem = leadingItem
                 lastMetric = selectedMetric
@@ -87,22 +90,75 @@ final class ChargingLiveActivityController {
     }
 
     func endIfNeeded() {
-        let active = activity
-            ?? Activity<MiniWattsActivityAttributes>.activities.first
-        guard let active else { return }
+        // Capture every ID before clearing local state. Older recovery races could
+        // leave more than one activity behind, and ending only `.first` allowed the
+        // remainder to consume the system activity limit.
+        let activityIDs = Set(
+            Activity<MiniWattsActivityAttributes>.activities.map(\.id)
+                + [activity?.id].compactMap { $0 }
+        )
+        resetLocalActivity()
+        guard !activityIDs.isEmpty else { return }
+
+        // Only immutable IDs cross the actor boundary. Reacquiring ActivityKit's
+        // objects in the detached task avoids sending framework objects across the
+        // Swift 6 isolation boundary.
+        Task.detached {
+            for current in Activity<MiniWattsActivityAttributes>.activities
+                where activityIDs.contains(current.id) {
+                await current.end(nil, dismissalPolicy: .immediate)
+            }
+        }
+    }
+
+    /// Keeps the cached object aligned with ActivityKit's current activity list.
+    /// A force-quit used to repair this accidentally because `init` rebuilt the
+    /// cache from this list; doing the same reconciliation continuously makes the
+    /// controller self-healing while the process stays alive.
+    private func synchronizeActivityWithSystem() {
+        let currentActivities = Activity<MiniWattsActivityAttributes>.activities.filter {
+            switch $0.activityState {
+            case .active, .stale, .pending: return true
+            case .ended, .dismissed: return false
+            @unknown default: return false
+            }
+        }
+
+        if let activity {
+            switch activity.activityState {
+            case .ended, .dismissed:
+                resetLocalActivity()
+            case .active, .stale, .pending:
+                if let current = currentActivities.first(where: { $0.id == activity.id }) {
+                    self.activity = current
+                    return
+                }
+                guard Date.now.timeIntervalSince(lastRequestAt) >= Self.requestGraceInterval else {
+                    return
+                }
+                resetLocalActivity()
+            @unknown default:
+                resetLocalActivity()
+            }
+        }
+
+        if let current = currentActivities.first {
+            activity = current
+            lastUpdate = .distantPast
+            lastLeadingItem = nil
+            lastMetric = nil
+        }
+    }
+
+    private func resetLocalActivity() {
         activity = nil
+        lastRequestAt = .distantPast
         lastUpdate = .distantPast
         lastLeadingItem = nil
         lastMetric = nil
         pendingUpdate = nil
         updateTask?.cancel()
         updateTask = nil
-        let activityID = active.id
-        Task.detached {
-            guard let current = Activity<MiniWattsActivityAttributes>.activities
-                .first(where: { $0.id == activityID }) else { return }
-            await current.end(nil, dismissalPolicy: .immediate)
-        }
     }
 
     private func beginUpdatingIfNeeded() {
@@ -132,10 +188,7 @@ final class ChargingLiveActivityController {
                     return true
                 }.value
                 if !didUpdate, self.activity?.id == activityID {
-                    self.activity = nil
-                    lastUpdate = .distantPast
-                    lastLeadingItem = nil
-                    lastMetric = nil
+                    resetLocalActivity()
                 }
             case .pending:
                 // Keep the latest value ready until the system finishes presenting
@@ -143,11 +196,7 @@ final class ChargingLiveActivityController {
                 pendingUpdate = content
                 try? await Task.sleep(for: .milliseconds(250))
             case .ended, .dismissed:
-                self.activity = nil
-                lastUpdate = .distantPast
-                lastLeadingItem = nil
-                lastMetric = nil
-                pendingUpdate = nil
+                resetLocalActivity()
             @unknown default:
                 pendingUpdate = nil
             }
