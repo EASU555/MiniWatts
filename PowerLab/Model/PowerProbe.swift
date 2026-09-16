@@ -52,11 +52,36 @@ nonisolated struct ProbeSample: Identifiable, Hashable, Codable, Sendable {
     let rawFields: [RawField]
 }
 
+nonisolated enum SensorMode: String, CaseIterable, Identifiable, Sendable {
+    case ioKitOnly = "IOKit 安全模式"
+    case full = "完整 HID 模式"
+
+    var id: Self { self }
+}
+
 @MainActor
 final class PowerProbe {
-    private let battery = IOKitBattery()
-    private let sensors = HIDSensors()
+    let mode: SensorMode
+    private let battery: IOKitBattery?
+    private let sensors: HIDSensors?
     private var sampleIndex = 0
+
+    init(mode: SensorMode) {
+        self.mode = mode
+
+        Self.recordStartupStage("正在创建 IOKit 电池接口")
+        battery = IOKitBattery()
+        Self.recordStartupStage(battery == nil ? "IOKit 接口不可用" : "IOKit 接口已创建")
+
+        if mode == .full {
+            Self.recordStartupStage("正在创建 HID 传感器接口")
+            sensors = HIDSensors()
+            Self.recordStartupStage(sensors == nil ? "HID 接口不可用" : "HID 接口已创建")
+        } else {
+            sensors = nil
+            Self.recordStartupStage("安全模式已就绪（未创建 HID）")
+        }
+    }
 
     var status: String {
         switch (battery != nil, sensors != nil) {
@@ -65,6 +90,10 @@ final class PowerProbe {
         case (false, true): "仅 HID 可用"
         case (false, false): "电源接口不可用"
         }
+    }
+
+    private static func recordStartupStage(_ stage: String) {
+        UserDefaults.standard.set(stage, forKey: "PowerLabLastStartupStage")
     }
 
     func capture() -> ProbeSample {

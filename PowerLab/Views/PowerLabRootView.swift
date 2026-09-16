@@ -2,9 +2,11 @@ import Charts
 import SwiftUI
 
 struct PowerLabRootView: View {
+    let exit: () -> Void
+
     var body: some View {
         TabView {
-            LivePowerView()
+            LivePowerView(exit: exit)
                 .tabItem { Label("实时", systemImage: "bolt.fill") }
             SensorChannelsView()
                 .tabItem { Label("通道", systemImage: "waveform.path.ecg") }
@@ -17,6 +19,7 @@ struct PowerLabRootView: View {
 
 private struct LivePowerView: View {
     @Environment(PowerLabMonitor.self) private var monitor
+    let exit: () -> Void
 
     var body: some View {
         NavigationStack {
@@ -31,6 +34,9 @@ private struct LivePowerView: View {
             }
             .navigationTitle("PowerLab")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("模式", systemImage: "chevron.backward", action: exit)
+                }
                 ToolbarItem(placement: .topBarTrailing) { VersionBadge() }
             }
             .refreshable { monitor.sampleNow() }
@@ -365,7 +371,7 @@ private struct ConfidenceBadge: View {
     }
 }
 
-private struct VersionBadge: View {
+struct VersionBadge: View {
     var body: some View {
         Text(verbatim: "v\(version) (\(build))")
             .font(.caption2.monospaced().weight(.semibold))
@@ -374,7 +380,7 @@ private struct VersionBadge: View {
     }
 
     private var version: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.2"
     }
 
     private var build: String {

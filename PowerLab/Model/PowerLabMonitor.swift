@@ -38,13 +38,16 @@ final class PowerLabMonitor {
     let sampleInterval: TimeInterval = 1
 
     private static let capacityKey = "PowerLabBatteryCapacityWh"
-    private let probe = PowerProbe()
+    let sensorMode: SensorMode
+    private let probe: PowerProbe
     private let estimator = PowerEstimator()
     private var samplingTask: Task<Void, Never>?
     private var loadWorkers: [Task<Void, Never>] = []
     private var loadCountdownTask: Task<Void, Never>?
 
-    init() {
+    init(sensorMode: SensorMode) {
+        self.sensorMode = sensorMode
+        probe = PowerProbe(mode: sensorMode)
         let stored = UserDefaults.standard.double(forKey: Self.capacityKey)
         capacityWh = stored > 0 ? stored : 19.7
     }
