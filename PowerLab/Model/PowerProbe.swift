@@ -53,8 +53,9 @@ nonisolated struct ProbeSample: Identifiable, Hashable, Codable, Sendable {
 }
 
 nonisolated enum SensorMode: String, CaseIterable, Identifiable, Sendable {
-    case ioKitOnly = "IOKit 安全模式"
-    case full = "完整 HID 模式"
+    case hidOnly = "HID 功耗模式"
+    case ioKitOnly = "IOKit 诊断模式"
+    case full = "IOKit + HID 完整模式"
 
     var id: Self { self }
 }
@@ -69,17 +70,22 @@ final class PowerProbe {
     init(mode: SensorMode) {
         self.mode = mode
 
-        Self.recordStartupStage("正在创建 IOKit 电池接口")
-        battery = IOKitBattery()
-        Self.recordStartupStage(battery == nil ? "IOKit 接口不可用" : "IOKit 接口已创建")
+        if mode != .hidOnly {
+            Self.recordStartupStage("正在创建 IOKit 电池接口")
+            battery = IOKitBattery()
+            Self.recordStartupStage(battery == nil ? "IOKit 接口不可用" : "IOKit 接口已创建")
+        } else {
+            battery = nil
+            Self.recordStartupStage("已绕过 IOKit")
+        }
 
-        if mode == .full {
+        if mode != .ioKitOnly {
             Self.recordStartupStage("正在创建 HID 传感器接口")
             sensors = HIDSensors()
             Self.recordStartupStage(sensors == nil ? "HID 接口不可用" : "HID 接口已创建")
         } else {
             sensors = nil
-            Self.recordStartupStage("安全模式已就绪（未创建 HID）")
+            Self.recordStartupStage("IOKit 诊断模式已就绪（未创建 HID）")
         }
     }
 
@@ -94,18 +100,24 @@ final class PowerProbe {
 
     private static func recordStartupStage(_ stage: String) {
         UserDefaults.standard.set(stage, forKey: "PowerLabLastStartupStage")
+        UserDefaults.standard.synchronize()
     }
 
     func capture() -> ProbeSample {
         sampleIndex += 1
         if sampleIndex == 1 || sampleIndex.isMultiple(of: 10) {
+            if sampleIndex == 1 { Self.recordStartupStage("正在枚举 HID 传感器") }
             sensors?.rescan()
         }
 
+        if sampleIndex == 1 { Self.recordStartupStage("正在读取 IOKit 注册表") }
         let registry = battery?.readRegistryProperties() ?? [:]
+        if sampleIndex == 1 { Self.recordStartupStage("正在读取 powerd 电源数据") }
         let powerSources = battery?.readPowerSources() ?? []
         let powerSource = preferredPowerSource(powerSources)
+        if sampleIndex == 1 { Self.recordStartupStage("正在读取 HID 传感器数值") }
         let hid = sensors?.read() ?? []
+        if sampleIndex == 1 { Self.recordStartupStage("首次采样完成") }
 
         let percent = integer(["CurrentCapacity", "Current Capacity"], registry, powerSource)
         let externalConnected = boolean("ExternalConnected", in: registry)

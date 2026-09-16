@@ -32,20 +32,26 @@ private struct PowerLabLauncherView: View {
 
                     Section("选择探测方式") {
                         Button {
+                            selectedMode = .hidOnly
+                        } label: {
+                            Label("启动 HID 功耗模式（推荐）", systemImage: "waveform.path.ecg")
+                        }
+
+                        Button {
                             selectedMode = .ioKitOnly
                         } label: {
-                            Label("先用 IOKit 安全模式", systemImage: "shield.lefthalf.filled")
+                            Label("测试 IOKit 崩溃点", systemImage: "exclamationmark.triangle")
                         }
 
                         Button {
                             selectedMode = .full
                         } label: {
-                            Label("启动完整 HID 模式", systemImage: "waveform.path.ecg")
+                            Label("启动 IOKit + HID 完整模式", systemImage: "sensor.tag.radiowaves.forward")
                         }
                     }
 
                     Section("建议顺序") {
-                        Text("先打开安全模式；若它能工作，再返回并打开完整 HID 模式。完整模式才能读取 MiniWatts 使用的电压、电流和温度传感器。")
+                        Text("请先打开 HID 功耗模式。它完全绕过刚才导致闪退的 IOKit，仍可读取 MiniWatts 使用的电压、电流和温度传感器。IOKit 选项只保留用于定位崩溃。")
                             .foregroundStyle(.secondary)
                     }
                 }
