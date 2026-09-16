@@ -312,7 +312,7 @@ struct SettingsView: View {
                 DetailRow(label: "System", value: "iOS \(UIDevice.current.systemVersion)")
                 DetailRow(label: "Charge level",
                           value: monitor.snapshot.percent.map {
-                              "\($0)% · \(String(localized: "System"))"
+                              "\($0)% · \(monitor.snapshot.percentSource ?? String(localized: "System"))"
                           })
                 DetailRow(label: "HID sensors",
                           value: monitor.sensorsAvailable

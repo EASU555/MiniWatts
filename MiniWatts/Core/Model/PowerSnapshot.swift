@@ -27,7 +27,7 @@ nonisolated struct ZoneTemperatures: Identifiable, Hashable {
 }
 
 /// One reading of everything the app can learn about power, merged from five sources:
-/// - `systemBatteryPercent`: the public `UIDevice` battery level used by iOS apps
+/// - `uiDeviceBatteryPercent`: the public `UIDevice` battery level used by iOS apps
 /// - `registry`:   IOKit `IOPMPowerSource` (complete on the simulator, two keys on iOS)
 /// - `powerSource`: powerd's battery description
 /// - `adapterDetails`: powerd's adapter description, including the PD profile menu
@@ -42,7 +42,7 @@ nonisolated struct ZoneTemperatures: Identifiable, Hashable {
 /// computed: those are single hash lookups.
 nonisolated struct PowerSnapshot {
     let date: Date
-    let systemBatteryPercent: Int?
+    let uiDeviceBatteryPercent: Int?
     let registry: [String: Any]
     let powerSource: [String: Any]?
     let adapterDetails: [String: Any]?
@@ -78,14 +78,14 @@ nonisolated struct PowerSnapshot {
     private let zoneHottest: [ThermalZone: HIDSensors.Reading]
 
     init(date: Date = .now,
-         systemBatteryPercent: Int? = nil,
+         uiDeviceBatteryPercent: Int? = nil,
          registry: [String: Any] = [:],
          powerSource: [String: Any]? = nil,
          adapterDetails: [String: Any]? = nil,
          sensors: [HIDSensors.Reading] = [],
          chargeStatus: [String: Any]? = nil) {
         self.date = date
-        self.systemBatteryPercent = systemBatteryPercent.flatMap(Self.validPercent)
+        self.uiDeviceBatteryPercent = uiDeviceBatteryPercent.flatMap(Self.validPercent)
         self.registry = registry
         self.powerSource = powerSource
         self.adapterDetails = adapterDetails
@@ -212,15 +212,28 @@ nonisolated struct PowerSnapshot {
 
     var isFinishingCharge: Bool { bool("Is Finishing Charge", in: powerSource) }
     var lowPowerMode: Bool { bool("LPM Active", in: powerSource) }
-    /// The percentage displayed by iOS is authoritative. powerd is the fallback
-    /// for extension refreshes where `UIDevice` may not have produced a level yet.
+    /// powerd is the source behind the system power-source state and is polled with
+    /// every sample. Prefer it to `UIDevice.batteryLevel`, whose change notification
+    /// is rate-limited and can remain one percentage point behind the status bar.
     /// The registry value comes last: on some systems `CurrentCapacity` is raw mAh,
-    /// not a percentage, so accepting it without a range check produced impossible
-    /// battery levels and corrupted charge-history start/end percentages.
+    /// not a percentage, so it is never accepted without a 0...100 range check.
+    var powerSourcePercent: Int? {
+        int("Current Capacity", in: powerSource).flatMap(Self.validPercent)
+    }
+
+    var registryPercent: Int? {
+        int("CurrentCapacity", in: registry).flatMap(Self.validPercent)
+    }
+
     var percent: Int? {
-        systemBatteryPercent
-            ?? int("Current Capacity", in: powerSource).flatMap(Self.validPercent)
-            ?? int("CurrentCapacity", in: registry).flatMap(Self.validPercent)
+        powerSourcePercent ?? uiDeviceBatteryPercent ?? registryPercent
+    }
+
+    var percentSource: String? {
+        if powerSourcePercent != nil { return "powerd" }
+        if uiDeviceBatteryPercent != nil { return "UIDevice" }
+        if registryPercent != nil { return "IOKit" }
+        return nil
     }
 
     /// e.g. "Charging On Hold". Privileged on iOS, so usually nil there.

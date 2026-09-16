@@ -246,7 +246,7 @@ final class PowerMonitor {
         let internalBattery = sources.first { ($0["Type"] as? String) == "InternalBattery" } ?? sources.first
 
         let current = PowerSnapshot(date: .now,
-                                    systemBatteryPercent: Self.systemBatteryPercent,
+                                    uiDeviceBatteryPercent: Self.uiDeviceBatteryPercent,
                                     registry: registry,
                                     powerSource: internalBattery,
                                     adapterDetails: battery?.readAdapterDetails(),
@@ -274,7 +274,7 @@ final class PowerMonitor {
         onTick?(current)
     }
 
-    private static var systemBatteryPercent: Int? {
+    private static var uiDeviceBatteryPercent: Int? {
         let level = UIDevice.current.batteryLevel
         guard level >= 0 else { return nil }
         return min(max(Int((Double(level) * 100).rounded()), 0), 100)
