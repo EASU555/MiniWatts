@@ -1,0 +1,60 @@
+name: PowerLab
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["experiment/power-lab"]
+    paths:
+      - "PowerLab/**"
+      - "PowerLab.xcodeproj/**"
+      - ".github/workflows/power-lab.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  ipa:
+    name: Unsigned PowerLab ipa
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select newest Xcode
+        run: |
+          newest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$newest"
+          xcodebuild -version
+          swift --version
+
+      - name: Check project format
+        run: |
+          found=$(sed -n 's/^[[:space:]]*objectVersion = \([0-9]*\);/\1/p' PowerLab.xcodeproj/project.pbxproj)
+          test "$found" -le 77
+
+      - name: Build unsigned experiment
+        run: bash PowerLab/scripts/build-power-lab.sh
+
+      - name: Verify bundle version
+        run: |
+          work=$(mktemp -d)
+          unzip -q build/PowerLab/export/PowerLab-unsigned.ipa -d "$work"
+          plist="$work/Payload/PowerLab.app/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist"
+
+      - name: Upload ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: PowerLab-unsigned-ipa
+          path: build/PowerLab/export/PowerLab-unsigned.ipa
+          if-no-files-found: error
+
+      - name: Upload dSYM
+        uses: actions/upload-artifact@v4
+        with:
+          name: PowerLab-dSYM
+          path: build/PowerLab/DerivedData/Build/Products/Release-iphoneos/*.dSYM
+          if-no-files-found: warn
