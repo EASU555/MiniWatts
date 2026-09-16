@@ -67,6 +67,22 @@ struct MiniWattsChargingLiveActivity: Widget {
                     .accessibilityLabel(minimalAccessibilityLabel(isStale: context.isStale))
             }
             .keylineTint(color(for: context.state.selectedMetric))
+            // Empty compact slots use a zero-size view below. Removing their
+            // horizontal content margin as well prevents WidgetKit's default
+            // padding from extending the black capsule on an otherwise empty side.
+            .contentMargins(
+                .horizontal,
+                compactHorizontalMargin(for: context.state.leadingItem ?? .statusIcon),
+                for: .compactLeading
+            )
+            .contentMargins(
+                .horizontal,
+                compactHorizontalMargin(
+                    for: context.state.trailingItem
+                        ?? LiveActivityCompactItem(metric: context.state.selectedMetric)
+                ),
+                for: .compactTrailing
+            )
         }
     }
 }
@@ -210,7 +226,9 @@ private struct CompactItemContent: View {
     var body: some View {
         switch item {
         case .none:
-            EmptyView()
+            Color.clear
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
         case .statusIcon:
             Image(systemName: isStale
                   ? "pause.fill"
@@ -219,6 +237,13 @@ private struct CompactItemContent: View {
                 .accessibilityLabel(isStale
                                     ? "Reading paused"
                                     : (state.externalConnected == false ? "On battery" : "Charging"))
+        case .socIcon, .batteryTemperatureIcon, .hottestTemperatureIcon:
+            if let metric = item.symbolMetric {
+                Image(systemName: symbol(for: metric))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(isStale ? Color.secondary : color(for: metric))
+                    .accessibilityLabel(label(for: metric))
+            }
         case .chargingPower, .socTemperature, .batteryTemperature, .hottestTemperature:
             if let metric = item.metric {
                 HStack(spacing: 2) {
@@ -255,13 +280,17 @@ private func minimalSymbol(
 ) -> String {
     guard !isStale else { return "pause.fill" }
     let item = preferredMinimalItem(for: state)
-    if let metric = item.metric { return symbol(for: metric) }
+    if let metric = item.symbolMetric { return symbol(for: metric) }
     return state.isWireless ? "bolt.horizontal.circle.fill" : "bolt.circle.fill"
 }
 
 private func minimalColor(for state: MiniWattsActivityAttributes.ContentState) -> Color {
     let item = preferredMinimalItem(for: state)
-    return item.metric.map(color(for:)) ?? .yellow
+    return item.symbolMetric.map(color(for:)) ?? .yellow
+}
+
+private func compactHorizontalMargin(for item: LiveActivityCompactItem) -> Double {
+    item == .none ? 0 : 4
 }
 
 private func numericValue(

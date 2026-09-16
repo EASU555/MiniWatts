@@ -106,7 +106,7 @@ struct RootView: View {
 /// Always-visible identifier for sideload test packages. This is intentionally
 /// hard-coded so screenshots can be matched to the exact personal build.
 struct PersonalBuildBadge: View {
-    static let number = 44
+    static let number = 45
 
     var body: some View {
         Text(verbatim: "B\(Self.number)")

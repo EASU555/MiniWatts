@@ -18,6 +18,9 @@ nonisolated enum LiveActivityMetric: String, Codable, CaseIterable, Identifiable
 nonisolated enum LiveActivityCompactItem: String, Codable, CaseIterable, Identifiable, Sendable {
     case none
     case statusIcon
+    case socIcon
+    case batteryTemperatureIcon
+    case hottestTemperatureIcon
     case chargingPower
     case socTemperature
     case batteryTemperature
@@ -27,11 +30,24 @@ nonisolated enum LiveActivityCompactItem: String, Codable, CaseIterable, Identif
 
     var metric: LiveActivityMetric? {
         switch self {
-        case .none, .statusIcon: nil
+        case .none, .statusIcon, .socIcon, .batteryTemperatureIcon, .hottestTemperatureIcon: nil
         case .chargingPower: .chargingPower
         case .socTemperature: .socTemperature
         case .batteryTemperature: .batteryTemperature
         case .hottestTemperature: .hottestTemperature
+        }
+    }
+
+    /// The metric whose SF Symbol and color represent this item. Icon-only items
+    /// deliberately don't return it from `metric`, because they shouldn't become
+    /// the expanded presentation's primary numeric readout.
+    var symbolMetric: LiveActivityMetric? {
+        switch self {
+        case .none, .statusIcon: nil
+        case .socIcon, .socTemperature: .socTemperature
+        case .batteryTemperatureIcon, .batteryTemperature: .batteryTemperature
+        case .hottestTemperatureIcon, .hottestTemperature: .hottestTemperature
+        case .chargingPower: .chargingPower
         }
     }
 

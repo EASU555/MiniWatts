@@ -2105,6 +2105,46 @@
         }
       }
     },
+    "Charging status icon" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "充电状态图标"
+          }
+        }
+      }
+    },
+    "SoC icon" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SoC 图标"
+          }
+        }
+      }
+    },
+    "Battery temperature icon" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "电池温度图标"
+          }
+        }
+      }
+    },
+    "Hottest temperature icon" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最高温度图标"
+          }
+        }
+      }
+    },
     "Turning this on starts the Live Activity immediately. It refreshes while MiniWatts is open, or in the background while the floating monitor is running. A Live Activity by itself doesn't keep sensor sampling active." : {
       "localizations" : {
         "zh-Hans" : {
