@@ -7,6 +7,7 @@ on:
     paths:
       - "PowerLab/**"
       - "PowerLab.xcodeproj/**"
+      - "PowerLab-Info.plist"
       - ".github/workflows/power-lab.yml"
 
 permissions:
