@@ -177,20 +177,25 @@ struct FloatingMonitorControlPanel: View {
                     }
                 } label: {
                     HStack(spacing: 8) {
-                        if pictureInPicture.isStarting {
+                        if pictureInPicture.isStarting || pictureInPicture.isStopping {
                             ProgressView()
                                 .controlSize(.small)
                         } else {
                             Image(systemName: pictureInPicture.isActive ? "pip.exit" : "pip.enter")
                         }
-                        Text(pictureInPicture.isActive
-                             ? "Stop Picture in Picture" : "Start Picture in Picture")
+                        if pictureInPicture.isStopping {
+                            Text("Stopping Picture in Picture")
+                        } else {
+                            Text(pictureInPicture.isActive
+                                 ? "Stop Picture in Picture" : "Start Picture in Picture")
+                        }
                     }
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.mwAccent)
                 .disabled(pictureInPicture.isStarting
+                          || pictureInPicture.isStopping
                           || !pictureInPicture.isSupported
                           || (!pictureInPicture.isActive
                               && !pictureInPicture.hasSelectedContent))

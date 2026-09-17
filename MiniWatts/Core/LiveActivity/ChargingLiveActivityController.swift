@@ -1,5 +1,6 @@
 import ActivityKit
 import Foundation
+import UIKit
 
 /// Owns the charging Live Activity without leaking ActivityKit into the sensor model.
 /// A manually enabled activity owns a local background-refresh session until the
@@ -14,6 +15,12 @@ final class ChargingLiveActivityController {
     /// scheduling jitter into a false "paused" state. Updates remain once per second;
     /// this only gives the system enough grace before declaring the reading stale.
     private static let staleInterval: TimeInterval = 30
+    /// A request that remains pending this long has normally lost its presentation
+    /// hand-off. Likewise, an update that never returns must not hold the coalescing
+    /// queue forever while the UI continues to claim that fresh values were sent.
+    private static let operationTimeout: Duration = .seconds(8)
+    private static let operationTimeoutSeconds: TimeInterval = 8
+    private static let requestRetryInterval: TimeInterval = 5
     /// ActivityKit can take a moment to publish a newly requested activity through
     /// `Activity.activities`. Do not mistake that short hand-off for a vanished
     /// activity and create a duplicate.
@@ -21,11 +28,21 @@ final class ChargingLiveActivityController {
 
     private var activity: Activity<MiniWattsActivityAttributes>?
     private var lastRequestAt = Date.distantPast
-    private var lastUpdate = Date.distantPast
+    /// These are deliberately separate. Enqueue time is only for throttling; only
+    /// the completion of ActivityKit's async update proves that the pipeline is
+    /// still moving and may be used by foreground recovery.
+    private var lastUpdateEnqueuedAt = Date.distantPast
+    private var lastSuccessfulUpdateAt = Date.distantPast
     private var lastLeadingItem: LiveActivityLeadingItem?
     private var lastMetric: LiveActivityMetric?
+    private var latestState: MiniWattsActivityAttributes.ContentState?
     private var pendingUpdate: ActivityContent<MiniWattsActivityAttributes.ContentState>?
-    private var updateTask: Task<Void, Never>?
+    private var updateInFlight = false
+    private var updateGeneration = 0
+    private var inFlightActivityID: String?
+    private var updateTimeoutTask: Task<Void, Never>?
+    private var activityStateTask: Task<Void, Never>?
+    private var pendingStateTimeoutTask: Task<Void, Never>?
     /// Serializes an explicit stop/restart so an asynchronous end from the old
     /// activity can never race with, or accidentally occupy the slot needed by,
     /// the replacement.
@@ -60,10 +77,13 @@ final class ChargingLiveActivityController {
                                       leadingItem: leadingItem,
                                       selectedMetric: selectedMetric)
         let now = snapshot.date
+        latestState = state
 
         if activity == nil {
             guard lifecycleTask == nil else { return }
             guard Self.areActivitiesEnabled else { return }
+            guard UIApplication.shared.applicationState == .active else { return }
+            guard now.timeIntervalSince(lastRequestAt) >= Self.requestRetryInterval else { return }
             requestActivity(state: state,
                             leadingItem: leadingItem,
                             selectedMetric: selectedMetric,
@@ -74,9 +94,9 @@ final class ChargingLiveActivityController {
         guard forceUpdate
                 || leadingItem != lastLeadingItem
                 || selectedMetric != lastMetric
-                || now.timeIntervalSince(lastUpdate) >= Self.updateInterval else { return }
+                || now.timeIntervalSince(lastUpdateEnqueuedAt) >= Self.updateInterval else { return }
 
-        lastUpdate = now
+        lastUpdateEnqueuedAt = now
         lastLeadingItem = leadingItem
         lastMetric = selectedMetric
         pendingUpdate = content(for: state, at: now)
@@ -94,7 +114,19 @@ final class ChargingLiveActivityController {
         let state = Self.contentState(from: snapshot,
                                       leadingItem: leadingItem,
                                       selectedMetric: selectedMetric)
-        let now = snapshot.date
+        latestState = state
+        beginRestart(state: state,
+                     leadingItem: leadingItem,
+                     selectedMetric: selectedMetric,
+                     at: snapshot.date)
+    }
+
+    private func beginRestart(
+        state: MiniWattsActivityAttributes.ContentState,
+        leadingItem: LiveActivityLeadingItem,
+        selectedMetric: LiveActivityMetric,
+        at date: Date
+    ) {
         let activityIDs = allKnownActivityIDs()
 
         lifecycleGeneration &+= 1
@@ -119,7 +151,7 @@ final class ChargingLiveActivityController {
             self.requestActivity(state: state,
                                  leadingItem: leadingItem,
                                  selectedMetric: selectedMetric,
-                                 at: now)
+                                 at: date)
             if self.lifecycleGeneration == generation {
                 self.lifecycleTask = nil
             }
@@ -138,9 +170,12 @@ final class ChargingLiveActivityController {
         let needsReplacement: Bool
         if let activity {
             switch activity.activityState {
-            case .active, .pending:
-                needsReplacement = snapshot.date.timeIntervalSince(lastUpdate)
+            case .active:
+                needsReplacement = snapshot.date.timeIntervalSince(lastSuccessfulUpdateAt)
                     >= Self.staleInterval
+            case .pending:
+                needsReplacement = snapshot.date.timeIntervalSince(lastRequestAt)
+                    >= Self.operationTimeoutSeconds
             case .stale, .ended, .dismissed:
                 needsReplacement = true
             @unknown default:
@@ -189,21 +224,25 @@ final class ChargingLiveActivityController {
         at date: Date
     ) {
         guard Self.areActivitiesEnabled else { return }
+        guard UIApplication.shared.applicationState == .active else { return }
         do {
             let requested = try Activity.request(
                 attributes: MiniWattsActivityAttributes(startedAt: date),
                 content: content(for: state, at: date),
                 pushType: nil
             )
-            activity = requested
+            adopt(requested)
             lastRequestAt = date
-            lastUpdate = date
+            lastUpdateEnqueuedAt = date
+            lastSuccessfulUpdateAt = date
             lastLeadingItem = leadingItem
             lastMetric = selectedMetric
+            schedulePendingStateTimeout(for: requested.id)
         } catch {
             // Live Activities can be disabled or the system-wide activity limit
-            // can be full. The next foreground tick can retry, while the explicit
-            // restart button remains available without force-quitting the app.
+            // can be full. Back off instead of repeating a failing system request
+            // every sensor tick; the explicit restart button remains available.
+            lastRequestAt = .now
         }
     }
 
@@ -241,7 +280,7 @@ final class ChargingLiveActivityController {
                 resetLocalActivity()
             case .active, .stale, .pending:
                 if let current = currentActivities.first(where: { $0.id == activity.id }) {
-                    self.activity = current
+                    adopt(current)
                     return
                 }
                 guard Date.now.timeIntervalSince(lastRequestAt) >= Self.requestGraceInterval else {
@@ -254,70 +293,171 @@ final class ChargingLiveActivityController {
         }
 
         if let current = currentActivities.first {
-            activity = current
-            lastUpdate = .distantPast
+            adopt(current)
+            lastSuccessfulUpdateAt = current.content.state.sampledAt
+            lastUpdateEnqueuedAt = lastSuccessfulUpdateAt
             lastLeadingItem = nil
             lastMetric = nil
+        }
+    }
+
+    private func adopt(_ activity: Activity<MiniWattsActivityAttributes>) {
+        let changedActivity = self.activity?.id != activity.id
+        self.activity = activity
+        guard changedActivity || activityStateTask == nil else { return }
+        observeStateUpdates(for: activity)
+    }
+
+    private func observeStateUpdates(for observed: Activity<MiniWattsActivityAttributes>) {
+        activityStateTask?.cancel()
+        let activityID = observed.id
+        activityStateTask = Task { @MainActor [weak self] in
+            for await state in observed.activityStateUpdates {
+                guard !Task.isCancelled,
+                      let self,
+                      self.activity?.id == activityID else { return }
+                switch state {
+                case .active:
+                    self.pendingStateTimeoutTask?.cancel()
+                    self.pendingStateTimeoutTask = nil
+                case .pending:
+                    self.schedulePendingStateTimeout(for: activityID)
+                case .stale:
+                    // A stale activity can still accept an update. Foreground
+                    // recovery uses the confirmed-update timestamp to decide
+                    // whether it needs a complete replacement.
+                    break
+                case .ended, .dismissed:
+                    self.resetLocalActivity()
+                @unknown default:
+                    self.resetLocalActivity()
+                }
+            }
+        }
+    }
+
+    private func schedulePendingStateTimeout(for activityID: String) {
+        pendingStateTimeoutTask?.cancel()
+        pendingStateTimeoutTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.operationTimeout)
+            guard !Task.isCancelled,
+                  let self,
+                  self.activity?.id == activityID,
+                  self.activity?.activityState == .pending,
+                  UIApplication.shared.applicationState == .active,
+                  let state = self.latestState else { return }
+            self.beginRestart(state: state,
+                              leadingItem: self.lastLeadingItem ?? .statusIcon,
+                              selectedMetric: self.lastMetric ?? .chargingPower,
+                              at: .now)
         }
     }
 
     private func resetLocalActivity() {
         activity = nil
         lastRequestAt = .distantPast
-        lastUpdate = .distantPast
+        lastUpdateEnqueuedAt = .distantPast
+        lastSuccessfulUpdateAt = .distantPast
         lastLeadingItem = nil
         lastMetric = nil
         pendingUpdate = nil
-        updateTask?.cancel()
-        updateTask = nil
+        updateGeneration &+= 1
+        updateInFlight = false
+        inFlightActivityID = nil
+        updateTimeoutTask?.cancel()
+        updateTimeoutTask = nil
+        activityStateTask?.cancel()
+        activityStateTask = nil
+        pendingStateTimeoutTask?.cancel()
+        pendingStateTimeoutTask = nil
     }
 
     private func beginUpdatingIfNeeded() {
-        guard updateTask == nil else { return }
-        updateTask = Task { @MainActor [weak self] in
-            await self?.drainPendingUpdates()
+        guard !updateInFlight,
+              let content = pendingUpdate,
+              let activity else { return }
+
+        switch activity.activityState {
+        case .active, .stale:
+            break
+        case .pending:
+            schedulePendingStateTimeout(for: activity.id)
+            return
+        case .ended, .dismissed:
+            resetLocalActivity()
+            return
+        @unknown default:
+            resetLocalActivity()
+            return
+        }
+
+        pendingUpdate = nil
+        updateGeneration &+= 1
+        let generation = updateGeneration
+        let activityID = activity.id
+        updateInFlight = true
+        inFlightActivityID = activityID
+
+        updateTimeoutTask?.cancel()
+        updateTimeoutTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.operationTimeout)
+            guard !Task.isCancelled else { return }
+            self?.finishUpdateAttempt(
+                generation: generation,
+                activityID: activityID,
+                succeeded: false
+            )
+        }
+
+        // Do not await this from the main-actor coalescer. If ActivityKit wedges,
+        // the independent watchdog above is still able to replace the activity.
+        Task.detached { [weak self] in
+            guard let current = Activity<MiniWattsActivityAttributes>.activities
+                .first(where: { $0.id == activityID }) else {
+                await self?.finishUpdateAttempt(
+                    generation: generation,
+                    activityID: activityID,
+                    succeeded: false
+                )
+                return
+            }
+            await current.update(content)
+            await self?.finishUpdateAttempt(
+                generation: generation,
+                activityID: activityID,
+                succeeded: true
+            )
         }
     }
 
-    /// Sends at most one update at a time and skips directly to the newest snapshot
-    /// when more sensor ticks arrive while ActivityKit is busy.
-    private func drainPendingUpdates() async {
-        while !Task.isCancelled, let content = pendingUpdate {
-            pendingUpdate = nil
-            guard let activity else { break }
+    private func finishUpdateAttempt(
+        generation: Int,
+        activityID: String,
+        succeeded: Bool
+    ) {
+        guard updateGeneration == generation,
+              updateInFlight,
+              inFlightActivityID == activityID else { return }
 
-            switch activity.activityState {
-            case .active, .stale:
-                // ActivityKit's update API is `@concurrent` in Swift 6. Reacquire
-                // the activity by ID outside the main actor, then await that single
-                // update before taking the next coalesced value.
-                let activityID = activity.id
-                let didUpdate = await Task.detached {
-                    guard let current = Activity<MiniWattsActivityAttributes>.activities
-                        .first(where: { $0.id == activityID }) else { return false }
-                    await current.update(content)
-                    return true
-                }.value
-                if !didUpdate, self.activity?.id == activityID {
-                    resetLocalActivity()
-                }
-            case .pending:
-                // Keep the latest value ready until the system finishes presenting
-                // the newly requested activity.
-                pendingUpdate = content
-                try? await Task.sleep(for: .milliseconds(250))
-            case .ended, .dismissed:
-                resetLocalActivity()
-            @unknown default:
-                pendingUpdate = nil
-            }
-        }
-        updateTask = nil
+        updateTimeoutTask?.cancel()
+        updateTimeoutTask = nil
+        updateInFlight = false
+        inFlightActivityID = nil
 
-        // A sensor tick can enqueue a value during the final suspension point.
-        if pendingUpdate != nil {
-            beginUpdatingIfNeeded()
+        if succeeded {
+            lastSuccessfulUpdateAt = .now
+            if pendingUpdate != nil { beginUpdatingIfNeeded() }
+            return
         }
+
+        guard let state = latestState else {
+            resetLocalActivity()
+            return
+        }
+        beginRestart(state: state,
+                     leadingItem: lastLeadingItem ?? .statusIcon,
+                     selectedMetric: lastMetric ?? .chargingPower,
+                     at: .now)
     }
 
     private func content(for state: MiniWattsActivityAttributes.ContentState,

@@ -140,6 +140,7 @@ final class TelemetryPictureInPictureController: NSObject {
 
     private(set) var isActive = false
     private(set) var isStarting = false
+    private(set) var isStopping = false
     private(set) var isPossible = false
     private(set) var isVisuallyHidden = false
     private(set) var errorMessage: LocalizedStringResource?
@@ -156,6 +157,11 @@ final class TelemetryPictureInPictureController: NSObject {
     /// remains on an endless spinner, then rebuild the controller once automatically.
     @ObservationIgnored private var startTask: Task<Void, Never>?
     @ObservationIgnored private var startAttempt = 0
+    /// AVKit occasionally omits `didStop` after an interrupted system session.
+    /// Bound the stop just like the start so a stale controller cannot make every
+    /// later tap a no-op until the process is killed.
+    @ObservationIgnored private var stopTask: Task<Void, Never>?
+    @ObservationIgnored private var stopAttempt = 0
     @ObservationIgnored private var backgroundPulseDisplayLink: CADisplayLink?
     @ObservationIgnored private var lastBackgroundPulseTimestamp: CFTimeInterval = 0
     @ObservationIgnored private var hiddenPulsePhase = false
@@ -201,7 +207,7 @@ final class TelemetryPictureInPictureController: NSObject {
     var hasSelectedContent: Bool {
         contentMode == .hiddenCarrier || showPower || showTemperatures
     }
-    var keepsSensorSamplingActive: Bool { isActive || isStarting }
+    var keepsSensorSamplingActive: Bool { isActive || isStarting || isStopping }
 
     func attach(to view: UIView) {
         if keepsSensorSamplingActive, sourceView !== view {
@@ -293,13 +299,32 @@ final class TelemetryPictureInPictureController: NSObject {
         invalidateStartAttempt()
         isStarting = false
         stopBackgroundPulseDriver()
-        pictureInPictureController?.stopPictureInPicture()
+        guard let controller = pictureInPictureController,
+              isActive || controller.isPictureInPictureActive else {
+            completeStopAttempt()
+            return
+        }
+
+        isStopping = true
+        stopAttempt &+= 1
+        let attempt = stopAttempt
+        controller.stopPictureInPicture()
+        scheduleStopWatchdog(attempt: attempt)
     }
 
     /// Scene suspension pauses the watchdog together with the process. Reconcile
     /// AVKit as soon as MiniWatts returns so an interrupted transition cannot carry
     /// a stale loading state into the next start request.
     func recoverAfterEnteringForeground() {
+        if isStopping {
+            if pictureInPictureController?.isPictureInPictureActive != true {
+                completeStopAttempt()
+            } else {
+                scheduleStopWatchdog(attempt: stopAttempt)
+            }
+            return
+        }
+
         if isStarting {
             if pictureInPictureController?.isPictureInPictureActive == true {
                 completeStartAttempt(startAttempt)
@@ -312,6 +337,7 @@ final class TelemetryPictureInPictureController: NSObject {
         if isActive, pictureInPictureController?.isPictureInPictureActive != true {
             isActive = false
             stopBackgroundPulseDriver()
+            deactivateAudioSession()
             rebuildRenderingPipeline()
             if contentMode == .liveReadings {
                 renderLatest()
@@ -414,6 +440,7 @@ final class TelemetryPictureInPictureController: NSObject {
         isStarting = false
         isActive = false
         stopBackgroundPulseDriver()
+        deactivateAudioSession()
         errorMessage = message
         displayLayer.sampleBufferRenderer.flush()
         rebuildRenderingPipeline()
@@ -428,6 +455,87 @@ final class TelemetryPictureInPictureController: NSObject {
         startAttempt &+= 1
         startTask?.cancel()
         startTask = nil
+    }
+
+    private func scheduleStopWatchdog(attempt: Int) {
+        stopTask?.cancel()
+        stopTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled,
+                  let self,
+                  self.isStopping,
+                  self.stopAttempt == attempt else { return }
+
+            if self.pictureInPictureController?.isPictureInPictureActive != true {
+                self.completeStopAttempt()
+                return
+            }
+
+            // One final public stop request covers a delayed first transition.
+            self.pictureInPictureController?.stopPictureInPicture()
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled,
+                  self.isStopping,
+                  self.stopAttempt == attempt else { return }
+
+            if self.pictureInPictureController?.isPictureInPictureActive == true {
+                self.forceResetAfterStopTimeout()
+            } else {
+                self.completeStopAttempt()
+            }
+        }
+    }
+
+    private func invalidateStopAttempt() {
+        stopAttempt &+= 1
+        stopTask?.cancel()
+        stopTask = nil
+    }
+
+    private func completeStopAttempt() {
+        invalidateStopAttempt()
+        isStarting = false
+        isStopping = false
+        isActive = false
+        stopBackgroundPulseDriver()
+        if contentMode == .hiddenCarrier {
+            applyVideoCallGeometry(hidden: false)
+        }
+        displayLayer.sampleBufferRenderer.flush()
+        deactivateAudioSession()
+        if pendingPipelineRebuild {
+            pendingPipelineRebuild = false
+            rebuildRenderingPipeline()
+        }
+        attachToPendingPreviewIfNeeded()
+        refreshPossibleState()
+    }
+
+    /// The system still claims PiP is active after two bounded stop requests. The
+    /// user explicitly asked to stop, so discard the wedged controller and build a
+    /// clean source instead of leaving the app permanently unable to start again.
+    private func forceResetAfterStopTimeout() {
+        invalidateStopAttempt()
+        isStarting = false
+        isStopping = false
+        isActive = false
+        stopBackgroundPulseDriver()
+        deactivateAudioSession()
+        pendingPipelineRebuild = false
+        rebuildRenderingPipeline()
+        if contentMode == .liveReadings {
+            renderLatest()
+        }
+        ensurePictureInPictureController()
+        attachToPendingPreviewIfNeeded()
+        errorMessage = "Picture in Picture was reset after iOS did not finish stopping it. You can start it again now."
+    }
+
+    private func deactivateAudioSession() {
+        try? AVAudioSession.sharedInstance().setActive(
+            false,
+            options: [.notifyOthersOnDeactivation]
+        )
     }
 
     /// The 0.1 pt path follows the public VideoCall PiP sizing mechanism used by
@@ -839,7 +947,11 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         _ pictureInPictureController: AVPictureInPictureController
     ) {
         guard self.pictureInPictureController === pictureInPictureController else { return }
-        if isStarting {
+        if isStopping {
+            // The start callback crossed the user's stop request. Preserve the
+            // user's intent and leave the stop watchdog armed.
+            pictureInPictureController.stopPictureInPicture()
+        } else if isStarting {
             completeStartAttempt(startAttempt)
         } else {
             isActive = true
@@ -853,11 +965,14 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         failedToStartPictureInPictureWithError error: any Error
     ) {
         guard self.pictureInPictureController === pictureInPictureController else { return }
-        if isStarting {
+        if isStopping {
+            completeStopAttempt()
+        } else if isStarting {
             failStartAttempt(startAttempt, message: "Picture in Picture could not start.")
         } else {
             isActive = false
             stopBackgroundPulseDriver()
+            deactivateAudioSession()
             errorMessage = "Picture in Picture could not start."
         }
     }
@@ -867,19 +982,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
     ) {
         guard self.pictureInPictureController === pictureInPictureController else { return }
         invalidateStartAttempt()
-        isStarting = false
-        isActive = false
-        stopBackgroundPulseDriver()
-        if contentMode == .hiddenCarrier {
-            applyVideoCallGeometry(hidden: false)
-        }
-        displayLayer.sampleBufferRenderer.flush()
-        if pendingPipelineRebuild {
-            pendingPipelineRebuild = false
-            rebuildRenderingPipeline()
-        }
-        attachToPendingPreviewIfNeeded()
-        refreshPossibleState()
+        completeStopAttempt()
     }
 
     func pictureInPictureController(
