@@ -12,6 +12,7 @@ struct DashboardView: View {
             heroPanel
             if monitor.thermal.state.isThrottling { throttleBanner }
             batteryPanel
+            batteryDiagnosticsPanel
             breakdownPanel
             livePanel
             sessionPanel
@@ -151,6 +152,30 @@ struct DashboardView: View {
                            tint: snapshot.batteryTemperature.map { Color.mwTemperature($0) } ?? .primary,
                            size: 20)
                 }
+            }
+        }
+    }
+
+    private var batteryDiagnosticsPanel: some View {
+        Panel("Battery diagnostics", systemImage: "stethoscope",
+              trailing: snapshot.percent.map { Text(verbatim: "\($0)%") }) {
+            VStack(alignment: .leading, spacing: 8) {
+                DetailRow(label: "Selected source", value: monitor.batteryLevelSource)
+                DetailRow(label: "Last sampled",
+                          value: monitor.batteryLevelSampledAt.map(Formatting.timestamp))
+                Text(verbatim: monitor.batteryLevelCandidates)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.mwMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("System battery readings")
+                    .accessibilityValue(monitor.batteryLevelCandidates)
+                ShareLink(item: monitor.diagnosticReport,
+                          subject: Text("MiniWatts diagnostics"),
+                          message: Text("MiniWatts diagnostic report")) {
+                    Label("Export diagnostic report", systemImage: "square.and.arrow.up")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .tint(.mwAccent)
             }
         }
     }

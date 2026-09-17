@@ -11,10 +11,10 @@ struct SettingsView: View {
                 Backdrop(glow: .mwAccent, glowIntensity: 0.6)
                 ScrollView {
                     VStack(spacing: 14) {
+                        diagnosticsPanel
                         recordingPanel(keepAwake: $monitor.keepScreenAwakeWhileCharging)
                         capacityPanel(capacity: $monitor.configuredBatteryWattHours)
                         devicePanel
-                        diagnosticsPanel
                         aboutPanel
                         #if DEBUG
                         rawDataLink

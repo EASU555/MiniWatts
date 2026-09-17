@@ -289,6 +289,16 @@
         }
       }
     },
+    "Battery diagnostics" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "电量诊断"
+          }
+        }
+      }
+    },
     "Battery sources" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1079,6 +1089,16 @@
         }
       }
     },
+    "Last sampled" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近采样"
+          }
+        }
+      }
+    },
     "Last 3 minutes" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1745,6 +1765,16 @@
         }
       }
     },
+    "Selected source" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前来源"
+          }
+        }
+      }
+    },
     "System" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1761,6 +1791,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "系统负载 + 损耗"
+          }
+        }
+      }
+    },
+    "System battery readings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统电量读数"
           }
         }
       }

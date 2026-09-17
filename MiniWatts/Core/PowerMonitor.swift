@@ -607,6 +607,13 @@ final class PowerMonitor {
         lines.append("# Live sensors")
         lines.append(contentsOf: snapshot.sensors.sorted { $0.name < $1.name }
             .map { "\($0.name) = \($0.formatted)" })
+        if let powerSource = snapshot.powerSource, !powerSource.isEmpty {
+            lines.append("")
+            lines.append("# powerd power source")
+            lines.append(contentsOf: powerSource.keys.sorted().map {
+                "\($0) = \(String(describing: powerSource[$0]!))"
+            })
+        }
         return lines.joined(separator: "\n")
     }
 

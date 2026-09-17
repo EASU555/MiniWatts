@@ -6,8 +6,8 @@ import UIKit
 ///
 /// `UIDevice.batteryLevel` is intentionally coarse on iPhone and can sit on one
 /// five-point bucket while the status bar moves through several one-percent
-/// values. MiniWatts therefore asks the same system services used by iOS first,
-/// while keeping the public UIKit value as the final fallback.
+/// values. MiniWatts therefore asks powerd for a fresh value on every sample,
+/// while keeping MobileGestalt and the public UIKit value as fallbacks.
 final class SystemBatteryLevelReader {
     enum Source: String {
         case mobileGestalt = "MobileGestalt"
@@ -68,10 +68,14 @@ final class SystemBatteryLevelReader {
         let uiDevice = Self.uiDevicePercent()
 
         let selected: (Int, Source)?
-        if let gestalt {
-            selected = (gestalt, .mobileGestalt)
-        } else if let powerd {
+        // MobileGestalt can return the precise launch value but then keep that
+        // answer cached for the process lifetime on iOS 27. powerd's Current
+        // Capacity is rebuilt by IOPSCopyPowerSourcesInfo for every call, so it is
+        // the live source even when UIKit and MobileGestalt remain unchanged.
+        if let powerd {
             selected = (powerd, .powerSource)
+        } else if let gestalt {
+            selected = (gestalt, .mobileGestalt)
         } else if let uiDevice {
             selected = (uiDevice, .uiDevice)
         } else {
