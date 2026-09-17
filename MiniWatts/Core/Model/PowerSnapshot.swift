@@ -27,7 +27,7 @@ nonisolated struct ZoneTemperatures: Identifiable, Hashable {
 }
 
 /// One reading of everything the app can learn about power, merged from five sources:
-/// - `uiDeviceBatteryPercent`: the public `UIDevice` battery level used by iOS apps
+/// - `systemBatteryPercent`: a directly reported iOS battery percentage
 /// - `registry`:   IOKit `IOPMPowerSource` (complete on the simulator, two keys on iOS)
 /// - `powerSource`: powerd's battery description
 /// - `adapterDetails`: powerd's adapter description, including the PD profile menu
@@ -42,7 +42,7 @@ nonisolated struct ZoneTemperatures: Identifiable, Hashable {
 /// computed: those are single hash lookups.
 nonisolated struct PowerSnapshot {
     let date: Date
-    let uiDeviceBatteryPercent: Int?
+    let systemBatteryPercent: Int?
     let registry: [String: Any]
     let powerSource: [String: Any]?
     let adapterDetails: [String: Any]?
@@ -78,14 +78,14 @@ nonisolated struct PowerSnapshot {
     private let zoneHottest: [ThermalZone: HIDSensors.Reading]
 
     init(date: Date = .now,
-         uiDeviceBatteryPercent: Int? = nil,
+         systemBatteryPercent: Int? = nil,
          registry: [String: Any] = [:],
          powerSource: [String: Any]? = nil,
          adapterDetails: [String: Any]? = nil,
          sensors: [HIDSensors.Reading] = [],
          chargeStatus: [String: Any]? = nil) {
         self.date = date
-        self.uiDeviceBatteryPercent = uiDeviceBatteryPercent.flatMap(Self.validPercent)
+        self.systemBatteryPercent = systemBatteryPercent.flatMap(Self.validPercent)
         self.registry = registry
         self.powerSource = powerSource
         self.adapterDetails = adapterDetails
@@ -212,10 +212,13 @@ nonisolated struct PowerSnapshot {
 
     var isFinishingCharge: Bool { bool("Is Finishing Charge", in: powerSource) }
     var lowPowerMode: Bool { bool("LPM Active", in: powerSource) }
-    /// The battery percentage exposed by Apple's public UIKit API. Raw capacity
-    /// values from powerd and IOKit are intentionally not used as fallbacks: they
-    /// can represent a differently refreshed or differently scaled quantity.
-    var percent: Int? { uiDeviceBatteryPercent }
+    /// A directly reported system percentage. The app supplies its most precise
+    /// available iOS reading; the extension falls back to powerd's documented
+    /// percentage key. No voltage or watt-hour estimate is used here.
+    var percent: Int? {
+        systemBatteryPercent
+            ?? int("Current Capacity", in: powerSource).flatMap(Self.validPercent)
+    }
 
     /// e.g. "Charging On Hold". Privileged on iOS, so usually nil there.
     var chargeStatusText: String? { chargeStatus?["chargeStatus"] as? String }

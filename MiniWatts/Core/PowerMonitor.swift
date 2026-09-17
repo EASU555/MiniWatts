@@ -27,6 +27,10 @@ final class PowerMonitor {
     /// discharge power: no discharge-current sensor is exposed to a sandboxed app.
     private(set) var rateEstimateWatts: Double?
     private(set) var diagnostics: [String] = []
+    private(set) var batteryLevelSource = "unavailable"
+    private(set) var batteryLevelSampledAt: Date?
+    private(set) var batteryLevelChangedAt: Date?
+    private(set) var batteryLevelCandidates = "—"
     /// Every power source powerd reports, not just the internal battery.
     ///
     /// BatteryCenter is built on this same list — it has a `_BCPowerSourceController`
@@ -150,6 +154,7 @@ final class PowerMonitor {
     private static let rateEstimateMaximumAge: TimeInterval = 30 * 60
 
     private let battery = IOKitBattery()
+    private let systemBatteryLevel = SystemBatteryLevelReader()
     private let sensors = HIDSensors()
     private let batteryCenter = BatteryCenterBridge()
     private let energy = EnergyAccumulator()
@@ -173,6 +178,7 @@ final class PowerMonitor {
     private var percentLog: [(date: Date, percent: Int)] = []
     private var lastChargingFlag: Bool?
     private var lastThermalObservation: (date: Date, wasThrottling: Bool)?
+    private var diagnosticEvents: [String] = []
 
     init() {
         let defaults = UserDefaults.standard
@@ -186,10 +192,11 @@ final class PowerMonitor {
             .flatMap(LiveActivityLeadingItem.init(rawValue:)) ?? .statusIcon
         liveActivityMetric = defaults.string(forKey: Self.liveActivityMetricKey)
             .flatMap(LiveActivityMetric.init(rawValue:)) ?? .chargingPower
-        // Use the same public battery percentage iOS exposes to applications.
-        // Without monitoring enabled, `batteryLevel` remains -1 (unknown).
-        UIDevice.current.isBatteryMonitoringEnabled = true
+        systemBatteryLevel.onSystemChange = { [weak self] in
+            self?.refreshIfDue(minimumInterval: 0)
+        }
         collectDiagnostics()
+        appendDiagnosticEvent("monitor initialized")
         Task { await loadStoredSessions() }
     }
 
@@ -220,7 +227,9 @@ final class PowerMonitor {
     // MARK: Lifecycle
 
     func start() {
+        systemBatteryLevel.prepareForForeground()
         guard task == nil else { return }
+        appendDiagnosticEvent("sampling started")
         refresh()
         task = Task { [weak self] in
             while !Task.isCancelled {
@@ -244,6 +253,7 @@ final class PowerMonitor {
     func pause() {
         task?.cancel()
         task = nil
+        appendDiagnosticEvent("sampling paused")
         persist()
     }
 
@@ -270,9 +280,11 @@ final class PowerMonitor {
         powerSources = sources
         #endif
         let internalBattery = sources.first { ($0["Type"] as? String) == "InternalBattery" } ?? sources.first
+        let levelReading = systemBatteryLevel.read(powerSource: internalBattery)
+        updateBatteryLevelDiagnostics(levelReading)
 
         let current = PowerSnapshot(date: .now,
-                                    uiDeviceBatteryPercent: Self.uiDeviceBatteryPercent,
+                                    systemBatteryPercent: levelReading?.percent,
                                     registry: registry,
                                     powerSource: internalBattery,
                                     adapterDetails: battery?.readAdapterDetails(),
@@ -298,12 +310,6 @@ final class PowerMonitor {
                                          enabled: liveActivityEnabled)
         lastExternalConnected = current.externalConnected
         onTick?(current)
-    }
-
-    private static var uiDeviceBatteryPercent: Int? {
-        let level = UIDevice.current.batteryLevel
-        guard level >= 0 else { return nil }
-        return min(max(Int((Double(level) * 100).rounded()), 0), 100)
     }
 
     private func appendLive(_ snapshot: PowerSnapshot) {
@@ -528,6 +534,80 @@ final class PowerMonitor {
         lines.append("Simulator: IOKit reads the Mac's battery, HID sensors are absent.")
         #endif
         diagnostics = lines
+    }
+
+    private func updateBatteryLevelDiagnostics(_ reading: SystemBatteryLevelReader.Reading?) {
+        let oldPercent = snapshot.percent
+        let oldSource = batteryLevelSource
+        guard let reading else {
+            batteryLevelSource = "unavailable"
+            batteryLevelSampledAt = .now
+            batteryLevelCandidates = "MobileGestalt — · powerd — · UIDevice —"
+            if oldSource != batteryLevelSource {
+                appendDiagnosticEvent("battery level unavailable")
+            }
+            return
+        }
+
+        batteryLevelSource = reading.source.rawValue
+        batteryLevelSampledAt = reading.sampledAt
+        batteryLevelCandidates = [
+            "MobileGestalt \(reading.mobileGestaltPercent.map(String.init) ?? "—")",
+            "powerd \(reading.powerSourcePercent.map(String.init) ?? "—")",
+            "UIDevice \(reading.uiDevicePercent.map(String.init) ?? "—")"
+        ].joined(separator: " · ")
+
+        if oldPercent != reading.percent || oldSource != batteryLevelSource {
+            batteryLevelChangedAt = reading.sampledAt
+            appendDiagnosticEvent(
+                "battery \(oldPercent.map(String.init) ?? "—")% -> \(reading.percent)% "
+                    + "via \(batteryLevelSource) [\(batteryLevelCandidates)]"
+            )
+        }
+    }
+
+    private func appendDiagnosticEvent(_ message: String) {
+        diagnosticEvents.append("\(Formatting.timestamp(.now))  \(message)")
+        if diagnosticEvents.count > 120 {
+            diagnosticEvents.removeFirst(diagnosticEvents.count - 120)
+        }
+    }
+
+    /// A local-only report the user can explicitly export from Settings. It avoids
+    /// serial numbers and identifiers while retaining enough source detail to tell
+    /// a frozen UIKit level from a stopped sampling loop.
+    var diagnosticReport: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
+        var lines = [
+            "MiniWatts diagnostics",
+            "Generated: \(Formatting.timestamp(.now))",
+            "Version: \(version) (\(build))",
+            "Device: \(Self.machineIdentifier)",
+            "System: iOS \(UIDevice.current.systemVersion)",
+            "Battery: \(snapshot.percent.map(String.init) ?? "—")% via \(batteryLevelSource)",
+            "Battery candidates: \(batteryLevelCandidates)",
+            "Battery sampled: \(batteryLevelSampledAt.map(Formatting.timestamp) ?? "—")",
+            "Battery last changed: \(batteryLevelChangedAt.map(Formatting.timestamp) ?? "—")",
+            "Snapshot: \(Formatting.timestamp(snapshot.date))",
+            "External power: \(snapshot.externalConnected)",
+            "Charging: \(snapshot.isCharging)",
+            "Input watts: \(snapshot.inputWatts.map { String(format: "%.3f", $0) } ?? "—")",
+            "Battery watts: \(snapshot.batteryWatts.map { String(format: "%.3f", $0) } ?? "—")",
+            "Thermal state: \(thermal.state.rawValue)",
+            "PiP background tick: \(task == nil ? "stopped" : "running")",
+            "",
+            "# Probe availability"
+        ]
+        lines.append(contentsOf: diagnostics)
+        lines.append("")
+        lines.append("# Recent events")
+        lines.append(contentsOf: diagnosticEvents)
+        lines.append("")
+        lines.append("# Live sensors")
+        lines.append(contentsOf: snapshot.sensors.sorted { $0.name < $1.name }
+            .map { "\($0.name) = \($0.formatted)" })
+        return lines.joined(separator: "\n")
     }
 
     /// Why the accessory list is empty, in the app's voice, for the Devices screen.

@@ -289,6 +289,16 @@
         }
       }
     },
+    "Battery sources" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "电量来源"
+          }
+        }
+      }
+    },
     "Battery °C" : {
       "localizations" : {
         "zh-Hans" : {
@@ -715,6 +725,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "屏幕"
+          }
+        }
+      }
+    },
+    "Diagnostics" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "诊断"
           }
         }
       }
@@ -1191,6 +1211,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "MiniWatts"
+          }
+        }
+      }
+    },
+    "Export diagnostic report" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出诊断报告"
+          }
+        }
+      }
+    },
+    "MiniWatts diagnostic report" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MiniWatts 诊断报告"
+          }
+        }
+      }
+    },
+    "MiniWatts diagnostics" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MiniWatts 诊断"
           }
         }
       }
@@ -2101,6 +2151,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "状态图标"
+          }
+        }
+      }
+    },
+    "The report stays on this iPhone until you choose where to share it. It contains recent probe state and sensor names, but no serial number or account information." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "报告只会保留在这台 iPhone 上，直到你主动选择分享位置。报告包含最近的探针状态和传感器名称，但不包含序列号或账户信息。"
           }
         }
       }

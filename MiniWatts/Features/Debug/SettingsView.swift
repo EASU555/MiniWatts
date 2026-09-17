@@ -14,6 +14,7 @@ struct SettingsView: View {
                         recordingPanel(keepAwake: $monitor.keepScreenAwakeWhileCharging)
                         capacityPanel(capacity: $monitor.configuredBatteryWattHours)
                         devicePanel
+                        diagnosticsPanel
                         aboutPanel
                         #if DEBUG
                         rawDataLink
@@ -91,13 +92,32 @@ struct SettingsView: View {
                 DetailRow(label: "Model identifier", value: monitor.deviceModelIdentifier)
                 DetailRow(label: "System", value: "iOS \(UIDevice.current.systemVersion)")
                 DetailRow(label: "Charge level",
-                          value: monitor.snapshot.percent.map { "\($0)% · UIDevice API" })
+                          value: monitor.snapshot.percent.map { "\($0)% · \(monitor.batteryLevelSource)" })
+                DetailRow(label: "Battery sources", value: monitor.batteryLevelCandidates)
                 DetailRow(label: "HID sensors",
                           value: monitor.sensorsAvailable
                               ? String(localized: "available") : String(localized: "unavailable"))
                 DetailRow(label: "Cycle count", value: monitor.snapshot.cycleCount.map(String.init))
                 DetailRow(label: "Battery health",
                           value: monitor.snapshot.healthPercent.map { String(format: "%.0f%%", $0) })
+            }
+        }
+    }
+
+    private var diagnosticsPanel: some View {
+        Panel("Diagnostics", systemImage: "stethoscope") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("The report stays on this iPhone until you choose where to share it. It contains recent probe state and sensor names, but no serial number or account information.")
+                    .font(.caption)
+                    .foregroundStyle(Color.mwMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                ShareLink(item: monitor.diagnosticReport,
+                          subject: Text("MiniWatts diagnostics"),
+                          message: Text("MiniWatts diagnostic report")) {
+                    Label("Export diagnostic report", systemImage: "square.and.arrow.up")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .tint(.mwAccent)
             }
         }
     }
