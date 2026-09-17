@@ -224,12 +224,16 @@ struct DashboardView: View {
                                value: totals.measuredInputWattHours.map { String(format: "%.2f", $0) } ?? "—",
                                unit: "Wh", tint: .mwAccent, size: 20)
                         Metric(caption: "Stored",
-                               value: String(format: "%.2f", totals.batteryWattHours),
+                               value: totals.measuredBatteryWattHours.map {
+                                   String(format: "%.2f", $0)
+                               } ?? "—",
                                unit: "Wh", tint: .mwBattery, size: 20)
                     }
                     HStack(alignment: .top, spacing: 10) {
                         Metric(caption: "Into cell",
-                               value: String(format: "%.0f", totals.batteryMilliAmpHours),
+                               value: totals.measuredBatteryMilliAmpHours.map {
+                                   String(format: "%.0f", $0)
+                               } ?? "—",
                                unit: "mAh", size: 20)
                         Metric(caption: "Round trip",
                                value: totals.efficiencyPercent.map { String(format: "%.0f", $0) } ?? "—",

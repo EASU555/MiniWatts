@@ -4,8 +4,11 @@ import Foundation
 nonisolated struct ChargeSample: Codable, Hashable, Identifiable {
     /// Seconds since the session started.
     let offset: TimeInterval
-    let inputWatts: Double
-    let batteryWatts: Double
+    /// Nil means the corresponding private sensor did not report. It must remain
+    /// distinct from a measured zero so charts can show a gap instead of a false
+    /// power dropout.
+    let inputWatts: Double?
+    let batteryWatts: Double?
     let percent: Int
     let batteryTemperature: Double?
     let hottestTemperature: Double?

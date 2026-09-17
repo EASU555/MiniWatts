@@ -5,8 +5,8 @@ import UIKit
 /// One point in the rolling live chart.
 nonisolated struct LiveSample: Identifiable, Hashable {
     let date: Date
-    let inputWatts: Double
-    let batteryWatts: Double
+    let inputWatts: Double?
+    let batteryWatts: Double?
     let hottestTemperature: Double?
     var id: Date { date }
 }
@@ -146,6 +146,8 @@ final class PowerMonitor {
     private static let liveActivityLeadingItemKey = "liveActivityLeadingItem"
     private static let liveActivityMetricKey = "liveActivityMetric"
     private static let liveWindow = 180
+    private static let maximumContinuousSampleInterval: TimeInterval = 10
+    private static let rateEstimateMaximumAge: TimeInterval = 30 * 60
 
     private let battery = IOKitBattery()
     private let sensors = HIDSensors()
@@ -170,6 +172,7 @@ final class PowerMonitor {
     private var discardedStoredSessions = false
     private var percentLog: [(date: Date, percent: Int)] = []
     private var lastChargingFlag: Bool?
+    private var lastThermalObservation: (date: Date, wasThrottling: Bool)?
 
     init() {
         let defaults = UserDefaults.standard
@@ -305,8 +308,8 @@ final class PowerMonitor {
 
     private func appendLive(_ snapshot: PowerSnapshot) {
         let sample = LiveSample(date: snapshot.date,
-                                inputWatts: snapshot.inputWatts ?? 0,
-                                batteryWatts: snapshot.batteryWatts ?? 0,
+                                inputWatts: snapshot.inputWatts,
+                                batteryWatts: snapshot.batteryWatts,
                                 hottestTemperature: snapshot.hottestSensor?.value)
         live.append(sample)
         if live.count > Self.liveWindow {
@@ -343,6 +346,7 @@ final class PowerMonitor {
                                        adapterRatedWatts: snapshot.adapterRatedWatts,
                                        isWireless: snapshot.isWirelessInput)
         lastSampleWrite = .distantPast
+        lastThermalObservation = nil
     }
 
     private func recordSample(_ snapshot: PowerSnapshot) {
@@ -350,8 +354,12 @@ final class PowerMonitor {
 
         session.endPercent = snapshot.percent ?? session.endPercent
         session.totals = energy.totals
-        session.peakInputWatts = max(session.peakInputWatts, snapshot.inputWatts ?? 0)
-        session.peakBatteryWatts = max(session.peakBatteryWatts, snapshot.batteryWatts ?? 0)
+        if let inputWatts = snapshot.inputWatts {
+            session.peakInputWatts = max(session.peakInputWatts, inputWatts)
+        }
+        if let batteryWatts = snapshot.batteryWatts {
+            session.peakBatteryWatts = max(session.peakBatteryWatts, batteryWatts)
+        }
         if let temperature = snapshot.batteryTemperature {
             session.peakBatteryTemperature = max(session.peakBatteryTemperature ?? temperature, temperature)
         }
@@ -359,13 +367,21 @@ final class PowerMonitor {
         // is filled in whenever it first becomes available.
         if session.adapterName == nil { session.adapterName = snapshot.adapterName }
         if session.adapterRatedWatts == nil { session.adapterRatedWatts = snapshot.adapterRatedWatts }
-        if thermal.state.isThrottling { session.throttledSeconds += 1 }
+        if let previous = lastThermalObservation {
+            let interval = snapshot.date.timeIntervalSince(previous.date)
+            if interval > 0,
+               interval <= Self.maximumContinuousSampleInterval,
+               previous.wasThrottling {
+                session.throttledSeconds += interval
+            }
+        }
+        lastThermalObservation = (snapshot.date, thermal.state.isThrottling)
 
         if snapshot.date.timeIntervalSince(lastSampleWrite) >= SessionStore.sampleInterval {
             lastSampleWrite = snapshot.date
             session.samples.append(ChargeSample(offset: snapshot.date.timeIntervalSince(session.start),
-                                                inputWatts: snapshot.inputWatts ?? 0,
-                                                batteryWatts: snapshot.batteryWatts ?? 0,
+                                                inputWatts: snapshot.inputWatts,
+                                                batteryWatts: snapshot.batteryWatts,
                                                 percent: snapshot.percent ?? session.endPercent,
                                                 batteryTemperature: snapshot.batteryTemperature,
                                                 hottestTemperature: snapshot.hottestSensor?.value,
@@ -389,6 +405,7 @@ final class PowerMonitor {
         lastConnectedObservation = nil
         session.totals = energy.totals
         currentSession = nil
+        lastThermalObservation = nil
         energy.reset()
         sessionTotals = EnergyTotals()
         if Self.isWorthKeeping(session) {
@@ -402,7 +419,9 @@ final class PowerMonitor {
     /// A stretch of being plugged in that moved no energy is a cable reseat, or a
     /// phone sitting at 100 %, not a charge worth keeping.
     private static func isWorthKeeping(_ session: ChargeSession) -> Bool {
-        session.totals.inputWattHours > 0.001 || session.gainedPercent > 0
+        session.totals.inputWattHours > 0.001
+            || session.totals.batteryWattHours > 0.001
+            || session.gainedPercent > 0
     }
 
     private func persist() {
@@ -420,6 +439,7 @@ final class PowerMonitor {
         discardedStoredSessions = true
         sessions.removeAll()
         currentSession = nil
+        lastThermalObservation = nil
         energy.reset()
         sessionTotals = EnergyTotals()
         store.deleteAll()
@@ -439,12 +459,23 @@ final class PowerMonitor {
             percentLog.removeAll()
             rateEstimateWatts = nil
         }
+        if let last = percentLog.last,
+           snapshot.date.timeIntervalSince(last.date) > Self.rateEstimateMaximumAge {
+            percentLog = [(snapshot.date, percent)]
+            rateEstimateWatts = nil
+            return
+        }
         if percentLog.last?.percent != percent {
             percentLog.append((snapshot.date, percent))
             if percentLog.count > 7 { percentLog.removeFirst(percentLog.count - 7) }
         }
-        let transitions = percentLog.dropFirst()
-        guard transitions.count >= 2, let first = transitions.first, let last = transitions.last else { return }
+        guard percentLog.count >= 3,
+              let first = percentLog.first,
+              let last = percentLog.last,
+              abs(last.percent - first.percent) >= 2 else {
+            rateEstimateWatts = nil
+            return
+        }
         let hours = last.date.timeIntervalSince(first.date) / 3600
         guard hours > 0 else { return }
         rateEstimateWatts = Double(last.percent - first.percent) / 100 * batteryWattHours / hours

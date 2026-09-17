@@ -13,6 +13,10 @@ by several entries.
 
 ## Build and run
 
+- Product/runtime priority is **iOS 27**. When a behavior or API choice conflicts
+  with older releases, keep the iOS 27 path correct and remove the legacy
+  workaround rather than weakening the iOS 27 experience. The deployment target
+  may remain lower only while that has no behavioral cost.
 - Plain Xcode project, no XcodeGen, no packages. `PBXFileSystemSynchronizedRootGroup`:
   new files under `MiniWatts/` join the target automatically, do not edit the pbxproj.
 - iOS 17 deployment target, **Swift 6** language mode, Xcode 26+ required

@@ -16,6 +16,11 @@ nonisolated struct EnergyTotals: Codable, Hashable {
     /// Seconds of integration, which is not the same as wall-clock time: gaps
     /// longer than the sample window are dropped rather than extrapolated.
     var integratedSeconds: TimeInterval = 0
+    /// Valid coverage for each sensor channel. These differ when one private
+    /// sensor temporarily disappears while the others continue reporting.
+    var inputIntegratedSeconds: TimeInterval = 0
+    var batteryIntegratedSeconds: TimeInterval = 0
+    var batteryCurrentIntegratedSeconds: TimeInterval = 0
 
     /// Delivered energy, or nil when none could be measured.
     ///
@@ -23,12 +28,28 @@ nonisolated struct EnergyTotals: Codable, Hashable {
     /// for a whole MagSafe session while the battery side accumulates normally.
     /// Nil says "not measured" where a bare 0.00 Wh would read as "nothing came in".
     var measuredInputWattHours: Double? {
-        inputWattHours > 0.001 ? inputWattHours : nil
+        inputIntegratedSeconds > 0 ? inputWattHours : nil
+    }
+
+    var measuredBatteryWattHours: Double? {
+        batteryIntegratedSeconds > 0 ? batteryWattHours : nil
+    }
+
+    var measuredBatteryMilliAmpHours: Double? {
+        batteryCurrentIntegratedSeconds > 0 ? batteryMilliAmpHours : nil
     }
 
     /// Share of delivered energy that reached the cell, 0…100.
     var efficiencyPercent: Double? {
-        guard inputWattHours > 0.001, batteryWattHours > 0 else { return nil }
+        guard inputWattHours > 0.001,
+              batteryWattHours > 0,
+              inputIntegratedSeconds > 0,
+              batteryIntegratedSeconds > 0 else { return nil }
+        let coverage = min(inputIntegratedSeconds, batteryIntegratedSeconds)
+            / max(inputIntegratedSeconds, batteryIntegratedSeconds)
+        // Comparing energy from materially different time windows would produce
+        // a precise-looking but meaningless efficiency figure.
+        guard coverage >= 0.9 else { return nil }
         return min(batteryWattHours / inputWattHours, 1) * 100
     }
 
@@ -37,9 +58,60 @@ nonisolated struct EnergyTotals: Codable, Hashable {
         max(inputWattHours - batteryWattHours, 0)
     }
 
+    var measuredLossWattHours: Double? {
+        efficiencyPercent == nil ? nil : lossWattHours
+    }
+
     var averageInputWatts: Double? {
-        guard integratedSeconds > 0 else { return nil }
-        return inputWattHours * 3600 / integratedSeconds
+        guard inputIntegratedSeconds > 0 else { return nil }
+        return inputWattHours * 3600 / inputIntegratedSeconds
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case inputWattHours
+        case batteryWattHours
+        case batteryMilliAmpHours
+        case integratedSeconds
+        case inputIntegratedSeconds
+        case batteryIntegratedSeconds
+        case batteryCurrentIntegratedSeconds
+    }
+
+    init() {}
+
+    init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        inputWattHours = try values.decodeIfPresent(Double.self, forKey: .inputWattHours) ?? 0
+        batteryWattHours = try values.decodeIfPresent(Double.self, forKey: .batteryWattHours) ?? 0
+        batteryMilliAmpHours = try values.decodeIfPresent(Double.self, forKey: .batteryMilliAmpHours) ?? 0
+        let legacyCoverage = try values.decodeIfPresent(TimeInterval.self, forKey: .integratedSeconds) ?? 0
+        inputIntegratedSeconds = try values.decodeIfPresent(
+            TimeInterval.self,
+            forKey: .inputIntegratedSeconds
+        ) ?? legacyCoverage
+        batteryIntegratedSeconds = try values.decodeIfPresent(
+            TimeInterval.self,
+            forKey: .batteryIntegratedSeconds
+        ) ?? legacyCoverage
+        batteryCurrentIntegratedSeconds = try values.decodeIfPresent(
+            TimeInterval.self,
+            forKey: .batteryCurrentIntegratedSeconds
+        ) ?? legacyCoverage
+        integratedSeconds = max(
+            inputIntegratedSeconds,
+            max(batteryIntegratedSeconds, batteryCurrentIntegratedSeconds)
+        )
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(inputWattHours, forKey: .inputWattHours)
+        try values.encode(batteryWattHours, forKey: .batteryWattHours)
+        try values.encode(batteryMilliAmpHours, forKey: .batteryMilliAmpHours)
+        try values.encode(integratedSeconds, forKey: .integratedSeconds)
+        try values.encode(inputIntegratedSeconds, forKey: .inputIntegratedSeconds)
+        try values.encode(batteryIntegratedSeconds, forKey: .batteryIntegratedSeconds)
+        try values.encode(batteryCurrentIntegratedSeconds, forKey: .batteryCurrentIntegratedSeconds)
     }
 }
 
@@ -53,9 +125,9 @@ nonisolated struct EnergyTotals: Codable, Hashable {
 nonisolated final class EnergyAccumulator {
     private struct Sample {
         let date: Date
-        let inputWatts: Double
-        let batteryWatts: Double
-        let batteryAmps: Double
+        let inputWatts: Double?
+        let batteryWatts: Double?
+        let batteryAmps: Double?
     }
 
     /// Longest gap that still counts as continuous measurement.
@@ -71,9 +143,9 @@ nonisolated final class EnergyAccumulator {
 
     func add(_ snapshot: PowerSnapshot) {
         let sample = Sample(date: snapshot.date,
-                            inputWatts: snapshot.inputWatts ?? 0,
-                            batteryWatts: max(snapshot.batteryWatts ?? 0, 0),
-                            batteryAmps: max(snapshot.batteryCurrent ?? 0, 0))
+                            inputWatts: snapshot.inputWatts,
+                            batteryWatts: snapshot.batteryWatts.map { max($0, 0) },
+                            batteryAmps: snapshot.batteryCurrent.map { max($0, 0) })
         defer { previous = sample }
         guard let previous else { return }
 
@@ -81,9 +153,21 @@ nonisolated final class EnergyAccumulator {
         guard interval > 0, interval <= Self.maximumInterval else { return }
 
         let hours = interval / 3600
-        totals.inputWattHours += (previous.inputWatts + sample.inputWatts) / 2 * hours
-        totals.batteryWattHours += (previous.batteryWatts + sample.batteryWatts) / 2 * hours
-        totals.batteryMilliAmpHours += (previous.batteryAmps + sample.batteryAmps) / 2 * hours * 1000
-        totals.integratedSeconds += interval
+        if let previousInput = previous.inputWatts, let input = sample.inputWatts {
+            totals.inputWattHours += (previousInput + input) / 2 * hours
+            totals.inputIntegratedSeconds += interval
+        }
+        if let previousBattery = previous.batteryWatts, let battery = sample.batteryWatts {
+            totals.batteryWattHours += (previousBattery + battery) / 2 * hours
+            totals.batteryIntegratedSeconds += interval
+        }
+        if let previousCurrent = previous.batteryAmps, let current = sample.batteryAmps {
+            totals.batteryMilliAmpHours += (previousCurrent + current) / 2 * hours * 1000
+            totals.batteryCurrentIntegratedSeconds += interval
+        }
+        totals.integratedSeconds = max(
+            totals.inputIntegratedSeconds,
+            max(totals.batteryIntegratedSeconds, totals.batteryCurrentIntegratedSeconds)
+        )
     }
 }

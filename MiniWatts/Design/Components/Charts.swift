@@ -1,6 +1,20 @@
 import Charts
 import SwiftUI
 
+private struct DatedPowerPoint: Identifiable {
+    let date: Date
+    let watts: Double
+    let series: String
+    var id: Date { date }
+}
+
+private struct ElapsedPowerPoint: Identifiable {
+    let offset: TimeInterval
+    let watts: Double
+    let series: String
+    var id: TimeInterval { offset }
+}
+
 /// Rolling three-minute view of adapter power against battery power. The area is
 /// what comes in; the line is what reaches the cell.
 struct LivePowerChart: View {
@@ -8,32 +22,63 @@ struct LivePowerChart: View {
     var height: CGFloat = 130
 
     private var ceiling: Double {
-        let peak = samples.flatMap { [$0.inputWatts, $0.batteryWatts] }.filter(\.isFinite).max() ?? 0
+        let peak = samples
+            .flatMap { [$0.inputWatts, $0.batteryWatts] }
+            .compactMap { $0 }
+            .filter(\.isFinite)
+            .max() ?? 0
         return max(peak * 1.25, 5)
+    }
+
+    private var inputPoints: [DatedPowerPoint] {
+        segmentedPoints(prefix: "input", value: \.inputWatts)
+    }
+
+    private var batteryPoints: [DatedPowerPoint] {
+        segmentedPoints(prefix: "battery", value: \.batteryWatts)
+    }
+
+    private func segmentedPoints(
+        prefix: String,
+        value keyPath: KeyPath<LiveSample, Double?>
+    ) -> [DatedPowerPoint] {
+        var segment = 0
+        return samples.compactMap { sample in
+            guard let watts = sample[keyPath: keyPath], watts.isFinite else {
+                segment += 1
+                return nil
+            }
+            return DatedPowerPoint(
+                date: sample.date,
+                watts: watts,
+                series: "\(prefix)-\(segment)"
+            )
+        }
     }
 
     var body: some View {
         Chart {
-            ForEach(samples) { sample in
-                AreaMark(x: .value("Time", sample.date),
-                         y: .value("Watts", sample.inputWatts))
+            ForEach(inputPoints) { point in
+                AreaMark(x: .value("Time", point.date),
+                         y: .value("Watts", point.watts),
+                         series: .value("Segment", point.series))
                     .foregroundStyle(LinearGradient(colors: [Color.mwAccent.opacity(0.45), Color.mwAccent.opacity(0.02)],
                                                     startPoint: .top,
                                                     endPoint: .bottom))
                     .interpolationMethod(.monotone)
             }
-            ForEach(samples) { sample in
-                LineMark(x: .value("Time", sample.date),
-                         y: .value("Watts", sample.inputWatts),
-                         series: .value("Series", String(localized: "From charger")))
+            ForEach(inputPoints) { point in
+                LineMark(x: .value("Time", point.date),
+                         y: .value("Watts", point.watts),
+                         series: .value("Segment", point.series))
                     .foregroundStyle(Color.mwAccent)
                     .lineStyle(StrokeStyle(lineWidth: 2, lineJoin: .round))
                     .interpolationMethod(.monotone)
             }
-            ForEach(samples) { sample in
-                LineMark(x: .value("Time", sample.date),
-                         y: .value("Watts", sample.batteryWatts),
-                         series: .value("Series", String(localized: "Into battery")))
+            ForEach(batteryPoints) { point in
+                LineMark(x: .value("Time", point.date),
+                         y: .value("Watts", point.watts),
+                         series: .value("Segment", point.series))
                     .foregroundStyle(Color.mwBattery)
                     .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
                     .interpolationMethod(.monotone)
@@ -63,31 +108,59 @@ struct SessionPowerChart: View {
     var height: CGFloat = 150
 
     private var ceiling: Double {
-        max((samples.map(\.inputWatts).filter(\.isFinite).max() ?? 0) * 1.2, 5)
+        let values = samples.flatMap { [$0.inputWatts, $0.batteryWatts] }.compactMap { $0 }
+        return max((values.filter(\.isFinite).max() ?? 0) * 1.2, 5)
+    }
+
+    private var inputPoints: [ElapsedPowerPoint] {
+        segmentedPoints(prefix: "input", value: \.inputWatts)
+    }
+
+    private var batteryPoints: [ElapsedPowerPoint] {
+        segmentedPoints(prefix: "battery", value: \.batteryWatts)
+    }
+
+    private func segmentedPoints(
+        prefix: String,
+        value keyPath: KeyPath<ChargeSample, Double?>
+    ) -> [ElapsedPowerPoint] {
+        var segment = 0
+        return samples.compactMap { sample in
+            guard let watts = sample[keyPath: keyPath], watts.isFinite else {
+                segment += 1
+                return nil
+            }
+            return ElapsedPowerPoint(
+                offset: sample.offset,
+                watts: watts,
+                series: "\(prefix)-\(segment)"
+            )
+        }
     }
 
     var body: some View {
         Chart {
-            ForEach(samples) { sample in
-                AreaMark(x: .value("Elapsed", sample.offset),
-                         y: .value("Watts", sample.inputWatts))
+            ForEach(inputPoints) { point in
+                AreaMark(x: .value("Elapsed", point.offset),
+                         y: .value("Watts", point.watts),
+                         series: .value("Segment", point.series))
                     .foregroundStyle(LinearGradient(colors: [Color.mwAccent.opacity(0.4), Color.mwAccent.opacity(0.02)],
                                                     startPoint: .top,
                                                     endPoint: .bottom))
                     .interpolationMethod(.monotone)
             }
-            ForEach(samples) { sample in
-                LineMark(x: .value("Elapsed", sample.offset),
-                         y: .value("Watts", sample.inputWatts),
-                         series: .value("Series", "From charger"))
+            ForEach(inputPoints) { point in
+                LineMark(x: .value("Elapsed", point.offset),
+                         y: .value("Watts", point.watts),
+                         series: .value("Segment", point.series))
                     .foregroundStyle(Color.mwAccent)
                     .lineStyle(StrokeStyle(lineWidth: 1.8))
                     .interpolationMethod(.monotone)
             }
-            ForEach(samples) { sample in
-                LineMark(x: .value("Elapsed", sample.offset),
-                         y: .value("Watts", sample.batteryWatts),
-                         series: .value("Series", "Into battery"))
+            ForEach(batteryPoints) { point in
+                LineMark(x: .value("Elapsed", point.offset),
+                         y: .value("Watts", point.watts),
+                         series: .value("Segment", point.series))
                     .foregroundStyle(Color.mwBattery)
                     .lineStyle(StrokeStyle(lineWidth: 1.4, dash: [4, 3]))
                     .interpolationMethod(.monotone)
@@ -227,7 +300,7 @@ struct SessionClimateChart: View {
 
 /// Compact inline sparkline, used in the session list.
 struct Sparkline: View {
-    let values: [Double]
+    let values: [Double?]
     var tint: Color = .mwAccent
 
     /// Points actually drawn. A session holds up to 1,500 samples and this is
@@ -236,27 +309,35 @@ struct Sparkline: View {
     /// thinning cannot hide a spike, which plain striding would.
     private static let resolution = 64
 
-    private var thinned: [Double] {
+    private var thinned: [Double?] {
         guard values.count > Self.resolution else { return values }
         let bucket = Double(values.count) / Double(Self.resolution)
-        return (0..<Self.resolution).compactMap { index in
+        return (0..<Self.resolution).map { index in
             let start = Int(Double(index) * bucket)
             let end = max(start + 1, Int(Double(index + 1) * bucket))
-            return values[start..<min(end, values.count)].max()
+            return values[start..<min(end, values.count)].compactMap { $0 }.max()
         }
     }
 
     var body: some View {
         GeometryReader { geometry in
             let points = thinned
-            let peak = max(points.max() ?? 1, 0.001)
+            let peak = max(points.compactMap { $0 }.max() ?? 1, 0.001)
             Path { path in
                 guard points.count > 1 else { return }
+                var hasCurrentSubpath = false
                 for (index, value) in points.enumerated() {
+                    guard let value, value.isFinite else {
+                        hasCurrentSubpath = false
+                        continue
+                    }
                     let x = geometry.size.width * CGFloat(index) / CGFloat(points.count - 1)
                     let y = geometry.size.height * (1 - CGFloat(value / peak))
-                    if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
-                    else { path.addLine(to: CGPoint(x: x, y: y)) }
+                    if hasCurrentSubpath { path.addLine(to: CGPoint(x: x, y: y)) }
+                    else {
+                        path.move(to: CGPoint(x: x, y: y))
+                        hasCurrentSubpath = true
+                    }
                 }
             }
             .stroke(tint, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))

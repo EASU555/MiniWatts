@@ -209,6 +209,16 @@
         }
       }
     },
+    "Adapter coverage" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适配器传感器有效时长"
+          }
+        }
+      }
+    },
     "Adapter utilisation" : {
       "localizations" : {
         "zh-Hans" : {
@@ -265,6 +275,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "电池"
+          }
+        }
+      }
+    },
+    "Battery coverage" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "电池传感器有效时长"
           }
         }
       }
@@ -1371,6 +1391,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "峰值 %@ W"
+          }
+        }
+      }
+    },
+    "peak —" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "峰值 —"
           }
         }
       }

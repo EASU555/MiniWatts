@@ -166,6 +166,8 @@ final class TelemetryPictureInPictureController: NSObject {
     @ObservationIgnored private var lastBackgroundPulseTimestamp: CFTimeInterval = 0
     @ObservationIgnored private var hiddenPulsePhase = false
     @ObservationIgnored private var playbackTimebase: CMTimebase?
+    @ObservationIgnored private var pixelBufferPool: CVPixelBufferPool?
+    @ObservationIgnored private var videoFormatDescription: CMVideoFormatDescription?
     @ObservationIgnored private var pendingPipelineRebuild = false
     // Kept strongly while PiP is active so SwiftUI dismantling its representable
     // cannot also destroy the layer tree AVKit is still presenting.
@@ -208,6 +210,12 @@ final class TelemetryPictureInPictureController: NSObject {
         contentMode == .hiddenCarrier || showPower || showTemperatures
     }
     var keepsSensorSamplingActive: Bool { isActive || isStarting || isStopping }
+
+    /// The SwiftUI preview renders itself. The expensive ImageRenderer → CGImage →
+    /// pixel-buffer path exists only for an actual or starting system PiP session.
+    private var shouldRenderVideoFrames: Bool {
+        contentMode == .liveReadings && (isStarting || isActive)
+    }
 
     func attach(to view: UIView) {
         if keepsSensorSamplingActive, sourceView !== view {
@@ -280,13 +288,11 @@ final class TelemetryPictureInPictureController: NSObject {
         // SwiftUI's early makeUIView pass can otherwise remain permanently unable
         // to enter PiP even after the preview begins displaying frames.
         sourceView?.layoutIfNeeded()
+        isStarting = true
         rebuildRenderingPipeline()
-        if contentMode == .liveReadings {
-            renderLatest()
-        }
+        renderLatest()
         ensurePictureInPictureController()
 
-        isStarting = true
         startAttempt &+= 1
         let attempt = startAttempt
         startTask?.cancel()
@@ -621,6 +627,8 @@ final class TelemetryPictureInPictureController: NSObject {
             configure(replacement)
             displayLayer = replacement
             playbackTimebase = nil
+            pixelBufferPool = nil
+            videoFormatDescription = nil
             configurePlaybackTimebase()
         case .hiddenCarrier:
             configureVideoCallCarrier()
@@ -822,7 +830,7 @@ final class TelemetryPictureInPictureController: NSObject {
     }
 
     private func renderLatest() {
-        guard contentMode == .liveReadings else { return }
+        guard shouldRenderVideoFrames else { return }
         let content = TelemetryVideoFrameView(
             data: latestData,
             showPower: showPower,
@@ -838,7 +846,7 @@ final class TelemetryPictureInPictureController: NSObject {
         renderer.scale = 1
         renderer.isOpaque = true
         guard let image = renderer.cgImage,
-              let sampleBuffer = Self.makeSampleBuffer(from: image, size: Self.frameSize) else { return }
+              let sampleBuffer = makeSampleBuffer(from: image, size: Self.frameSize) else { return }
 
         // The renderer API is the iOS 17 replacement for enqueuing directly on the
         // display layer. Each buffer is marked for immediate display, so a fresh
@@ -857,21 +865,39 @@ final class TelemetryPictureInPictureController: NSObject {
         }
     }
 
-    private static func makeSampleBuffer(from image: CGImage, size: CGSize) -> CMSampleBuffer? {
+    private func makeSampleBuffer(from image: CGImage, size: CGSize) -> CMSampleBuffer? {
         let width = Int(size.width)
         let height = Int(size.height)
-        let attributes: [CFString: Any] = [
-            kCVPixelBufferCGImageCompatibilityKey: true,
-            kCVPixelBufferCGBitmapContextCompatibilityKey: true,
-            kCVPixelBufferIOSurfacePropertiesKey: [:]
-        ]
+        if pixelBufferPool == nil {
+            let poolAttributes: [CFString: Any] = [
+                kCVPixelBufferPoolMinimumBufferCountKey: 3
+            ]
+            let pixelAttributes: [CFString: Any] = [
+                kCVPixelBufferWidthKey: width,
+                kCVPixelBufferHeightKey: height,
+                kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferCGImageCompatibilityKey: true,
+                kCVPixelBufferCGBitmapContextCompatibilityKey: true,
+                kCVPixelBufferIOSurfacePropertiesKey: [:]
+            ]
+            var optionalPool: CVPixelBufferPool?
+            guard CVPixelBufferPoolCreate(
+                kCFAllocatorDefault,
+                poolAttributes as CFDictionary,
+                pixelAttributes as CFDictionary,
+                &optionalPool
+            ) == kCVReturnSuccess,
+                  let optionalPool else { return nil }
+            pixelBufferPool = optionalPool
+        }
+
+        guard let pixelBufferPool else { return nil }
         var optionalPixelBuffer: CVPixelBuffer?
-        guard CVPixelBufferCreate(kCFAllocatorDefault,
-                                  width,
-                                  height,
-                                  kCVPixelFormatType_32BGRA,
-                                  attributes as CFDictionary,
-                                  &optionalPixelBuffer) == kCVReturnSuccess,
+        guard CVPixelBufferPoolCreatePixelBuffer(
+            kCFAllocatorDefault,
+            pixelBufferPool,
+            &optionalPixelBuffer
+        ) == kCVReturnSuccess,
               let pixelBuffer = optionalPixelBuffer else { return nil }
 
         CVPixelBufferLockBaseAddress(pixelBuffer, [])
@@ -893,12 +919,19 @@ final class TelemetryPictureInPictureController: NSObject {
         // upside down in both the inline preview and the PiP window.
         context.draw(image, in: CGRect(origin: .zero, size: size))
 
-        var optionalFormat: CMVideoFormatDescription?
-        guard CMVideoFormatDescriptionCreateForImageBuffer(
-            allocator: kCFAllocatorDefault,
-            imageBuffer: pixelBuffer,
-            formatDescriptionOut: &optionalFormat
-        ) == noErr, let format = optionalFormat else { return nil }
+        let format: CMVideoFormatDescription
+        if let videoFormatDescription {
+            format = videoFormatDescription
+        } else {
+            var optionalFormat: CMVideoFormatDescription?
+            guard CMVideoFormatDescriptionCreateForImageBuffer(
+                allocator: kCFAllocatorDefault,
+                imageBuffer: pixelBuffer,
+                formatDescriptionOut: &optionalFormat
+            ) == noErr, let optionalFormat else { return nil }
+            videoFormatDescription = optionalFormat
+            format = optionalFormat
+        }
 
         let timestamp = CMClockGetTime(CMClockGetHostTimeClock())
         var timing = CMSampleTimingInfo(duration: CMTime(value: 1, timescale: 1),
