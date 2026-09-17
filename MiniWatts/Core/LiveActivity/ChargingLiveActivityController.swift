@@ -294,7 +294,7 @@ final class ChargingLiveActivityController {
 
         if let current = currentActivities.first {
             adopt(current)
-            lastSuccessfulUpdateAt = current.content.state.sampledAt
+            lastSuccessfulUpdateAt = current.content.state.sampledAt ?? .now
             lastUpdateEnqueuedAt = lastSuccessfulUpdateAt
             lastLeadingItem = nil
             lastMetric = nil
@@ -320,8 +320,6 @@ final class ChargingLiveActivityController {
                 case .active:
                     self.pendingStateTimeoutTask?.cancel()
                     self.pendingStateTimeoutTask = nil
-                case .pending:
-                    self.schedulePendingStateTimeout(for: activityID)
                 case .stale:
                     // A stale activity can still accept an update. Foreground
                     // recovery uses the confirmed-update timestamp to decide
@@ -330,7 +328,11 @@ final class ChargingLiveActivityController {
                 case .ended, .dismissed:
                     self.resetLocalActivity()
                 @unknown default:
-                    self.resetLocalActivity()
+                    if #available(iOS 26.0, *), state == .pending {
+                        self.schedulePendingStateTimeout(for: activityID)
+                    } else {
+                        self.resetLocalActivity()
+                    }
                 }
             }
         }
@@ -343,9 +345,13 @@ final class ChargingLiveActivityController {
             guard !Task.isCancelled,
                   let self,
                   self.activity?.id == activityID,
-                  self.activity?.activityState == .pending,
                   UIApplication.shared.applicationState == .active,
                   let state = self.latestState else { return }
+            if #available(iOS 26.0, *) {
+                guard self.activity?.activityState == .pending else { return }
+            } else {
+                return
+            }
             self.beginRestart(state: state,
                               leadingItem: self.lastLeadingItem ?? .statusIcon,
                               selectedMetric: self.lastMetric ?? .chargingPower,
