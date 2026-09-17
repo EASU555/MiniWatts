@@ -16,6 +16,8 @@ struct DashboardView: View {
             livePanel
             sessionPanel
             if !monitor.sensorsAvailable { sensorNote }
+            LiveActivityControlPanel()
+            FloatingMonitorControlPanel()
         }
         .sheet(isPresented: $showingSettings) { SettingsView() }
     }

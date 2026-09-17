@@ -26,6 +26,11 @@ final class ChargingLiveActivityController {
     private var lastMetric: LiveActivityMetric?
     private var pendingUpdate: ActivityContent<MiniWattsActivityAttributes.ContentState>?
     private var updateTask: Task<Void, Never>?
+    /// Serializes an explicit stop/restart so an asynchronous end from the old
+    /// activity can never race with, or accidentally occupy the slot needed by,
+    /// the replacement.
+    private var lifecycleTask: Task<Void, Never>?
+    private var lifecycleGeneration = 0
 
     init() { synchronizeActivityWithSystem() }
 
@@ -57,23 +62,12 @@ final class ChargingLiveActivityController {
         let now = snapshot.date
 
         if activity == nil {
+            guard lifecycleTask == nil else { return }
             guard Self.areActivitiesEnabled else { return }
-            do {
-                let requested = try Activity.request(
-                    attributes: MiniWattsActivityAttributes(startedAt: now),
-                    content: content(for: state, at: now),
-                    pushType: nil
-                )
-                activity = requested
-                lastRequestAt = now
-                lastUpdate = now
-                lastLeadingItem = leadingItem
-                lastMetric = selectedMetric
-            } catch {
-                // Live Activities can be disabled or the system-wide activity limit
-                // can be full. The monitor must keep sampling even when this surface
-                // is unavailable, so a failed request is intentionally non-fatal.
-            }
+            requestActivity(state: state,
+                            leadingItem: leadingItem,
+                            selectedMetric: selectedMetric,
+                            at: now)
             return
         }
 
@@ -89,14 +83,94 @@ final class ChargingLiveActivityController {
         beginUpdatingIfNeeded()
     }
 
+    /// Ends every activity from this app, waits for ActivityKit to release the
+    /// system presentation, then requests a completely new one. Use this for an
+    /// explicit user restart: a cached activity can remain `.active` even when its
+    /// Dynamic Island presentation has disappeared, which cannot be diagnosed from
+    /// `activityState` alone.
+    func restart(snapshot: PowerSnapshot,
+                 leadingItem: LiveActivityLeadingItem,
+                 selectedMetric: LiveActivityMetric) {
+        let state = Self.contentState(from: snapshot,
+                                      leadingItem: leadingItem,
+                                      selectedMetric: selectedMetric)
+        let now = snapshot.date
+        let activityIDs = allKnownActivityIDs()
+
+        lifecycleGeneration &+= 1
+        let generation = lifecycleGeneration
+        lifecycleTask?.cancel()
+        lifecycleTask = nil
+        resetLocalActivity()
+
+        lifecycleTask = Task { @MainActor [weak self] in
+            await Self.endActivities(withIDs: activityIDs)
+            guard !Task.isCancelled,
+                  let self,
+                  self.lifecycleGeneration == generation else { return }
+
+            // ActivityKit removes ended activities asynchronously. A short bounded
+            // hand-off avoids requesting the replacement while the old UI still
+            // owns the app's Live Activity slot.
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled,
+                  self.lifecycleGeneration == generation else { return }
+
+            self.requestActivity(state: state,
+                                 leadingItem: leadingItem,
+                                 selectedMetric: selectedMetric,
+                                 at: now)
+            if self.lifecycleGeneration == generation {
+                self.lifecycleTask = nil
+            }
+        }
+    }
+
+    /// Repairs an activity as soon as the app becomes interactive again. Starting
+    /// a Live Activity is foreground-only, so this is the first reliable moment to
+    /// replace one that iOS ended while the process was suspended.
+    func recoverAfterEnteringForeground(
+        snapshot: PowerSnapshot,
+        leadingItem: LiveActivityLeadingItem,
+        selectedMetric: LiveActivityMetric
+    ) {
+        synchronizeActivityWithSystem()
+        let needsReplacement: Bool
+        if let activity {
+            switch activity.activityState {
+            case .active, .pending:
+                needsReplacement = snapshot.date.timeIntervalSince(lastUpdate)
+                    >= Self.staleInterval
+            case .stale, .ended, .dismissed:
+                needsReplacement = true
+            @unknown default:
+                needsReplacement = true
+            }
+        } else {
+            needsReplacement = true
+        }
+
+        if needsReplacement {
+            restart(snapshot: snapshot,
+                    leadingItem: leadingItem,
+                    selectedMetric: selectedMetric)
+        } else {
+            reconcile(snapshot: snapshot,
+                      leadingItem: leadingItem,
+                      selectedMetric: selectedMetric,
+                      enabled: true,
+                      forceUpdate: true)
+        }
+    }
+
     func endIfNeeded() {
         // Capture every ID before clearing local state. Older recovery races could
         // leave more than one activity behind, and ending only `.first` allowed the
         // remainder to consume the system activity limit.
-        let activityIDs = Set(
-            Activity<MiniWattsActivityAttributes>.activities.map(\.id)
-                + [activity?.id].compactMap { $0 }
-        )
+        let activityIDs = allKnownActivityIDs()
+        lifecycleGeneration &+= 1
+        lifecycleTask?.cancel()
+        lifecycleTask = nil
         resetLocalActivity()
         guard !activityIDs.isEmpty else { return }
 
@@ -104,10 +178,47 @@ final class ChargingLiveActivityController {
         // objects in the detached task avoids sending framework objects across the
         // Swift 6 isolation boundary.
         Task.detached {
-            for current in Activity<MiniWattsActivityAttributes>.activities
-                where activityIDs.contains(current.id) {
-                await current.end(nil, dismissalPolicy: .immediate)
-            }
+            await Self.endActivities(withIDs: activityIDs)
+        }
+    }
+
+    private func requestActivity(
+        state: MiniWattsActivityAttributes.ContentState,
+        leadingItem: LiveActivityLeadingItem,
+        selectedMetric: LiveActivityMetric,
+        at date: Date
+    ) {
+        guard Self.areActivitiesEnabled else { return }
+        do {
+            let requested = try Activity.request(
+                attributes: MiniWattsActivityAttributes(startedAt: date),
+                content: content(for: state, at: date),
+                pushType: nil
+            )
+            activity = requested
+            lastRequestAt = date
+            lastUpdate = date
+            lastLeadingItem = leadingItem
+            lastMetric = selectedMetric
+        } catch {
+            // Live Activities can be disabled or the system-wide activity limit
+            // can be full. The next foreground tick can retry, while the explicit
+            // restart button remains available without force-quitting the app.
+        }
+    }
+
+    private func allKnownActivityIDs() -> Set<String> {
+        Set(
+            Activity<MiniWattsActivityAttributes>.activities.map(\.id)
+                + [activity?.id].compactMap { $0 }
+        )
+    }
+
+    nonisolated private static func endActivities(withIDs activityIDs: Set<String>) async {
+        guard !activityIDs.isEmpty else { return }
+        for current in Activity<MiniWattsActivityAttributes>.activities
+            where activityIDs.contains(current.id) {
+            await current.end(nil, dismissalPolicy: .immediate)
         }
     }
 

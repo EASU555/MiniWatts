@@ -53,11 +53,13 @@ final class PowerMonitor {
     var liveActivityEnabled: Bool {
         didSet {
             UserDefaults.standard.set(liveActivityEnabled, forKey: Self.liveActivityEnabledKey)
-            liveActivityController.reconcile(snapshot: snapshot,
-                                             leadingItem: liveActivityLeadingItem,
-                                             selectedMetric: liveActivityMetric,
-                                             enabled: liveActivityEnabled,
-                                             forceUpdate: true)
+            if liveActivityEnabled {
+                liveActivityController.restart(snapshot: snapshot,
+                                               leadingItem: liveActivityLeadingItem,
+                                               selectedMetric: liveActivityMetric)
+            } else {
+                liveActivityController.endIfNeeded()
+            }
         }
     }
 
@@ -86,6 +88,27 @@ final class PowerMonitor {
 
     var liveActivitiesAvailable: Bool {
         ChargingLiveActivityController.areActivitiesEnabled
+    }
+
+    /// Explicit recovery path for an ActivityKit presentation that disappeared
+    /// while its retained Activity object still claims to be active.
+    func restartLiveActivity() {
+        guard liveActivityEnabled else {
+            liveActivityEnabled = true
+            return
+        }
+        liveActivityController.restart(snapshot: snapshot,
+                                       leadingItem: liveActivityLeadingItem,
+                                       selectedMetric: liveActivityMetric)
+    }
+
+    func recoverLiveActivityAfterEnteringForeground() {
+        guard liveActivityEnabled else { return }
+        liveActivityController.recoverAfterEnteringForeground(
+            snapshot: snapshot,
+            leadingItem: liveActivityLeadingItem,
+            selectedMetric: liveActivityMetric
+        )
     }
 
     let thermal = ThermalMonitor()

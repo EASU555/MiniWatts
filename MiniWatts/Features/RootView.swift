@@ -51,6 +51,7 @@ struct RootView: View {
             case .active:
                 pictureInPicture.recoverAfterEnteringForeground()
                 monitor.start()
+                monitor.recoverLiveActivityAfterEnteringForeground()
             case .background:
                 widgetPublisher.flush(
                     ChargeReading(monitor.snapshot),

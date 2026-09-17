@@ -2185,6 +2185,16 @@
         }
       }
     },
+    "Restart Live Activity" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新启动实时活动"
+          }
+        }
+      }
+    },
     "Start Picture in Picture before changing its hidden state." : {
       "localizations" : {
         "zh-Hans" : {
