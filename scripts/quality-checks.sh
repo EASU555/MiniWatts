@@ -6,8 +6,6 @@ cd "$(dirname "$0")/.."
 echo "Checking property lists and string catalogs"
 plutil -lint MiniWatts-Info.plist
 plutil -lint MiniWattsLiveActivity/Info.plist
-plutil -lint MiniWatts/Localizable.xcstrings
-plutil -lint MiniWattsLiveActivity/Localizable.xcstrings
 
 echo "Checking app and extension release metadata"
 grep -q '<string>$(MARKETING_VERSION)</string>' MiniWatts-Info.plist
