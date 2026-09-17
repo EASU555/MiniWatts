@@ -52,13 +52,6 @@ final class SystemBatteryLevelReader {
         }
     }
 
-    deinit {
-        for token in notificationTokens {
-            NotificationCenter.default.removeObserver(token)
-        }
-        if let mobileGestaltHandle { dlclose(mobileGestaltHandle) }
-    }
-
     /// Re-establishes UIKit monitoring after foreground transitions. Some iOS 27
     /// builds leave `batteryLevel` on the value captured when the app launched.
     /// The precise system-service reads below do not depend on this, but UIKit is
