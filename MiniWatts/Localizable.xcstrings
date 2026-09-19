@@ -2325,6 +2325,26 @@
         }
       }
     },
+    "Restarting Live Activity" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在重新启动实时活动"
+          }
+        }
+      }
+    },
+    "Live Activity could not be restarted. Keep MiniWatts open and try again. If this repeats, check Live Activities in iOS Settings." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时活动无法重新启动。请保持 MiniWatts 在前台并重试；如果反复出现，请检查 iOS 设置中的实时活动权限。"
+          }
+        }
+      }
+    },
     "Start Picture in Picture before changing its hidden state." : {
       "localizations" : {
         "zh-Hans" : {

@@ -53,11 +53,27 @@ struct LiveActivityControlPanel: View {
                     Button {
                         monitor.restartLiveActivity()
                     } label: {
-                        Label("Restart Live Activity", systemImage: "arrow.clockwise")
-                            .frame(maxWidth: .infinity)
+                        HStack(spacing: 8) {
+                            if monitor.liveActivityRecoveryStatus == .restarting {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Restarting Live Activity")
+                            } else {
+                                Label("Restart Live Activity", systemImage: "arrow.clockwise")
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                     .tint(.mwAccent)
+                    .disabled(monitor.liveActivityRecoveryStatus == .restarting)
+                }
+
+                if case .failed = monitor.liveActivityRecoveryStatus {
+                    EmptyNote(
+                        text: "Live Activity could not be restarted. Keep MiniWatts open and try again. If this repeats, check Live Activities in iOS Settings.",
+                        systemImage: "exclamationmark.triangle"
+                    )
                 }
 
                 Text("Choose the compact Dynamic Island's left and right contents independently. For example, use status icon + power, or power + temperature. The right-side choice is also the primary readout when expanded.")

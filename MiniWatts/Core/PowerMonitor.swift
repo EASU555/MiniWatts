@@ -31,6 +31,7 @@ final class PowerMonitor {
     private(set) var batteryLevelSampledAt: Date?
     private(set) var batteryLevelChangedAt: Date?
     private(set) var batteryLevelCandidates = "—"
+    private(set) var liveActivityRecoveryStatus = LiveActivityRecoveryStatus.idle
     /// Every power source powerd reports, not just the internal battery.
     ///
     /// BatteryCenter is built on this same list — it has a `_BCPowerSourceController`
@@ -194,6 +195,12 @@ final class PowerMonitor {
             .flatMap(LiveActivityMetric.init(rawValue:)) ?? .chargingPower
         systemBatteryLevel.onSystemChange = { [weak self] in
             self?.refreshIfDue(minimumInterval: 0)
+        }
+        liveActivityController.onRecoveryStatusChange = { [weak self] status in
+            self?.liveActivityRecoveryStatus = status
+            if case let .failed(details) = status {
+                self?.appendDiagnosticEvent("Live Activity restart failed: \(details)")
+            }
         }
         collectDiagnostics()
         appendDiagnosticEvent("monitor initialized")
