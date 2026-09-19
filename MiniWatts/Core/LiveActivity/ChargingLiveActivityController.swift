@@ -146,11 +146,9 @@ final class ChargingLiveActivityController {
         selectedMetric: LiveActivityMetric,
         at date: Date
     ) {
-        // Keep the actual objects, not only their IDs. An Activity object can still
-        // report `.active` after it has fallen out of `Activity.activities`; ending
-        // only objects reacquired from the static list leaves that orphan alive
-        // until the whole app process is restarted.
-        let activitiesToEnd = allKnownActivities()
+        // Only IDs cross into ActivityKit's `@concurrent` end operation. The
+        // framework objects aren't Sendable under Swift 6 strict isolation.
+        let activityIDs = allKnownActivityIDs()
 
         lifecycleGeneration &+= 1
         let generation = lifecycleGeneration
@@ -160,9 +158,7 @@ final class ChargingLiveActivityController {
         recoveryStatus = .restarting
 
         lifecycleTask = Task { @MainActor [weak self] in
-            for current in activitiesToEnd {
-                await current.end(nil, dismissalPolicy: .immediate)
-            }
+            await Self.endActivities(withIDs: activityIDs)
             guard !Task.isCancelled,
                   let self,
                   self.lifecycleGeneration == generation else { return }
@@ -170,7 +166,7 @@ final class ChargingLiveActivityController {
             // `end` returning does not mean the old presentation has released its
             // ActivityKit slot. Wait for the framework's source-of-truth list to
             // confirm release instead of relying on a fixed 400 ms delay.
-            await self.waitForSystemRelease(of: Set(activitiesToEnd.map(\.id)))
+            await self.waitForSystemRelease(of: activityIDs)
             guard !Task.isCancelled,
                   self.lifecycleGeneration == generation else { return }
 
@@ -231,19 +227,17 @@ final class ChargingLiveActivityController {
         // Capture every ID before clearing local state. Older recovery races could
         // leave more than one activity behind, and ending only `.first` allowed the
         // remainder to consume the system activity limit.
-        let activitiesToEnd = allKnownActivities()
+        let activityIDs = allKnownActivityIDs()
         lifecycleGeneration &+= 1
         let generation = lifecycleGeneration
         lifecycleTask?.cancel()
         lifecycleTask = nil
         resetLocalActivity()
         recoveryStatus = .idle
-        guard !activitiesToEnd.isEmpty else { return }
+        guard !activityIDs.isEmpty else { return }
 
         lifecycleTask = Task { @MainActor [weak self] in
-            for current in activitiesToEnd {
-                await current.end(nil, dismissalPolicy: .immediate)
-            }
+            await Self.endActivities(withIDs: activityIDs)
             guard !Task.isCancelled,
                   let self,
                   self.lifecycleGeneration == generation else { return }
@@ -282,15 +276,11 @@ final class ChargingLiveActivityController {
         }
     }
 
-    private func allKnownActivities() -> [Activity<MiniWattsActivityAttributes>] {
-        var activitiesByID: [String: Activity<MiniWattsActivityAttributes>] = [:]
-        for current in Activity<MiniWattsActivityAttributes>.activities {
-            activitiesByID[current.id] = current
-        }
-        if let activity {
-            activitiesByID[activity.id] = activity
-        }
-        return Array(activitiesByID.values)
+    private func allKnownActivityIDs() -> Set<String> {
+        Set(
+            Activity<MiniWattsActivityAttributes>.activities.map(\.id)
+                + [activity?.id].compactMap { $0 }
+        )
     }
 
     private func waitForSystemRelease(of activityIDs: Set<String>) async {
@@ -303,27 +293,23 @@ final class ChargingLiveActivityController {
             // Include every ongoing activity that appears during the drain. A
             // cancelled older restart may finish `Activity.request` just after the
             // first snapshot; three empty checks close that narrow race as well.
-            let ongoingActivities = Activity<MiniWattsActivityAttributes>.activities.filter {
+            let ongoingActivityIDs = Set(Activity<MiniWattsActivityAttributes>.activities.filter {
                 Self.isOngoing($0.activityState)
-            }
-            trackedIDs.formUnion(ongoingActivities.map(\.id))
-            let oldActivities = ongoingActivities.filter { trackedIDs.contains($0.id) }
+            }.map(\.id))
+            trackedIDs.formUnion(ongoingActivityIDs)
+            let oldActivityIDs = ongoingActivityIDs.intersection(trackedIDs)
 
-            if oldActivities.isEmpty {
+            if oldActivityIDs.isEmpty {
                 consecutiveEmptyChecks += 1
                 if consecutiveEmptyChecks >= 3 { return }
             } else {
                 consecutiveEmptyChecks = 0
-                for current in oldActivities {
-                    await current.end(nil, dismissalPolicy: .immediate)
-                }
+                await Self.endActivities(withIDs: oldActivityIDs)
             }
             if clock.now >= deadline {
                 // Ask once more at the boundary. The later request loop backs off if
                 // ActivityKit still hasn't released the system slot.
-                for current in oldActivities {
-                    await current.end(nil, dismissalPolicy: .immediate)
-                }
+                await Self.endActivities(withIDs: oldActivityIDs)
                 return
             }
             try? await Task.sleep(for: .milliseconds(200))
@@ -358,7 +344,7 @@ final class ChargingLiveActivityController {
                     pushType: nil
                 )
                 guard !Task.isCancelled, lifecycleGeneration == generation else {
-                    await requested.end(nil, dismissalPolicy: .immediate)
+                    await Self.endActivities(withIDs: [requested.id])
                     return
                 }
                 adopt(requested)
@@ -392,6 +378,17 @@ final class ChargingLiveActivityController {
         case .active, .stale, .pending: return true
         case .ended, .dismissed: return false
         @unknown default: return false
+        }
+    }
+
+    /// Reacquire framework objects in the concurrent context. Passing only stable
+    /// IDs across the actor boundary is required by Swift 6 and also avoids an old
+    /// retained wrapper being mistaken for ActivityKit's current system object.
+    nonisolated private static func endActivities(withIDs activityIDs: Set<String>) async {
+        guard !activityIDs.isEmpty else { return }
+        for current in Activity<MiniWattsActivityAttributes>.activities
+            where activityIDs.contains(current.id) {
+            await current.end(nil, dismissalPolicy: .immediate)
         }
     }
 
@@ -464,12 +461,10 @@ final class ChargingLiveActivityController {
                 case .ended, .dismissed:
                     self.resetLocalActivity()
                     self.recoveryStatus = .idle
+                case .pending:
+                    self.schedulePendingStateTimeout(for: activityID)
                 @unknown default:
-                    if #available(iOS 26.0, *), state == .pending {
-                        self.schedulePendingStateTimeout(for: activityID)
-                    } else {
-                        self.resetLocalActivity()
-                    }
+                    self.resetLocalActivity()
                 }
             }
         }
