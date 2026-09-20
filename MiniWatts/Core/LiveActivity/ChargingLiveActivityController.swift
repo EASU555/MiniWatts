@@ -655,6 +655,18 @@ final class ChargingLiveActivityController {
         activityID: String,
         succeeded: Bool
     ) {
+        // A background timeout may just be a slow system reply. If that exact
+        // operation eventually finishes before any replacement/stop, resume the
+        // existing pipeline instead of requiring a foreground visit for a blip.
+        if succeeded, enabled, needsForegroundRecovery,
+           lifecycleTask == nil, updateGeneration == generation,
+           activity?.id == activityID {
+            needsForegroundRecovery = false
+            lastSuccessfulUpdateAt = .now
+            record("Delayed update completed; existing activity resumed")
+            if pendingUpdate != nil { beginUpdatingIfNeeded() }
+            return
+        }
         guard updateGeneration == generation,
               updateInFlight,
               inFlightActivityID == activityID else { return }

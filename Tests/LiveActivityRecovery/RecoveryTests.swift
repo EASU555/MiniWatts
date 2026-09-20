@@ -94,6 +94,23 @@ struct PowerSnapshot {
         print("PASS: background timeout preserves activity and foreground repairs it")
 
         TestSystem.reset()
+        let delayed = ChargingLiveActivityController()
+        tick(delayed)
+        try? await Task.sleep(for: .milliseconds(100))
+        TestSystem.configure(updateDelay: .seconds(10))
+        UIApplication.shared.applicationState = .background
+        await sample(delayed, seconds: 9)
+        TestSystem.configure()
+        await sample(delayed, seconds: 2)
+        check(TestSystem.requests == 1 && TestSystem.endings.isEmpty,
+              "A slow background update unnecessarily replaced the activity")
+        check(TestSystem.updates.count > 1, "Late successful update did not resume sampling")
+        UIApplication.shared.applicationState = .active
+        delayed.endIfNeeded()
+        try? await Task.sleep(for: .milliseconds(300))
+        print("PASS: late successful background update resumes without reopening app")
+
+        TestSystem.reset()
         let toggled = ChargingLiveActivityController()
         tick(toggled)
         TestSystem.configure(endDelay: .seconds(2))
