@@ -72,6 +72,9 @@ jobs:
       - name: Run project quality checks
         run: ./scripts/quality-checks.sh
 
+      - name: Test Live Activity recovery under delayed system responses
+        run: bash ./scripts/test-live-activity-recovery.sh
+
       # On a tag, the tag is the version: build-ipa.sh hands MARKETING_VERSION to
       # xcodebuild, so the project file never has to be edited to cut a release. Taken
       # from the triggering tag explicitly rather than left to the script's own git

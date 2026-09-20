@@ -76,6 +76,17 @@ struct LiveActivityControlPanel: View {
                     )
                 }
 
+                DisclosureGroup("Live Activity recovery details") {
+                    Text(verbatim: monitor.liveActivityRecoveryDetail)
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ShareLink(item: monitor.diagnosticReport) {
+                        Label("Share recovery diagnostics", systemImage: "square.and.arrow.up")
+                    }
+                }
+                .font(.caption)
+
                 Text("Choose the compact Dynamic Island's left and right contents independently. For example, use status icon + power, or power + temperature. The right-side choice is also the primary readout when expanded.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)

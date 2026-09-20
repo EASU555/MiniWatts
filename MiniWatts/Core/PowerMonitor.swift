@@ -32,6 +32,7 @@ final class PowerMonitor {
     private(set) var batteryLevelChangedAt: Date?
     private(set) var batteryLevelCandidates = "—"
     private(set) var liveActivityRecoveryStatus = LiveActivityRecoveryStatus.idle
+    private(set) var liveActivityRecoveryDetail = ""
     /// Every power source powerd reports, not just the internal battery.
     ///
     /// BatteryCenter is built on this same list — it has a `_BCPowerSourceController`
@@ -201,6 +202,12 @@ final class PowerMonitor {
             if case let .failed(details) = status {
                 self?.appendDiagnosticEvent("Live Activity restart failed: \(details)")
             }
+        }
+        liveActivityController.onDetailChange = { [weak self] detail in
+            self?.liveActivityRecoveryDetail = detail
+        }
+        liveActivityController.onDiagnostic = { [weak self] message in
+            self?.appendDiagnosticEvent("Live Activity: \(message)")
         }
         collectDiagnostics()
         appendDiagnosticEvent("monitor initialized")
@@ -597,6 +604,8 @@ final class PowerMonitor {
             "Battery sampled: \(batteryLevelSampledAt.map(Formatting.timestamp) ?? "—")",
             "Battery last changed: \(batteryLevelChangedAt.map(Formatting.timestamp) ?? "—")",
             "Snapshot: \(Formatting.timestamp(snapshot.date))",
+            "Live Activity: \(liveActivityRecoveryStatus)",
+            "Live Activity detail: \(liveActivityRecoveryDetail)",
             "External power: \(snapshot.externalConnected)",
             "Charging: \(snapshot.isCharging)",
             "Input watts: \(snapshot.inputWatts.map { String(format: "%.3f", $0) } ?? "—")",

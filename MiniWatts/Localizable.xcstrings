@@ -1,6 +1,26 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Live Activity recovery details" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时活动恢复详情"
+          }
+        }
+      }
+    },
+    "Share recovery diagnostics" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分享恢复诊断记录"
+          }
+        }
+      }
+    },
     "" : {
       "shouldTranslate" : false
     },
