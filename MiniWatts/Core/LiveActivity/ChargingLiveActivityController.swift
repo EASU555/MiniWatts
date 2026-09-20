@@ -419,7 +419,7 @@ final class ChargingLiveActivityController {
     private func reportRequested(_ requested: Activity<MiniWattsActivityAttributes>) {
         // ActivityKit's active state confirms acceptance, not Dynamic Island
         // visibility. Never describe a returned pending request as running.
-        if requested.activityState == .pending {
+        if #available(iOS 26.0, *), requested.activityState == .pending {
             recoveryStatus = .restarting
         } else {
             recoveryStatus = .running
