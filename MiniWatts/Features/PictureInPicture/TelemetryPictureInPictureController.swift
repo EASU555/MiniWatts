@@ -167,6 +167,7 @@ final class TelemetryPictureInPictureController: NSObject {
             + "stopping=\(isStopping) possible=\(isPossible) hidden=\(isVisuallyHidden) "
             + "power=\(showPower) temperatures=\(showTemperatures) "
             + "layout=\(layout.rawValue) component=\(temperatureSelection.rawValue) "
+            + "lastFrameSample=\(latestData?.date.timeIntervalSince1970.description ?? "none") "
             + "error=\(errorMessage.map { String(localized: $0) } ?? "none")"
     }
 

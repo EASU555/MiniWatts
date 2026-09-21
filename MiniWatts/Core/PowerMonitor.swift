@@ -215,7 +215,7 @@ final class PowerMonitor {
             self?.appendDiagnosticEvent("Live Activity: \(message)")
         }
         collectDiagnostics()
-        appendDiagnosticEvent("monitor initialized")
+        appendDiagnosticEvent("monitor initialized model=\(Self.machineIdentifier) iOS=\(UIDevice.current.systemVersion)")
         Task { await loadStoredSessions() }
     }
 

@@ -35,7 +35,7 @@ struct DashboardView: View {
         HStack {
             Button { showingProblemReport = true } label: {
                 Label("Problem report", systemImage: "exclamationmark.bubble")
-                    .labelStyle(.iconOnly)
+                    .labelStyle(.titleAndIcon)
             }
             Button { showingSettings = true } label: { Image(systemName: "gearshape") }
                 .tint(.mwAccent)
