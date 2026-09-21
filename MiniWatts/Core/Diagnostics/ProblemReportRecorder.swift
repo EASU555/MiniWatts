@@ -99,8 +99,15 @@ nonisolated final class ProblemReportRecorder: @unchecked Sendable {
                     let files = try FileManager.default.contentsOfDirectory(
                         at: exports, includingPropertiesForKeys: [.creationDateKey]
                     ).filter { $0.lastPathComponent.hasPrefix("MiniWatts-report-") && $0.pathExtension == "txt" }
-                        .sorted { $0.lastPathComponent > $1.lastPathComponent }
-                    for old in files.filter({ $0 != url }).dropFirst(2) {
+                        .sorted {
+                            let left = (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                            let right = (try? $1.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                            return left > right
+                        }
+                    // Foundation may return an absolute URL while appendingPath
+                    // retains a base URL. Compare the filename within this one
+                    // directory, not URL identity, to protect the new share file.
+                    for old in files.filter({ $0.lastPathComponent != url.lastPathComponent }).dropFirst(2) {
                         try? FileManager.default.removeItem(at: old)
                     }
                     continuation.resume(returning: Export(url: url, preview: String(text.prefix(24000))))
