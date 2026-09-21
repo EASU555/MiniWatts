@@ -64,11 +64,18 @@ struct MiniWattsChargingLiveActivity: Widget {
                     Image(systemName: "pause.fill")
                         .foregroundStyle(.secondary)
                         .accessibilityLabel("Reading paused")
-                } else if let value = minimalValue(for: metric, state: context.state) {
-                    Text(verbatim: value)
+                } else if let values = minimalValueVariants(for: metric, state: context.state) {
+                    ViewThatFits(in: .horizontal) {
+                        Text(verbatim: values.preferredWithUnit)
+                            .fixedSize(horizontal: true, vertical: false)
+                        Text(verbatim: values.precise)
+                            .fixedSize(horizontal: true, vertical: false)
+                        Text(verbatim: values.roundedWithUnit)
+                            .fixedSize(horizontal: true, vertical: false)
+                        Text(verbatim: values.rounded)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
                         .font(.caption2.monospacedDigit().weight(.heavy))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
                         .foregroundStyle(color(for: metric))
                         .accessibilityLabel(label(for: metric))
                         .accessibilityValue(Text(verbatim: formattedValue(for: metric,
@@ -320,20 +327,33 @@ private func shortValue(
     return oneDecimal(value) + unit(for: metric)
 }
 
-/// The iPhone 18 Pro can show three simultaneous activities, but each minimal
-/// surface is still tiny. Keep one decimal for normal readings, then shorten
-/// three-digit readings to fit the system's narrow minimal presentation.
-private func minimalValue(
+private struct MinimalValueVariants {
+    let preferredWithUnit: String
+    let precise: String
+    let roundedWithUnit: String
+    let rounded: String
+}
+
+/// Keep the intrinsic width of each alternative so ViewThatFits moves to the
+/// next complete reading instead of accepting a truncated first choice.
+private func minimalValueVariants(
     for metric: LiveActivityMetric,
     state: MiniWattsActivityAttributes.ContentState
-) -> String? {
+) -> MinimalValueVariants? {
     guard let value = numericValue(for: metric, state: state), value.isFinite else { return nil }
     if metric == .chargingPower {
         guard value >= 0, value < 1_000 else { return nil }
-        return (value < 100 ? oneDecimal(value) : "\(Int(value.rounded()))") + "W"
+    } else {
+        guard value >= -40, value <= 150 else { return nil }
     }
-    guard value >= -40, value <= 150 else { return nil }
-    return (abs(value) < 100 ? oneDecimal(value) : "\(Int(value.rounded()))") + "°"
+    let precise = oneDecimal(value)
+    let rounded = "\(Int(value.rounded()))"
+    let suffix = unit(for: metric)
+    let preferred = abs(value) < 100 ? precise : rounded
+    return MinimalValueVariants(preferredWithUnit: preferred + suffix,
+                                precise: precise,
+                                roundedWithUnit: rounded + suffix,
+                                rounded: rounded)
 }
 
 private func formattedValue(
