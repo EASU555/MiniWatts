@@ -2345,6 +2345,26 @@
         }
       }
     },
+    "Multiple activities" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "多活动时显示"
+          }
+        }
+      }
+    },
+    "Follow right side" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随右侧设置"
+          }
+        }
+      }
+    },
     "Status icon" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2471,6 +2491,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "恢复悬浮窗"
+          }
+        }
+      }
+    },
+    "When two or three activities share the Dynamic Island, MiniWatts shows one short reading chosen above. iOS decides its position; the left and right choices apply when MiniWatts is alone." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当两个或三个实时活动共用灵动岛时，MiniWatts 会显示这里选择的一项简短读数。显示位置由 iOS 决定；只有 MiniWatts 单独显示时，才使用上方的左右两侧设置。"
           }
         }
       }

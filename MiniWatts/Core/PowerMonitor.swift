@@ -63,7 +63,8 @@ final class PowerMonitor {
             if liveActivityEnabled {
                 liveActivityController.restart(snapshot: snapshot,
                                                leadingItem: liveActivityLeadingItem,
-                                               selectedMetric: liveActivityMetric)
+                                               selectedMetric: liveActivityMetric,
+                                               minimalMetric: liveActivityMinimalSelection.resolvedMetric(primary: liveActivityMetric))
             } else {
                 liveActivityController.endIfNeeded()
             }
@@ -78,6 +79,7 @@ final class PowerMonitor {
             liveActivityController.reconcile(snapshot: snapshot,
                                              leadingItem: liveActivityLeadingItem,
                                              selectedMetric: liveActivityMetric,
+                                             minimalMetric: liveActivityMinimalSelection.resolvedMetric(primary: liveActivityMetric),
                                              enabled: liveActivityEnabled,
                                              forceUpdate: true)
         }
@@ -90,6 +92,21 @@ final class PowerMonitor {
             liveActivityController.reconcile(snapshot: snapshot,
                                              leadingItem: liveActivityLeadingItem,
                                              selectedMetric: liveActivityMetric,
+                                             minimalMetric: liveActivityMinimalSelection.resolvedMetric(primary: liveActivityMetric),
+                                             enabled: liveActivityEnabled,
+                                             forceUpdate: true)
+        }
+    }
+
+    var liveActivityMinimalSelection: LiveActivityMinimalSelection {
+        didSet {
+            appendDiagnosticEvent("action: minimal metric=\(liveActivityMinimalSelection.rawValue)")
+            UserDefaults.standard.set(liveActivityMinimalSelection.rawValue,
+                                      forKey: Self.liveActivityMinimalSelectionKey)
+            liveActivityController.reconcile(snapshot: snapshot,
+                                             leadingItem: liveActivityLeadingItem,
+                                             selectedMetric: liveActivityMetric,
+                                             minimalMetric: liveActivityMinimalSelection.resolvedMetric(primary: liveActivityMetric),
                                              enabled: liveActivityEnabled,
                                              forceUpdate: true)
         }
@@ -109,7 +126,8 @@ final class PowerMonitor {
         }
         liveActivityController.restart(snapshot: snapshot,
                                        leadingItem: liveActivityLeadingItem,
-                                       selectedMetric: liveActivityMetric)
+                                       selectedMetric: liveActivityMetric,
+                                       minimalMetric: liveActivityMinimalSelection.resolvedMetric(primary: liveActivityMetric))
     }
 
     func recoverLiveActivityAfterEnteringForeground() {
@@ -117,7 +135,8 @@ final class PowerMonitor {
         liveActivityController.recoverAfterEnteringForeground(
             snapshot: snapshot,
             leadingItem: liveActivityLeadingItem,
-            selectedMetric: liveActivityMetric
+            selectedMetric: liveActivityMetric,
+            minimalMetric: liveActivityMinimalSelection.resolvedMetric(primary: liveActivityMetric)
         )
     }
 
@@ -155,6 +174,7 @@ final class PowerMonitor {
     private static let liveActivityEnabledKey = "liveActivityManualEnabled"
     private static let liveActivityLeadingItemKey = "liveActivityLeadingItem"
     private static let liveActivityMetricKey = "liveActivityMetric"
+    private static let liveActivityMinimalSelectionKey = "liveActivityMinimalSelection"
     private static let liveWindow = 180
     private static let maximumContinuousSampleInterval: TimeInterval = 10
     private static let rateEstimateMaximumAge: TimeInterval = 30 * 60
@@ -199,6 +219,8 @@ final class PowerMonitor {
             .flatMap(LiveActivityLeadingItem.init(rawValue:)) ?? .statusIcon
         liveActivityMetric = defaults.string(forKey: Self.liveActivityMetricKey)
             .flatMap(LiveActivityMetric.init(rawValue:)) ?? .chargingPower
+        liveActivityMinimalSelection = defaults.string(forKey: Self.liveActivityMinimalSelectionKey)
+            .flatMap(LiveActivityMinimalSelection.init(rawValue:)) ?? .followRightSide
         systemBatteryLevel.onSystemChange = { [weak self] in
             self?.refreshIfDue(minimumInterval: 0)
         }
@@ -337,6 +359,7 @@ final class PowerMonitor {
         liveActivityController.reconcile(snapshot: current,
                                          leadingItem: liveActivityLeadingItem,
                                          selectedMetric: liveActivityMetric,
+                                         minimalMetric: liveActivityMinimalSelection.resolvedMetric(primary: liveActivityMetric),
                                          enabled: liveActivityEnabled)
         lastExternalConnected = current.externalConnected
         onTick?(current)

@@ -19,13 +19,16 @@ struct PowerSnapshot {
     static func check(_ condition: @autoclosure () -> Bool, _ message: String) {
         if !condition() { fatalError(message) }
     }
-    static func tick(_ controller: ChargingLiveActivityController, enabled: Bool = true) {
+    static func tick(_ controller: ChargingLiveActivityController,
+                     enabled: Bool = true,
+                     minimalMetric: LiveActivityMetric = .chargingPower) {
         controller.reconcile(snapshot: PowerSnapshot(), leadingItem: .statusIcon,
-                             selectedMetric: .chargingPower, enabled: enabled, forceUpdate: true)
+                             selectedMetric: .chargingPower, minimalMetric: minimalMetric,
+                             enabled: enabled, forceUpdate: true)
     }
     static func restart(_ controller: ChargingLiveActivityController) {
         controller.restart(snapshot: PowerSnapshot(), leadingItem: .statusIcon,
-                           selectedMetric: .chargingPower)
+                           selectedMetric: .chargingPower, minimalMetric: .chargingPower)
     }
     static func sample(_ controller: ChargingLiveActivityController, seconds: Double) async {
         let until = ContinuousClock.now.advanced(by: .milliseconds(Int(seconds * 1000)))
@@ -84,7 +87,8 @@ struct PowerSnapshot {
         TestSystem.configure()
         background.recoverAfterEnteringForeground(snapshot: PowerSnapshot(),
                                                    leadingItem: .statusIcon,
-                                                   selectedMetric: .chargingPower)
+                                                   selectedMetric: .chargingPower,
+                                                   minimalMetric: .chargingPower)
         await sample(background, seconds: 1)
         check(TestSystem.requests == 2, "Foreground recovery did not replace failed pipeline")
         background.endIfNeeded()
@@ -123,5 +127,24 @@ struct PowerSnapshot {
         TestSystem.configure()
         toggled.endIfNeeded()
         print("PASS: rapid off/on and repeated disabled ticks")
+
+        // Changing the minimal readout must update the existing activity, not
+        // create a second activity that competes for an iPhone 18 Pro's slots.
+        TestSystem.reset()
+        check(LiveActivityMinimalSelection.followRightSide.resolvedMetric(primary: .socTemperature)
+              == .socTemperature, "Follow-right selection did not resolve")
+        let minimal = ChargingLiveActivityController()
+        tick(minimal)
+        try? await Task.sleep(for: .milliseconds(100))
+        guard let active = Activity<MiniWattsActivityAttributes>.activities.first else {
+            fatalError("Minimal metric test did not start an activity")
+        }
+        tick(minimal, minimalMetric: .batteryTemperature)
+        try? await Task.sleep(for: .milliseconds(150))
+        check(active.content.state.minimalMetric == .batteryTemperature,
+              "Minimal metric change did not reach ActivityKit")
+        check(TestSystem.requests == 1, "Minimal metric change created another activity")
+        minimal.endIfNeeded()
+        print("PASS: minimal readout selection updates the existing activity")
     }
 }

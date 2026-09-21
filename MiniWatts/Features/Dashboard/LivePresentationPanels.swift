@@ -50,6 +50,21 @@ struct LiveActivityControlPanel: View {
                     .pickerStyle(.menu)
                 }
 
+                HStack {
+                    Text("Multiple activities")
+                        .font(.subheadline)
+                    Spacer()
+                    Picker("Multiple activities", selection: $monitor.liveActivityMinimalSelection) {
+                        Text("Follow right side").tag(LiveActivityMinimalSelection.followRightSide)
+                        Text("Charging power").tag(LiveActivityMinimalSelection.chargingPower)
+                        Text("SoC temperature").tag(LiveActivityMinimalSelection.socTemperature)
+                        Text("Battery temperature").tag(LiveActivityMinimalSelection.batteryTemperature)
+                        Text("Hottest component").tag(LiveActivityMinimalSelection.hottestTemperature)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                }
+
                 if monitor.liveActivityEnabled {
                     Button {
                         monitor.restartLiveActivity()
@@ -89,6 +104,11 @@ struct LiveActivityControlPanel: View {
                 .font(.caption)
 
                 Text("Choose the compact Dynamic Island's left and right contents independently. For example, use status icon + power, or power + temperature. The right-side choice is also the primary readout when expanded.")
+                    .font(.caption)
+                    .foregroundStyle(Color.mwMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("When two or three activities share the Dynamic Island, MiniWatts shows one short reading chosen above. iOS decides its position; the left and right choices apply when MiniWatts is alone.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)

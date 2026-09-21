@@ -59,13 +59,29 @@ struct MiniWattsChargingLiveActivity: Widget {
                         state: context.state
                     )))
             } minimal: {
-                Image(systemName: context.isStale
-                      ? "pause.fill" : symbol(for: context.state.selectedMetric))
-                    .foregroundStyle(context.isStale
-                                     ? Color.secondary : color(for: context.state.selectedMetric))
-                    .accessibilityLabel(minimalAccessibilityLabel(isStale: context.isStale))
+                let metric = context.state.minimalMetric ?? context.state.selectedMetric
+                if context.isStale {
+                    Image(systemName: "pause.fill")
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Reading paused")
+                } else if let value = minimalValue(for: metric, state: context.state) {
+                    Text(verbatim: value)
+                        .font(.caption2.monospacedDigit().weight(.heavy))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .foregroundStyle(color(for: metric))
+                        .accessibilityLabel(label(for: metric))
+                        .accessibilityValue(Text(verbatim: formattedValue(for: metric,
+                                                                          state: context.state)))
+                        .accessibilityAddTraits(.updatesFrequently)
+                } else {
+                    Text(verbatim: "—")
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(label(for: metric))
+                        .accessibilityValue(Text("No reading"))
+                }
             }
-            .keylineTint(color(for: context.state.selectedMetric))
+            .keylineTint(color(for: context.state.minimalMetric ?? context.state.selectedMetric))
         }
     }
 }
@@ -270,10 +286,6 @@ private func shortLabel(for metric: LiveActivityMetric) -> LocalizedStringKey {
     }
 }
 
-private func minimalAccessibilityLabel(isStale: Bool) -> LocalizedStringKey {
-    isStale ? "Reading paused" : "MiniWatts"
-}
-
 private func symbol(for metric: LiveActivityMetric) -> String {
     switch metric {
     case .chargingPower: "bolt.fill"
@@ -306,6 +318,22 @@ private func shortValue(
 ) -> String {
     guard let value = numericValue(for: metric, state: state) else { return "—" }
     return oneDecimal(value) + unit(for: metric)
+}
+
+/// The iPhone 18 Pro can show three simultaneous activities, but each minimal
+/// surface is still tiny. Keep one decimal for normal readings, then shorten
+/// three-digit readings to fit the system's narrow minimal presentation.
+private func minimalValue(
+    for metric: LiveActivityMetric,
+    state: MiniWattsActivityAttributes.ContentState
+) -> String? {
+    guard let value = numericValue(for: metric, state: state), value.isFinite else { return nil }
+    if metric == .chargingPower {
+        guard value >= 0, value < 1_000 else { return nil }
+        return (value < 100 ? oneDecimal(value) : "\(Int(value.rounded()))") + "W"
+    }
+    guard value >= -40, value <= 150 else { return nil }
+    return (abs(value) < 100 ? oneDecimal(value) : "\(Int(value.rounded()))") + "°"
 }
 
 private func formattedValue(

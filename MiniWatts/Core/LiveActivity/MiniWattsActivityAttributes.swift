@@ -12,6 +12,28 @@ nonisolated enum LiveActivityMetric: String, Codable, CaseIterable, Identifiable
     var id: Self { self }
 }
 
+/// The minimal island is used when other activities compete for space. Keep its
+/// choice separate from the compact right side, with the old choice as default.
+nonisolated enum LiveActivityMinimalSelection: String, CaseIterable, Identifiable, Sendable {
+    case followRightSide
+    case chargingPower
+    case socTemperature
+    case batteryTemperature
+    case hottestTemperature
+
+    var id: Self { self }
+
+    func resolvedMetric(primary: LiveActivityMetric) -> LiveActivityMetric {
+        switch self {
+        case .followRightSide: primary
+        case .chargingPower: .chargingPower
+        case .socTemperature: .socTemperature
+        case .batteryTemperature: .batteryTemperature
+        case .hottestTemperature: .hottestTemperature
+        }
+    }
+}
+
 /// What appears in the compact Dynamic Island's leading slot. Keeping the
 /// status symbol as an explicit choice lets the user build either the familiar
 /// icon + reading layout or a denser reading + reading layout.
@@ -71,6 +93,9 @@ nonisolated struct MiniWattsActivityAttributes: ActivityAttributes {
         /// decodes; nil preserves the original status-symbol presentation.
         let leadingItem: LiveActivityLeadingItem?
         let selectedMetric: LiveActivityMetric
+        /// Optional so activities persisted by older builds still decode. With no
+        /// saved choice, their minimal view follows the compact right-side metric.
+        let minimalMetric: LiveActivityMetric?
         let isWireless: Bool
     }
 

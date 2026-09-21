@@ -97,6 +97,7 @@ final class ChargingLiveActivityController {
     func reconcile(snapshot: PowerSnapshot,
                    leadingItem: LiveActivityLeadingItem,
                    selectedMetric: LiveActivityMetric,
+                   minimalMetric: LiveActivityMetric,
                    enabled: Bool,
                    forceUpdate: Bool = false) {
         guard enabled else {
@@ -107,7 +108,8 @@ final class ChargingLiveActivityController {
 
         let state = Self.contentState(from: snapshot,
                                       leadingItem: leadingItem,
-                                      selectedMetric: selectedMetric)
+                                      selectedMetric: selectedMetric,
+                                      minimalMetric: minimalMetric)
         latestState = state
         // Sampling continues during recovery, but must not re-adopt or update the
         // activity being ended. Keep only the newest reading for the replacement.
@@ -116,7 +118,8 @@ final class ChargingLiveActivityController {
             guard UIApplication.shared.applicationState == .active else { return }
             recoverAfterEnteringForeground(snapshot: snapshot,
                                            leadingItem: leadingItem,
-                                           selectedMetric: selectedMetric)
+                                           selectedMetric: selectedMetric,
+                                           minimalMetric: minimalMetric)
             return
         }
 
@@ -159,12 +162,14 @@ final class ChargingLiveActivityController {
     /// `activityState` alone.
     func restart(snapshot: PowerSnapshot,
                  leadingItem: LiveActivityLeadingItem,
-                 selectedMetric: LiveActivityMetric) {
+                 selectedMetric: LiveActivityMetric,
+                 minimalMetric: LiveActivityMetric) {
         enabled = true
         automaticRecoveryCount = 0
         let state = Self.contentState(from: snapshot,
                                       leadingItem: leadingItem,
-                                      selectedMetric: selectedMetric)
+                                      selectedMetric: selectedMetric,
+                                      minimalMetric: minimalMetric)
         latestState = state
         beginRestart(state: state,
                      leadingItem: leadingItem,
@@ -232,7 +237,8 @@ final class ChargingLiveActivityController {
     func recoverAfterEnteringForeground(
         snapshot: PowerSnapshot,
         leadingItem: LiveActivityLeadingItem,
-        selectedMetric: LiveActivityMetric
+        selectedMetric: LiveActivityMetric,
+        minimalMetric: LiveActivityMetric
     ) {
         guard lifecycleTask == nil else { return }
         enabled = true
@@ -258,11 +264,13 @@ final class ChargingLiveActivityController {
         if needsReplacement {
             restart(snapshot: snapshot,
                     leadingItem: leadingItem,
-                    selectedMetric: selectedMetric)
+                    selectedMetric: selectedMetric,
+                    minimalMetric: minimalMetric)
         } else {
             reconcile(snapshot: snapshot,
                       leadingItem: leadingItem,
                       selectedMetric: selectedMetric,
+                      minimalMetric: minimalMetric,
                       enabled: true,
                       forceUpdate: true)
         }
@@ -706,7 +714,8 @@ final class ChargingLiveActivityController {
     private static func contentState(
         from snapshot: PowerSnapshot,
         leadingItem: LiveActivityLeadingItem,
-        selectedMetric: LiveActivityMetric
+        selectedMetric: LiveActivityMetric,
+        minimalMetric: LiveActivityMetric
     ) -> MiniWattsActivityAttributes.ContentState {
         let power: (watts: Double?, isBatterySide: Bool) = snapshot.externalConnected
             ? snapshot.chargingPower
@@ -723,6 +732,7 @@ final class ChargingLiveActivityController {
             sampledAt: snapshot.date,
             leadingItem: leadingItem,
             selectedMetric: selectedMetric,
+            minimalMetric: minimalMetric,
             isWireless: snapshot.isWirelessInput
         )
     }
