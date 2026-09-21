@@ -3,6 +3,7 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(PowerMonitor.self) private var monitor
     @State private var showingSettings = false
+    @State private var showingProblemReport = false
 
     private var snapshot: PowerSnapshot { monitor.snapshot }
     private var plugged: Bool { snapshot.externalConnected }
@@ -21,6 +22,7 @@ struct DashboardView: View {
             FloatingMonitorControlPanel()
         }
         .sheet(isPresented: $showingSettings) { SettingsView() }
+        .sheet(isPresented: $showingProblemReport) { ProblemReportView() }
     }
 
     private var glowColor: Color {
@@ -30,8 +32,14 @@ struct DashboardView: View {
     }
 
     private var toolbarButtons: some View {
-        Button { showingSettings = true } label: { Image(systemName: "gearshape") }
-            .tint(.mwAccent)
+        HStack {
+            Button { showingProblemReport = true } label: {
+                Label("Problem report", systemImage: "exclamationmark.bubble")
+                    .labelStyle(.iconOnly)
+            }
+            Button { showingSettings = true } label: { Image(systemName: "gearshape") }
+                .tint(.mwAccent)
+        }
     }
 
     // MARK: Hero
@@ -169,9 +177,7 @@ struct DashboardView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityLabel("System battery readings")
                     .accessibilityValue(monitor.batteryLevelCandidates)
-                ShareLink(item: monitor.diagnosticReport,
-                          subject: Text("MiniWatts diagnostics"),
-                          message: Text("MiniWatts diagnostic report")) {
+                Button { showingProblemReport = true } label: {
                     Label("Export diagnostic report", systemImage: "square.and.arrow.up")
                         .font(.subheadline.weight(.semibold))
                 }

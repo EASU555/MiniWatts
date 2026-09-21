@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(PowerMonitor.self) private var monitor
     @Environment(\.dismiss) private var dismiss
+    @State private var showingProblemReport = false
 
     var body: some View {
         @Bindable var monitor = monitor
@@ -31,6 +32,7 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .sheet(isPresented: $showingProblemReport) { ProblemReportView() }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -111,10 +113,8 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
-                ShareLink(item: monitor.diagnosticReport,
-                          subject: Text("MiniWatts diagnostics"),
-                          message: Text("MiniWatts diagnostic report")) {
-                    Label("Export diagnostic report", systemImage: "square.and.arrow.up")
+                Button { showingProblemReport = true } label: {
+                    Label("Problem report", systemImage: "exclamationmark.bubble")
                         .font(.system(size: 14, weight: .semibold))
                 }
                 .tint(.mwAccent)

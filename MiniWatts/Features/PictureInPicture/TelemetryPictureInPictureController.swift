@@ -127,6 +127,7 @@ final class TelemetryPictureInPictureController: NSObject {
 
     var contentMode: TelemetryPictureInPictureContentMode {
         didSet {
+            ProblemReportRecorder.shared.record("pip", "mode=\(contentMode.rawValue)")
             UserDefaults.standard.set(contentMode.rawValue, forKey: Self.contentModeKey)
             guard contentMode != oldValue else { return }
             if keepsSensorSamplingActive {
@@ -138,12 +139,36 @@ final class TelemetryPictureInPictureController: NSObject {
         }
     }
 
-    private(set) var isActive = false
-    private(set) var isStarting = false
-    private(set) var isStopping = false
-    private(set) var isPossible = false
-    private(set) var isVisuallyHidden = false
-    private(set) var errorMessage: LocalizedStringResource?
+    private(set) var isActive = false {
+        didSet { if oldValue != isActive { recordState("active=\(isActive)") } }
+    }
+    private(set) var isStarting = false {
+        didSet { if oldValue != isStarting { recordState("starting=\(isStarting)") } }
+    }
+    private(set) var isStopping = false {
+        didSet { if oldValue != isStopping { recordState("stopping=\(isStopping)") } }
+    }
+    private(set) var isPossible = false {
+        didSet { if oldValue != isPossible { recordState("possible=\(isPossible)") } }
+    }
+    private(set) var isVisuallyHidden = false {
+        didSet { if oldValue != isVisuallyHidden { recordState("hidden=\(isVisuallyHidden)") } }
+    }
+    private(set) var errorMessage: LocalizedStringResource? {
+        didSet { if let errorMessage { recordState("error: \(String(localized: errorMessage))") } }
+    }
+
+    private func recordState(_ message: String) {
+        ProblemReportRecorder.shared.record("pip", message)
+    }
+
+    var diagnosticSummary: String {
+        "mode=\(contentMode.rawValue) active=\(isActive) starting=\(isStarting) "
+            + "stopping=\(isStopping) possible=\(isPossible) hidden=\(isVisuallyHidden) "
+            + "power=\(showPower) temperatures=\(showTemperatures) "
+            + "layout=\(layout.rawValue) component=\(temperatureSelection.rawValue) "
+            + "error=\(errorMessage.map { String(localized: $0) } ?? "none")"
+    }
 
     @ObservationIgnored private(set) var displayLayer = AVSampleBufferDisplayLayer()
     @ObservationIgnored private var videoCallContentController: AVPictureInPictureVideoCallViewController?
@@ -271,6 +296,7 @@ final class TelemetryPictureInPictureController: NSObject {
     }
 
     func start() {
+        recordState("action: start requested; \(diagnosticSummary)")
         guard isSupported, hasSelectedContent, !keepsSensorSamplingActive else { return }
         errorMessage = nil
 
@@ -279,6 +305,8 @@ final class TelemetryPictureInPictureController: NSObject {
             try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try session.setActive(true)
         } catch {
+            let failure = error as NSError
+            recordState("audio error domain=\(failure.domain) code=\(failure.code)")
             errorMessage = "Picture in Picture audio mode could not start."
             return
         }
@@ -302,6 +330,7 @@ final class TelemetryPictureInPictureController: NSObject {
     }
 
     func stop() {
+        recordState("action: stop requested")
         invalidateStartAttempt()
         isStarting = false
         stopBackgroundPulseDriver()
@@ -548,6 +577,7 @@ final class TelemetryPictureInPictureController: NSObject {
     /// GlobalRefresh-PiP. It changes AVKit's content size rather than moving or
     /// covering a system-owned PiP window.
     func setVisuallyHidden(_ hidden: Bool) {
+        recordState("action: hide requested=\(hidden)")
         guard contentMode == .hiddenCarrier else { return }
         guard isActive else {
             errorMessage = "Start Picture in Picture before changing its hidden state."
@@ -998,6 +1028,8 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         failedToStartPictureInPictureWithError error: any Error
     ) {
         guard self.pictureInPictureController === pictureInPictureController else { return }
+        let failure = error as NSError
+        recordState("AVKit start failure domain=\(failure.domain) code=\(failure.code)")
         if isStopping {
             completeStopAttempt()
         } else if isStarting {

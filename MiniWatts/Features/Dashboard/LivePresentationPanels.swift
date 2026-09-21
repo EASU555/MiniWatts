@@ -5,6 +5,7 @@ import SwiftUI
 /// measurement hierarchy while making recovery and PiP launch one scroll away.
 struct LiveActivityControlPanel: View {
     @Environment(PowerMonitor.self) private var monitor
+    @State private var showingProblemReport = false
 
     var body: some View {
         @Bindable var monitor = monitor
@@ -81,7 +82,7 @@ struct LiveActivityControlPanel: View {
                         .font(.caption.monospaced())
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    ShareLink(item: monitor.diagnosticReport) {
+                    Button { showingProblemReport = true } label: {
                         Label("Share recovery diagnostics", systemImage: "square.and.arrow.up")
                     }
                 }
@@ -108,6 +109,7 @@ struct LiveActivityControlPanel: View {
                 }
             }
         }
+        .sheet(isPresented: $showingProblemReport) { ProblemReportView() }
     }
 }
 

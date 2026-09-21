@@ -1,6 +1,146 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "OK" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "确定"
+          }
+        }
+      }
+    },
+    "Problem report" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "问题报告"
+          }
+        }
+      }
+    },
+    "Key events are recorded locally while MiniWatts runs. The previous run is retained after reopening the app. Reports are only shared when you export them." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MiniWatts 运行时会在本机记录关键事件，重新打开后仍保留上次运行记录。只有你主动导出，报告才会被分享。"
+          }
+        }
+      }
+    },
+    "Mark problem time" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标记问题发生时间"
+          }
+        }
+      }
+    },
+    "Problem time marked" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已标记问题时间"
+          }
+        }
+      }
+    },
+    "Problem description (optional)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "问题描述（选填）"
+          }
+        }
+      }
+    },
+    "What happened? What did you tap?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发生了什么问题？之前进行了哪些操作？"
+          }
+        }
+      }
+    },
+    "Export problem report" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出问题报告"
+          }
+        }
+      }
+    },
+    "Preview problem report" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预览问题报告"
+          }
+        }
+      }
+    },
+    "Preparing report" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在准备报告"
+          }
+        }
+      }
+    },
+    "Includes app/iOS versions, device model, readings and recent events. No Apple ID, device serial number or other app content is collected. You can save the text file to Files and send it for troubleshooting." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "报告包含 APP 与 iOS 版本、机型、读数及近期事件，不采集 Apple ID、设备序列号或其他 APP 内容。可将文本文件保存到“文件”，再发送给我排查问题。"
+          }
+        }
+      }
+    },
+    "Report preview" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "报告预览"
+          }
+        }
+      }
+    },
+    "Preview shows up to 24,000 characters. The exported file includes all retained records." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预览最多显示 24,000 个字符，导出的文件包含全部已保留记录。"
+          }
+        }
+      }
+    },
+    "Could not prepare report" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法准备报告"
+          }
+        }
+      }
+    },
     "Live Activity recovery details" : {
       "localizations" : {
         "zh-Hans" : {

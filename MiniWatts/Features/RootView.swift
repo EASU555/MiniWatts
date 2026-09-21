@@ -47,6 +47,7 @@ struct RootView: View {
             }
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
+            ProblemReportRecorder.shared.record("lifecycle", "scene=\(phase)")
             switch phase {
             case .active:
                 pictureInPicture.recoverAfterEnteringForeground()
@@ -70,6 +71,7 @@ struct RootView: View {
             }
         }
         .onChange(of: keepsBackgroundSamplingActive) { _, keepSampling in
+            ProblemReportRecorder.shared.record("lifecycle", "backgroundSampling=\(keepSampling)")
             guard scenePhase == .background else { return }
             if keepSampling {
                 monitor.start()
@@ -79,6 +81,12 @@ struct RootView: View {
         }
         .onChange(of: shouldStayAwake, initial: true) { _, awake in
             UIApplication.shared.isIdleTimerDisabled = awake
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+            ProblemReportRecorder.shared.record("lifecycle", "memory warning received")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)) { _ in
+            ProblemReportRecorder.shared.record("lifecycle", "termination notification received (best effort)")
         }
     }
 

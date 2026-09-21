@@ -58,6 +58,7 @@ final class PowerMonitor {
     /// sensor tick remains the single source of truth for its content.
     var liveActivityEnabled: Bool {
         didSet {
+            appendDiagnosticEvent("action: Live Activity enabled=\(liveActivityEnabled)")
             UserDefaults.standard.set(liveActivityEnabled, forKey: Self.liveActivityEnabledKey)
             if liveActivityEnabled {
                 liveActivityController.restart(snapshot: snapshot,
@@ -71,6 +72,7 @@ final class PowerMonitor {
 
     var liveActivityLeadingItem: LiveActivityLeadingItem {
         didSet {
+            appendDiagnosticEvent("action: left metric=\(liveActivityLeadingItem.rawValue)")
             UserDefaults.standard.set(liveActivityLeadingItem.rawValue,
                                       forKey: Self.liveActivityLeadingItemKey)
             liveActivityController.reconcile(snapshot: snapshot,
@@ -83,6 +85,7 @@ final class PowerMonitor {
 
     var liveActivityMetric: LiveActivityMetric {
         didSet {
+            appendDiagnosticEvent("action: right metric=\(liveActivityMetric.rawValue)")
             UserDefaults.standard.set(liveActivityMetric.rawValue, forKey: Self.liveActivityMetricKey)
             liveActivityController.reconcile(snapshot: snapshot,
                                              leadingItem: liveActivityLeadingItem,
@@ -99,6 +102,7 @@ final class PowerMonitor {
     /// Explicit recovery path for an ActivityKit presentation that disappeared
     /// while its retained Activity object still claims to be active.
     func restartLiveActivity() {
+        appendDiagnosticEvent("action: restart Live Activity tapped")
         guard liveActivityEnabled else {
             liveActivityEnabled = true
             return
@@ -181,6 +185,7 @@ final class PowerMonitor {
     private var lastChargingFlag: Bool?
     private var lastThermalObservation: (date: Date, wasThrottling: Bool)?
     private var diagnosticEvents: [String] = []
+    private var lastReportCheckpoint = Date.distantPast
 
     init() {
         let defaults = UserDefaults.standard
@@ -305,6 +310,17 @@ final class PowerMonitor {
                                     sensors: sensors?.read() ?? [],
                                     chargeStatus: battery?.readChargeStatus())
         snapshot = current
+        if Date.now.timeIntervalSince(lastReportCheckpoint) >= 30 {
+            lastReportCheckpoint = .now
+            appendDiagnosticEvent("checkpoint: percent=\(current.percent.map(String.init) ?? "nil") "
+                + "source=\(batteryLevelSource) sample=\(current.date.timeIntervalSince1970) "
+                + "inputW=\(current.inputWatts.map { String(format: "%.2f", $0) } ?? "nil") "
+                + "batteryC=\(current.batteryTemperature.map { String(format: "%.1f", $0) } ?? "nil") "
+                + "thermal=\(thermal.state.rawValue) activity=\(liveActivityRecoveryStatus)")
+        }
+        if lastExternalConnected != current.externalConnected {
+            appendDiagnosticEvent("power: externalConnected=\(current.externalConnected)")
+        }
 
         // Charger-side sensors only exist while something is plugged in, so the
         // service list is re-enumerated on every plug event and occasionally after.
@@ -581,6 +597,7 @@ final class PowerMonitor {
     }
 
     private func appendDiagnosticEvent(_ message: String) {
+        ProblemReportRecorder.shared.record("monitor", message)
         diagnosticEvents.append("\(Formatting.timestamp(.now))  \(message)")
         if diagnosticEvents.count > 120 {
             diagnosticEvents.removeFirst(diagnosticEvents.count - 120)
@@ -623,13 +640,8 @@ final class PowerMonitor {
         lines.append("# Live sensors")
         lines.append(contentsOf: snapshot.sensors.sorted { $0.name < $1.name }
             .map { "\($0.name) = \($0.formatted)" })
-        if let powerSource = snapshot.powerSource, !powerSource.isEmpty {
-            lines.append("")
-            lines.append("# powerd power source")
-            lines.append(contentsOf: powerSource.keys.sorted().map {
-                "\($0) = \(String(describing: powerSource[$0]!))"
-            })
-        }
+        // Deliberate allowlist above: raw power-source dictionaries can contain
+        // device/accessory identifiers and must not be copied into user reports.
         return lines.joined(separator: "\n")
     }
 
