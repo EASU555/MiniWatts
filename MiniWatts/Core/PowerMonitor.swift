@@ -371,6 +371,7 @@ final class PowerMonitor {
 
         let current = PowerSnapshot(date: .now,
                                     systemBatteryPercent: levelReading?.percent,
+                                    cpuUsagePercent: raw.cpuUsagePercent,
                                     registry: raw.registry,
                                     powerSource: internalBattery,
                                     adapterDetails: raw.adapterDetails,
@@ -384,6 +385,7 @@ final class PowerMonitor {
                 + "source=\(batteryLevelSource) sample=\(current.date.timeIntervalSince1970) "
                 + "inputW=\(current.inputWatts.map { String(format: "%.2f", $0) } ?? "nil") "
                 + "batteryC=\(current.batteryTemperature.map { String(format: "%.1f", $0) } ?? "nil") "
+                + "cpu=\(current.cpuUsagePercent.map { String(format: "%.1f", $0) } ?? "nil") "
                 + "thermal=\(thermal.state.rawValue) activity=\(liveActivityRecoveryStatus) "
                 + "probeMs=\(String(format: "%.1f", raw.elapsedMilliseconds))")
         }

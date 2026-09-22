@@ -8,6 +8,7 @@ nonisolated enum LiveActivityMetric: String, Codable, CaseIterable, Identifiable
     case socTemperature
     case batteryTemperature
     case hottestTemperature
+    case cpuUsage
 
     var id: Self { self }
 }
@@ -20,6 +21,7 @@ nonisolated enum LiveActivityMinimalSelection: String, CaseIterable, Identifiabl
     case socTemperature
     case batteryTemperature
     case hottestTemperature
+    case cpuUsage
 
     var id: Self { self }
 
@@ -30,6 +32,7 @@ nonisolated enum LiveActivityMinimalSelection: String, CaseIterable, Identifiabl
         case .socTemperature: .socTemperature
         case .batteryTemperature: .batteryTemperature
         case .hottestTemperature: .hottestTemperature
+        case .cpuUsage: .cpuUsage
         }
     }
 }
@@ -42,20 +45,23 @@ nonisolated enum LiveActivityLeadingItem: String, Codable, CaseIterable, Identif
     case socIcon
     case batteryTemperatureIcon
     case hottestTemperatureIcon
+    case cpuIcon
     case chargingPower
     case socTemperature
     case batteryTemperature
     case hottestTemperature
+    case cpuUsage
 
     var id: Self { self }
 
     var metric: LiveActivityMetric? {
         switch self {
-        case .statusIcon, .socIcon, .batteryTemperatureIcon, .hottestTemperatureIcon: nil
+        case .statusIcon, .socIcon, .batteryTemperatureIcon, .hottestTemperatureIcon, .cpuIcon: nil
         case .chargingPower: .chargingPower
         case .socTemperature: .socTemperature
         case .batteryTemperature: .batteryTemperature
         case .hottestTemperature: .hottestTemperature
+        case .cpuUsage: .cpuUsage
         }
     }
 
@@ -64,8 +70,9 @@ nonisolated enum LiveActivityLeadingItem: String, Codable, CaseIterable, Identif
         case .socIcon: .socTemperature
         case .batteryTemperatureIcon: .batteryTemperature
         case .hottestTemperatureIcon: .hottestTemperature
+        case .cpuIcon: .cpuUsage
         case .statusIcon, .chargingPower, .socTemperature,
-             .batteryTemperature, .hottestTemperature: nil
+             .batteryTemperature, .hottestTemperature, .cpuUsage: nil
         }
     }
 }
@@ -81,6 +88,8 @@ nonisolated struct MiniWattsActivityAttributes: ActivityAttributes {
         /// presentation until the first new update arrives.
         let externalConnected: Bool?
         let batteryPercent: Int?
+        /// Optional so an activity persisted by an older build still decodes.
+        let cpuUsagePercent: Double?
         let socTemperature: Double?
         let batteryTemperature: Double?
         let hottestTemperature: Double?

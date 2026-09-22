@@ -15,11 +15,13 @@ actor SensorProbe {
         let sensors: [HIDSensors.Reading]
         let ioKitAvailable: Bool
         let hidServiceCount: Int?
+        let cpuUsagePercent: Double?
         let elapsedMilliseconds: Double
     }
 
     private var battery: IOKitBattery?
     private var hid: HIDSensors?
+    private var cpuLoad = SystemCPULoadReader()
     private var initialized = false
 
     private func prepareIfNeeded() {
@@ -37,6 +39,7 @@ actor SensorProbe {
         let adapterDetails = battery?.readAdapterDetails()
         let chargeStatus = battery?.readChargeStatus()
         let readings = hid?.read() ?? []
+        let cpuUsagePercent = cpuLoad.read()
         if rescanAfterward { hid?.rescan() }
         return Sample(registry: registry,
                       sources: sources,
@@ -45,6 +48,7 @@ actor SensorProbe {
                       sensors: readings,
                       ioKitAvailable: battery != nil,
                       hidServiceCount: hid?.serviceCount,
+                      cpuUsagePercent: cpuUsagePercent,
                       elapsedMilliseconds: Date.now.timeIntervalSince(started) * 1000)
     }
 

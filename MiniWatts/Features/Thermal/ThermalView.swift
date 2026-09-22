@@ -20,6 +20,7 @@ struct ThermalView: View {
     var body: some View {
         PageScaffold("Thermal", glow: glowColor) {
             statePanel
+            cpuPanel
             if snapshot.temperatures.isEmpty {
                 Panel("Sensors", systemImage: "sensor") {
                     EmptyNote(text: "No temperature sensors were found. The simulator has none; on a device they appear as soon as the app has read the HID service list.",
@@ -76,6 +77,27 @@ struct ThermalView: View {
         case .nominal: return .mwBattery
         case .fair: return .mwLoss
         default: return .mwDanger
+        }
+    }
+
+    private var cpuPanel: some View {
+        Panel("CPU usage", systemImage: "cpu") {
+            if let usage = snapshot.cpuUsagePercent {
+                BarRow(title: Text("Whole-device CPU"),
+                       detail: usage.formatted(.number.precision(.fractionLength(0))) + "%",
+                       fraction: usage / 100,
+                       tint: .mwAccent)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Whole-device CPU")
+                    .accessibilityValue(Text(verbatim: (usage / 100).formatted(.percent.precision(.fractionLength(0)))))
+            } else {
+                EmptyNote(text: "No CPU reading yet. Two live samples are needed; if this persists, iOS is not providing CPU counters.",
+                          systemImage: "cpu")
+            }
+            Text("Average busy time across the device's CPU cores during the latest sample interval. This is not MiniWatts' own CPU use, CPU frequency, or power consumption.")
+                .font(.caption2)
+                .foregroundStyle(Color.mwMuted)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

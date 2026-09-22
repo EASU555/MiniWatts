@@ -43,6 +43,8 @@ nonisolated struct ZoneTemperatures: Identifiable, Hashable {
 nonisolated struct PowerSnapshot {
     let date: Date
     let systemBatteryPercent: Int?
+    /// Busy CPU time across the whole device during the latest sampling interval.
+    let cpuUsagePercent: Double?
     let registry: [String: Any]
     let powerSource: [String: Any]?
     let adapterDetails: [String: Any]?
@@ -79,6 +81,7 @@ nonisolated struct PowerSnapshot {
 
     init(date: Date = .now,
          systemBatteryPercent: Int? = nil,
+         cpuUsagePercent: Double? = nil,
          registry: [String: Any] = [:],
          powerSource: [String: Any]? = nil,
          adapterDetails: [String: Any]? = nil,
@@ -86,6 +89,9 @@ nonisolated struct PowerSnapshot {
          chargeStatus: [String: Any]? = nil) {
         self.date = date
         self.systemBatteryPercent = systemBatteryPercent.flatMap(Self.validPercent)
+        self.cpuUsagePercent = cpuUsagePercent.flatMap {
+            $0.isFinite && (0...100).contains($0) ? $0 : nil
+        }
         self.registry = registry
         self.powerSource = powerSource
         self.adapterDetails = adapterDetails

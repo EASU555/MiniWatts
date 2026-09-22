@@ -1,6 +1,56 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "CPU usage" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CPU 占用率"
+          }
+        }
+      }
+    },
+    "CPU icon" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CPU 图标"
+          }
+        }
+      }
+    },
+    "Whole-device CPU" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整机 CPU"
+          }
+        }
+      }
+    },
+    "No CPU reading yet. Two live samples are needed; if this persists, iOS is not providing CPU counters." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂时没有 CPU 读数。需要连续两次实时采样；如果持续没有读数，说明 iOS 未提供 CPU 计数。"
+          }
+        }
+      }
+    },
+    "Average busy time across the device's CPU cores during the latest sample interval. This is not MiniWatts' own CPU use, CPU frequency, or power consumption." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近一次采样间隔内，整机各 CPU 核心的平均忙碌时间比例。它不是 MiniWatts 自身的 CPU 占用率、CPU 频率，也不是功耗。"
+          }
+        }
+      }
+    },
     "OK" : {
       "localizations" : {
         "zh-Hans" : {

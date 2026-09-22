@@ -36,6 +36,9 @@ by several entries.
   (`IOHIDEventSystemClient`, one client per process, created once), `BatteryCenterBridge`,
   `ThermalMonitor` (`ProcessInfo.thermalState`, public API), `SensorCatalog`
   (name → zone/label by whole-word keyword, never exact).
+  `SystemCPULoadReader` samples Mach `HOST_CPU_LOAD_INFO` once per sensor tick;
+  adjacent aggregate tick deltas yield whole-device CPU busy time, not this app's
+  process usage, clock speed, or power. A missing or unchanged counter is nil.
 - `Core/Model/` — `PowerSnapshot` merges all four sources and owns every derived value.
   Anything derived from the HID readings is resolved **once, in `init`, and stored** —
   it used to be computed per access, which meant a body asking for the battery

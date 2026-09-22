@@ -27,10 +27,12 @@ struct LiveActivityControlPanel: View {
                         Text("SoC icon").tag(LiveActivityLeadingItem.socIcon)
                         Text("Battery temperature icon").tag(LiveActivityLeadingItem.batteryTemperatureIcon)
                         Text("Hottest temperature icon").tag(LiveActivityLeadingItem.hottestTemperatureIcon)
+                        Text("CPU icon").tag(LiveActivityLeadingItem.cpuIcon)
                         Text("Charging power").tag(LiveActivityLeadingItem.chargingPower)
                         Text("SoC temperature").tag(LiveActivityLeadingItem.socTemperature)
                         Text("Battery temperature").tag(LiveActivityLeadingItem.batteryTemperature)
                         Text("Hottest component").tag(LiveActivityLeadingItem.hottestTemperature)
+                        Text("CPU usage").tag(LiveActivityLeadingItem.cpuUsage)
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
@@ -45,6 +47,7 @@ struct LiveActivityControlPanel: View {
                         Text("SoC temperature").tag(LiveActivityMetric.socTemperature)
                         Text("Battery temperature").tag(LiveActivityMetric.batteryTemperature)
                         Text("Hottest component").tag(LiveActivityMetric.hottestTemperature)
+                        Text("CPU usage").tag(LiveActivityMetric.cpuUsage)
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
@@ -60,6 +63,7 @@ struct LiveActivityControlPanel: View {
                         Text("SoC temperature").tag(LiveActivityMinimalSelection.socTemperature)
                         Text("Battery temperature").tag(LiveActivityMinimalSelection.batteryTemperature)
                         Text("Hottest component").tag(LiveActivityMinimalSelection.hottestTemperature)
+                        Text("CPU usage").tag(LiveActivityMinimalSelection.cpuUsage)
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)

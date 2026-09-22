@@ -174,6 +174,10 @@ private struct PrimaryMetricView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+            } else if state.selectedMetric == .cpuUsage {
+                Text("Whole-device average")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
         }
         .accessibilityElement(children: .combine)
@@ -272,6 +276,7 @@ private func numericValue(
     case .socTemperature: state.socTemperature
     case .batteryTemperature: state.batteryTemperature
     case .hottestTemperature: state.hottestTemperature
+    case .cpuUsage: state.cpuUsagePercent
     }
 }
 
@@ -281,6 +286,7 @@ private func label(for metric: LiveActivityMetric) -> LocalizedStringKey {
     case .socTemperature: "SoC temperature"
     case .batteryTemperature: "Battery temperature"
     case .hottestTemperature: "Hottest component"
+    case .cpuUsage: "CPU usage"
     }
 }
 
@@ -290,6 +296,7 @@ private func shortLabel(for metric: LiveActivityMetric) -> LocalizedStringKey {
     case .socTemperature: "SoC"
     case .batteryTemperature: "Battery"
     case .hottestTemperature: "Hottest"
+    case .cpuUsage: "CPU"
     }
 }
 
@@ -299,6 +306,7 @@ private func symbol(for metric: LiveActivityMetric) -> String {
     case .socTemperature: "cpu"
     case .batteryTemperature: "battery.75percent"
     case .hottestTemperature: "thermometer.high"
+    case .cpuUsage: "cpu"
     }
 }
 
@@ -308,11 +316,16 @@ private func color(for metric: LiveActivityMetric) -> Color {
     case .socTemperature: .orange
     case .batteryTemperature: .green
     case .hottestTemperature: .red
+    case .cpuUsage: .cyan
     }
 }
 
 private func unit(for metric: LiveActivityMetric) -> String {
-    metric == .chargingPower ? "W" : "°"
+    switch metric {
+    case .chargingPower: "W"
+    case .cpuUsage: "%"
+    case .socTemperature, .batteryTemperature, .hottestTemperature: "°"
+    }
 }
 
 private func oneDecimal(_ value: Double) -> String {
@@ -343,6 +356,8 @@ private func minimalValueVariants(
     guard let value = numericValue(for: metric, state: state), value.isFinite else { return nil }
     if metric == .chargingPower {
         guard value >= 0, value < 1_000 else { return nil }
+    } else if metric == .cpuUsage {
+        guard (0...100).contains(value) else { return nil }
     } else {
         guard value >= -40, value <= 150 else { return nil }
     }
