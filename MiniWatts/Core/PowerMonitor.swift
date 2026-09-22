@@ -31,6 +31,7 @@ final class PowerMonitor {
     private(set) var batteryLevelSampledAt: Date?
     private(set) var batteryLevelChangedAt: Date?
     private(set) var batteryLevelCandidates = "—"
+    private(set) var sensorsAvailable = false
     private(set) var liveActivityRecoveryStatus = LiveActivityRecoveryStatus.idle
     private(set) var liveActivityRecoveryDetail = ""
     /// Every power source powerd reports, not just the internal battery.
@@ -179,7 +180,6 @@ final class PowerMonitor {
         didSet { UserDefaults.standard.set(configuredBatteryWattHours, forKey: Self.wattHoursKey) }
     }
 
-    var sensorsAvailable: Bool { sensors != nil && !(sensors?.isEmpty ?? true) }
     var deviceModelIdentifier: String { Self.machineIdentifier }
 
     // MARK: Private
@@ -198,15 +198,18 @@ final class PowerMonitor {
     private static let maximumContinuousSampleInterval: TimeInterval = 10
     private static let rateEstimateMaximumAge: TimeInterval = 30 * 60
 
-    private let battery = IOKitBattery()
+    private let probe = SensorProbe()
     private let systemBatteryLevel = SystemBatteryLevelReader()
-    private let sensors = HIDSensors()
     private let batteryCenter = BatteryCenterBridge()
     private let energy = EnergyAccumulator()
     private let store = SessionStore()
     private let liveActivityController = ChargingLiveActivityController()
 
     private var task: Task<Void, Never>?
+    private var refreshInFlight = false
+    private var refreshGeneration = 0
+    private var ioKitAvailable = false
+    private var hidServiceCount: Int?
     private var lastRefreshStartedAt = Date.distantPast
     private var tick = 0
     private var lastSampleWrite: Date = .distantPast
@@ -316,6 +319,9 @@ final class PowerMonitor {
     func pause() {
         task?.cancel()
         task = nil
+        // A blocking probe cannot be cancelled midway. Discard its result if it
+        // arrives after sampling was stopped, without ever blocking the UI actor.
+        refreshGeneration &+= 1
         appendDiagnosticEvent("sampling paused")
         persist()
     }
@@ -331,12 +337,29 @@ final class PowerMonitor {
     // MARK: Refresh
 
     func refresh() {
+        // The HID and powerd calls may take longer than one frame. Never queue
+        // overlapping probes when PiP and the regular timer pulse together.
+        guard !refreshInFlight else { return }
+        refreshInFlight = true
         lastRefreshStartedAt = .now
         tick += 1
-        thermal.update()
+        let generation = refreshGeneration
+        let rescanAfterward = tick % 15 == 0
+        Task { [weak self, probe] in
+            let raw = await probe.read(rescanAfterward: rescanAfterward)
+            guard let self else { return }
+            self.refreshInFlight = false
+            guard self.refreshGeneration == generation else { return }
+            self.apply(raw)
+        }
+    }
 
-        let registry = battery?.readRegistryProperties() ?? [:]
-        let sources = battery?.readPowerSources() ?? []
+    private func apply(_ raw: SensorProbe.Sample) {
+        thermal.update()
+        ioKitAvailable = raw.ioKitAvailable
+        hidServiceCount = raw.hidServiceCount
+        sensorsAvailable = (raw.hidServiceCount ?? 0) > 0
+        let sources = raw.sources
         #if DEBUG
         // Only the Raw data screen reads this, and that screen is Debug-only, so a
         // Release build was republishing the whole array once a second for nobody.
@@ -348,19 +371,21 @@ final class PowerMonitor {
 
         let current = PowerSnapshot(date: .now,
                                     systemBatteryPercent: levelReading?.percent,
-                                    registry: registry,
+                                    registry: raw.registry,
                                     powerSource: internalBattery,
-                                    adapterDetails: battery?.readAdapterDetails(),
-                                    sensors: sensors?.read() ?? [],
-                                    chargeStatus: battery?.readChargeStatus())
+                                    adapterDetails: raw.adapterDetails,
+                                    sensors: raw.sensors,
+                                    chargeStatus: raw.chargeStatus)
         snapshot = current
+        if tick == 1 { collectDiagnostics() }
         if Date.now.timeIntervalSince(lastReportCheckpoint) >= 30 {
             lastReportCheckpoint = .now
             appendDiagnosticEvent("checkpoint: percent=\(current.percent.map(String.init) ?? "nil") "
                 + "source=\(batteryLevelSource) sample=\(current.date.timeIntervalSince1970) "
                 + "inputW=\(current.inputWatts.map { String(format: "%.2f", $0) } ?? "nil") "
                 + "batteryC=\(current.batteryTemperature.map { String(format: "%.1f", $0) } ?? "nil") "
-                + "thermal=\(thermal.state.rawValue) activity=\(liveActivityRecoveryStatus)")
+                + "thermal=\(thermal.state.rawValue) activity=\(liveActivityRecoveryStatus) "
+                + "probeMs=\(String(format: "%.1f", raw.elapsedMilliseconds))")
         }
         if lastExternalConnected != current.externalConnected {
             appendDiagnosticEvent("power: externalConnected=\(current.externalConnected)")
@@ -368,8 +393,10 @@ final class PowerMonitor {
 
         // Charger-side sensors only exist while something is plugged in, so the
         // service list is re-enumerated on every plug event and occasionally after.
-        if lastExternalConnected != current.externalConnected || tick % 15 == 0 {
-            sensors?.rescan()
+        if lastExternalConnected != current.externalConnected {
+            // The next sample sees newly enumerated charger sensors. The scan
+            // itself stays on the probe actor instead of stalling scrolling.
+            Task { [probe] in await probe.rescan() }
         }
         if tick % 5 == 1 {
             devices = batteryCenter.read()
@@ -601,8 +628,8 @@ final class PowerMonitor {
 
     private func collectDiagnostics() {
         var lines: [String] = []
-        lines.append("IOKit: \(battery == nil ? "unavailable" : "loaded")")
-        lines.append("HID sensors: \(sensors == nil ? "unavailable" : "\(sensors?.serviceCount ?? 0) services")")
+        lines.append("IOKit: \(ioKitAvailable ? "loaded" : "unavailable")")
+        lines.append("HID sensors: \(hidServiceCount.map { "\($0) services" } ?? "unavailable")")
         lines.append("BatteryCenter: \(batteryCenter.status) via \(batteryCenter.controllerOrigin)")
         lines.append("Device: \(Self.machineIdentifier)")
         #if targetEnvironment(simulator)
@@ -697,8 +724,8 @@ final class PowerMonitor {
     var batteryCenterDiagnostic: LocalizedStringResource? { batteryCenter.status.diagnostic }
 
     /// Every HID service in the system, for the debug view.
-    func hidInventory() -> [HIDSensors.ServiceInfo] {
-        sensors?.fullInventory() ?? []
+    func hidInventory() async -> [HIDSensors.ServiceInfo] {
+        await probe.inventory()
     }
 
     private static let machineIdentifier: String = {

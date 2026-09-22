@@ -96,7 +96,7 @@ struct DebugView: View {
             VStack(alignment: .leading, spacing: 10) {
                 if inventory.isEmpty {
                     Button {
-                        inventory = monitor.hidInventory()
+                        Task { inventory = await monitor.hidInventory() }
                     } label: {
                         Label("Enumerate every HID service", systemImage: "magnifyingglass")
                             .font(.system(size: 13, weight: .medium))

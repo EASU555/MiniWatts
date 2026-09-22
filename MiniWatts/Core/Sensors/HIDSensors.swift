@@ -26,14 +26,14 @@ nonisolated final class HIDSensors {
     /// summaries and widgets.
     static let plausibleCelsius = -40.0...150.0
 
-    enum Kind: Int {
+    enum Kind: Int, Sendable {
         case current = 2
         case voltage = 3
         case temperature = 5
         case other = 0
     }
 
-    struct Reading: Identifiable, Hashable {
+    struct Reading: Identifiable, Hashable, Sendable {
         let name: String
         let kind: Kind
         let value: Double
@@ -54,7 +54,7 @@ nonisolated final class HIDSensors {
     }
 
     /// One HID service as the system reports it, before any value is read.
-    struct ServiceInfo: Identifiable, Hashable {
+    struct ServiceInfo: Identifiable, Hashable, Sendable {
         let name: String
         let usagePage: Int
         let usage: Int
