@@ -112,6 +112,24 @@ final class PowerMonitor {
         }
     }
 
+    /// ActivityKit's relevance hint is a preference, not a placement command.
+    /// Keep the previous value (1) for existing installations until changed.
+    var liveActivityRelevanceScore: Int {
+        didSet {
+            guard liveActivityRelevanceScore != oldValue else { return }
+            appendDiagnosticEvent("action: Live Activity relevance=\(liveActivityRelevanceScore)")
+            UserDefaults.standard.set(liveActivityRelevanceScore,
+                                      forKey: Self.liveActivityRelevanceScoreKey)
+            liveActivityController.setRelevanceScore(liveActivityRelevanceScore)
+            liveActivityController.reconcile(snapshot: snapshot,
+                                             leadingItem: liveActivityLeadingItem,
+                                             selectedMetric: liveActivityMetric,
+                                             minimalMetric: liveActivityMinimalSelection.resolvedMetric(primary: liveActivityMetric),
+                                             enabled: liveActivityEnabled,
+                                             forceUpdate: true)
+        }
+    }
+
     var liveActivitiesAvailable: Bool {
         ChargingLiveActivityController.areActivitiesEnabled
     }
@@ -175,6 +193,7 @@ final class PowerMonitor {
     private static let liveActivityLeadingItemKey = "liveActivityLeadingItem"
     private static let liveActivityMetricKey = "liveActivityMetric"
     private static let liveActivityMinimalSelectionKey = "liveActivityMinimalSelection"
+    private static let liveActivityRelevanceScoreKey = "liveActivityRelevanceScore"
     private static let liveWindow = 180
     private static let maximumContinuousSampleInterval: TimeInterval = 10
     private static let rateEstimateMaximumAge: TimeInterval = 30 * 60
@@ -221,6 +240,9 @@ final class PowerMonitor {
             .flatMap(LiveActivityMetric.init(rawValue:)) ?? .chargingPower
         liveActivityMinimalSelection = defaults.string(forKey: Self.liveActivityMinimalSelectionKey)
             .flatMap(LiveActivityMinimalSelection.init(rawValue:)) ?? .followRightSide
+        let savedRelevanceScore = defaults.object(forKey: Self.liveActivityRelevanceScoreKey) as? Int
+        liveActivityRelevanceScore = savedRelevanceScore == 0 ? 0 : 1
+        liveActivityController.setRelevanceScore(liveActivityRelevanceScore)
         systemBatteryLevel.onSystemChange = { [weak self] in
             self?.refreshIfDue(minimumInterval: 0)
         }

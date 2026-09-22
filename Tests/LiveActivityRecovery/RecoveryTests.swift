@@ -146,5 +146,27 @@ struct PowerSnapshot {
         check(TestSystem.requests == 1, "Minimal metric change created another activity")
         minimal.endIfNeeded()
         print("PASS: minimal readout selection updates the existing activity")
+
+        // Changing the relevance hint must update the same ActivityContent in
+        // place. Placement is iOS-owned, so only the submitted hint is testable.
+        TestSystem.reset()
+        let priority = ChargingLiveActivityController()
+        tick(priority)
+        try? await Task.sleep(for: .milliseconds(100))
+        guard let priorityActivity = Activity<MiniWattsActivityAttributes>.activities.first else {
+            fatalError("Priority test did not start an activity")
+        }
+        check(priorityActivity.content.relevanceScore == 1, "Default relevance changed")
+        priority.setRelevanceScore(0)
+        tick(priority)
+        try? await Task.sleep(for: .milliseconds(150))
+        check(priorityActivity.content.relevanceScore == 0, "Lower relevance did not reach ActivityKit")
+        check(TestSystem.requests == 1, "Changing relevance restarted the activity")
+        priority.setRelevanceScore(1)
+        tick(priority)
+        try? await Task.sleep(for: .milliseconds(150))
+        check(priorityActivity.content.relevanceScore == 1, "Higher relevance did not reach ActivityKit")
+        priority.endIfNeeded()
+        print("PASS: relevance switches between 0 and 1 on the existing activity")
     }
 }

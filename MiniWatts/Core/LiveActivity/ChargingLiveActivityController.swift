@@ -54,6 +54,7 @@ final class ChargingLiveActivityController {
     private var pendingStateTimeoutTask: Task<Void, Never>?
     private var pendingStateActivityID: String?
     private var enabled = false
+    private var relevanceScore: Double = 1
     private var needsForegroundRecovery = false
     private var automaticRecoveryCount = 0
     private var retiredActivityIDs: Set<String> = []
@@ -93,6 +94,10 @@ final class ChargingLiveActivityController {
     }
 
     var isRunning: Bool { activity != nil }
+
+    func setRelevanceScore(_ score: Int) {
+        relevanceScore = score == 0 ? 0 : 1
+    }
 
     func reconcile(snapshot: PowerSnapshot,
                    leadingItem: LiveActivityLeadingItem,
@@ -707,7 +712,7 @@ final class ChargingLiveActivityController {
         ActivityContent(
             state: state,
             staleDate: date.addingTimeInterval(Self.staleInterval),
-            relevanceScore: 1
+            relevanceScore: relevanceScore
         )
     }
 

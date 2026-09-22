@@ -65,6 +65,24 @@ struct LiveActivityControlPanel: View {
                     .pickerStyle(.menu)
                 }
 
+                HStack {
+                    Text("Relevance score (experimental)")
+                        .font(.subheadline)
+                    Spacer()
+                    Picker("Relevance score (experimental)", selection: $monitor.liveActivityRelevanceScore) {
+                        Text("1 · Current default").tag(1)
+                        Text("0 · Lower relevance").tag(0)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .accessibilityHint("Sends an update to the current Live Activity without restarting it. iOS decides the final position.")
+                }
+
+                Text("MiniWatts sends the new score to the current Live Activity immediately. Apple documents this score for ranking multiple activities from the same app; it does not guarantee a change in position next to other apps. When MiniWatts is alone, its display stays the same.")
+                    .font(.caption)
+                    .foregroundStyle(Color.mwMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 if monitor.liveActivityEnabled {
                     Button {
                         monitor.restartLiveActivity()

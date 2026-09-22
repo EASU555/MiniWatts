@@ -2505,6 +2505,56 @@
         }
       }
     },
+    "Relevance score (experimental)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "排序分数（实验性）"
+          }
+        }
+      }
+    },
+    "1 · Current default" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 · 当前默认"
+          }
+        }
+      }
+    },
+    "0 · Lower relevance" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "0 · 较低关联度"
+          }
+        }
+      }
+    },
+    "Sends an update to the current Live Activity without restarting it. iOS decides the final position." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无需重启即可向当前实时活动发送更新；最终位置由 iOS 决定。"
+          }
+        }
+      }
+    },
+    "MiniWatts sends the new score to the current Live Activity immediately. Apple documents this score for ranking multiple activities from the same app; it does not guarantee a change in position next to other apps. When MiniWatts is alone, its display stays the same." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换后 MiniWatts 会立即向当前实时活动发送新分数。Apple 仅明确说明它用于同一 App 多个活动的排序；与其他 App 并存时不保证位置变化。仅有 MiniWatts 时，显示方式不变。"
+          }
+        }
+      }
+    },
     "Restart Live Activity" : {
       "localizations" : {
         "zh-Hans" : {

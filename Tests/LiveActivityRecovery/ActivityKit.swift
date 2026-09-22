@@ -8,7 +8,11 @@ public enum ActivityState: Sendable { case active, stale, pending, ended, dismis
 public enum ActivityUIDismissalPolicy: Sendable { case immediate }
 public struct ActivityContent<State: Sendable>: Sendable {
     public let state: State
-    public init(state: State, staleDate: Date?, relevanceScore: Double) { self.state = state }
+    public let relevanceScore: Double
+    public init(state: State, staleDate: Date?, relevanceScore: Double) {
+        self.state = state
+        self.relevanceScore = relevanceScore
+    }
 }
 public struct ActivityAuthorizationInfo {
     public init() {}
