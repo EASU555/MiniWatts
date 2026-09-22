@@ -9,6 +9,7 @@ struct PowerSnapshot {
     var chargingPower: (watts: Double?, isBatterySide: Bool) = (12, false)
     var batteryWatts: Double? = 10
     var percent: Int? = 50
+    var cpuUsagePercent: Double? = 24
     var socTemperature: Double? = 32
     var batteryTemperature: Double? = 30
     var hottestSensor: (value: Double, name: String)? = nil
