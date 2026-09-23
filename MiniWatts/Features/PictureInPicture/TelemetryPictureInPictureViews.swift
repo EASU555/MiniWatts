@@ -92,7 +92,9 @@ struct TelemetryVideoFrameView: View {
         let seconds = max(0, Int(Date.now.timeIntervalSince(data.date)))
         if seconds >= 30 { return ("Paused", seconds, .orange) }
         if seconds >= 3 { return ("Delayed", seconds, .orange) }
-        return ("Live", seconds, .green)
+        // A video frame can freeze if iOS suspends the compositor. "Sampled" and
+        // the absolute timestamp at the right stay truthful even in that case.
+        return ("Sampled", seconds, .cyan)
     }
 
     private var displaysPowerPage: Bool {
@@ -158,7 +160,7 @@ struct TelemetryVideoFrameView: View {
             Text(freshness.label)
                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                 .foregroundStyle(.secondary)
-            if data != nil {
+            if data != nil, freshness.seconds >= 3 {
                 Text(verbatim: "· \(freshness.seconds)s")
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.secondary)

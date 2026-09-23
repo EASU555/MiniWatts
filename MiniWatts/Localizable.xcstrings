@@ -11,12 +11,12 @@
         }
       }
     },
-    "Live" : {
+    "Sampled" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "实时"
+            "value" : "已采样"
           }
         }
       }
