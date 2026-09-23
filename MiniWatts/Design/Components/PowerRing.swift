@@ -37,8 +37,9 @@ struct PowerRing: View {
             centre
         }
         .frame(width: size, height: size)
-        .animation(.easeOut(duration: 0.45), value: inputFraction)
-        .animation(.easeOut(duration: 0.45), value: batteryFraction)
+        // Sensor data changes once per second. Animating both arcs for almost
+        // half of every second kept nonessential rendering work active while
+        // the user scrolled the dashboard. A direct instrument update is enough.
     }
 
     private var ticks: some View {
@@ -63,6 +64,7 @@ struct PowerRing: View {
                                lineWidth: major ? 1.5 : 1)
             }
         }
+        .drawingGroup()
     }
 
     private func arc(width: CGFloat, inset: CGFloat, fraction: CGFloat, color: Color) -> some View {
@@ -73,7 +75,6 @@ struct PowerRing: View {
             Circle()
                 .trim(from: 0, to: sweep * fraction)
                 .stroke(Theme.gradient(color), style: StrokeStyle(lineWidth: width, lineCap: .round))
-                .shadow(color: color.opacity(fraction > 0.01 ? 0.55 : 0), radius: 10)
         }
         .rotationEffect(.degrees(startAngle))
         .padding(width / 2 + inset)
@@ -84,7 +85,7 @@ struct PowerRing: View {
             if let inputWatts {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text(Formatting.watts(inputWatts))
-                        .mwReadout(size: 52, weight: .semibold, rolling: true)
+                        .mwReadout(size: 52, weight: .semibold)
                         .foregroundStyle(tint)
                     Text(verbatim: "W")
                         .font(.system(size: 20, weight: .medium, design: .rounded))

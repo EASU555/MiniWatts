@@ -11,6 +11,15 @@ nonisolated struct LiveSample: Identifiable, Hashable {
     var id: Date { date }
 }
 
+enum HistoryStorageState: Equatable {
+    case loading
+    case ready
+    case recoveredFromBackup
+    case loadFailed
+    case saveFailed
+    case backupFailed
+}
+
 /// Drives every probe on a one-second tick and merges the results into one
 /// observable object the whole UI reads from.
 @Observable
@@ -46,6 +55,8 @@ final class PowerMonitor {
     /// the load is asynchronous now, and a save that landed first would overwrite
     /// the whole history with an empty array.
     private(set) var isLoaded = false
+    private(set) var historyStorageState: HistoryStorageState = .loading
+    private(set) var historyStorageDetail = ""
 
     /// Whether to hold the screen awake while the phone is plugged in.
     ///
@@ -221,10 +232,11 @@ final class PowerMonitor {
     /// closed at this point rather than at `.now`, so a charge that ended while the
     /// app was suspended is not recorded as having run until the app came back.
     private var lastConnectedObservation: Date?
-    /// Set by `deleteAllSessions`. The load is asynchronous, so a delete that lands
-    /// while it is still in flight would otherwise have the file's contents merged
-    /// back in on top of it a moment later.
-    private var discardedStoredSessions = false
+    /// An explicit delete invalidates an asynchronous load already in flight.
+    private var sessionLoadGeneration = 0
+    private var sessionLoadInFlight = false
+    /// Late write callbacks must not overwrite the status of a newer save/delete.
+    private var storeOperationGeneration = 0
     private var percentLog: [(date: Date, percent: Int)] = []
     private var lastChargingFlag: Bool?
     private var lastThermalObservation: (date: Date, wasThrottling: Bool)?
@@ -279,9 +291,31 @@ final class PowerMonitor {
 
     /// Reads the session file off the main thread and merges it in.
     private func loadStoredSessions() async {
-        let stored = await store.loaded()
-        guard !discardedStoredSessions else {
-            isLoaded = true
+        guard !sessionLoadInFlight else { return }
+        sessionLoadInFlight = true
+        let generation = sessionLoadGeneration
+        let result = await store.loaded()
+        sessionLoadInFlight = false
+        guard generation == sessionLoadGeneration else { return }
+
+        let stored: [ChargeSession]
+        switch result {
+        case .loaded(let sessions):
+            stored = sessions
+            historyStorageState = .ready
+            historyStorageDetail = ""
+        case .recovered(let sessions, let reason):
+            stored = sessions
+            historyStorageState = .recoveredFromBackup
+            historyStorageDetail = reason
+            appendDiagnosticEvent("history restored from backup: \(reason)")
+        case .failed(let reason):
+            // Do not turn an unreadable file into an empty history. In particular,
+            // keep `isLoaded` false so a subsequent periodic save cannot erase it.
+            isLoaded = false
+            historyStorageState = .loadFailed
+            historyStorageDetail = reason
+            appendDiagnosticEvent("history load failed; writes held: \(reason)")
             return
         }
         let restored = stored.map { session in
@@ -299,6 +333,12 @@ final class PowerMonitor {
         sessions = (sessions + restored.filter { !known.contains($0.id) })
             .sorted { $0.start > $1.start }
         isLoaded = true
+    }
+
+    func retryLoadingHistory() {
+        guard historyStorageState == .loadFailed, !sessionLoadInFlight else { return }
+        historyStorageState = .loading
+        Task { await loadStoredSessions() }
     }
 
     // MARK: Lifecycle
@@ -553,7 +593,35 @@ final class PowerMonitor {
     private func persist() {
         guard isLoaded else { return }
         lastPersist = .now
-        store.save(sessions + (currentSession.map { [$0] } ?? []))
+        saveSessions(sessions + (currentSession.map { [$0] } ?? []))
+    }
+
+    func retrySavingHistory() {
+        guard isLoaded else { return }
+        persist()
+    }
+
+    private func saveSessions(_ sessions: [ChargeSession]) {
+        storeOperationGeneration &+= 1
+        let generation = storeOperationGeneration
+        store.save(sessions) { [weak self] result in
+            Task { @MainActor [weak self] in
+                guard let self, generation == self.storeOperationGeneration else { return }
+                switch result {
+                case .saved:
+                    self.historyStorageState = .ready
+                    self.historyStorageDetail = ""
+                case .backupFailed(let reason):
+                    self.historyStorageState = .backupFailed
+                    self.historyStorageDetail = reason
+                    self.appendDiagnosticEvent("history saved, backup failed: \(reason)")
+                case .failed(let reason):
+                    self.historyStorageState = .saveFailed
+                    self.historyStorageDetail = reason
+                    self.appendDiagnosticEvent("history save failed: \(reason)")
+                }
+            }
+        }
     }
 
     func deleteSession(_ session: ChargeSession) {
@@ -562,13 +630,16 @@ final class PowerMonitor {
     }
 
     func deleteAllSessions() {
-        discardedStoredSessions = true
+        sessionLoadGeneration &+= 1
+        isLoaded = true
         sessions.removeAll()
         currentSession = nil
         lastThermalObservation = nil
         energy.reset()
         sessionTotals = EnergyTotals()
-        store.deleteAll()
+        // Save an empty valid primary and backup. Removing only the primary
+        // would resurrect the old backup on the next launch.
+        saveSessions([])
     }
 
     // MARK: Rate estimate
@@ -800,6 +871,8 @@ final class PowerMonitor {
             "Battery candidates: \(batteryLevelCandidates)",
             "Battery sampled: \(batteryLevelSampledAt.map(Formatting.timestamp) ?? "—")",
             "Battery last changed: \(batteryLevelChangedAt.map(Formatting.timestamp) ?? "—")",
+            "History storage: \(historyStorageState)",
+            "History storage detail: \(historyStorageDetail.isEmpty ? "—" : historyStorageDetail)",
             "Snapshot: \(Formatting.timestamp(snapshot.date))",
             "Snapshot age: \(String(format: "%.2f s", Date.now.timeIntervalSince(snapshot.date)))",
             "CPU sampled: \(cpuSampledAt.map(Self.epoch) ?? "—")",

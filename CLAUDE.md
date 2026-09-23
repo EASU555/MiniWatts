@@ -46,7 +46,7 @@ by several entries.
   (which lowercases and splits) once per sensor per scan. Registry lookups stay
   computed: those are single hash hits. Also here:
   `EnergyAccumulator` integrates ∫V·I dt; `ChargeSession` + `SessionStore` persist charges
-  as one JSON file in Application Support.
+  as a primary JSON file and safety copy in Application Support.
 - `Core/PowerMonitor.swift` — `@Observable`, 1 s tick, drives everything and owns session
   lifecycle. Injected once in `MiniWattsApp`, read via `@Environment(PowerMonitor.self)`.
   `headline` lives here rather than on the snapshot: its last fallback is the %-rate
@@ -114,8 +114,12 @@ foreground. Three things make that work and they are easy to undo by accident:
 `SessionStore` encodes and writes on its own serial queue, coalescing bursts, and the
 load in `PowerMonitor.init` is a `Task`. At the ceiling — 60 sessions × 1,500 samples —
 the file is several megabytes, and doing that inline was a stall before the first frame
-and again every thirty seconds during a charge. `persist()` is a no-op until `isLoaded`,
-or a save landing before the load would truncate the history to nothing.
+and again every thirty seconds during a charge. Each successful save also updates a
+second JSON safety copy. A damaged primary is recovered from that copy; two unreadable
+copies are **not** treated as empty history. The History page shows load/write failures
+and offers a safe retry. `persist()` remains a no-op until a valid load completes,
+or a save landing before the load could truncate history to nothing. Explicit Delete
+All writes an empty primary **and** backup so old sessions cannot reappear on restart.
 
 ## Localization
 
@@ -277,9 +281,14 @@ via `mwReadout(rolling:)` now, used only by the dial), and the heat map's 0.6 s
 animation, which was retriggered every second on a `blur` + `plusLighter` layer.
 The grid `Canvas` is `.drawingGroup()`-rasterised.
 
-Deliberately kept despite the cost, as design decisions: the `Backdrop`'s full-screen
-`plusLighter` glow, and `PowerRing`'s `.shadow` on a stroked arc (a non-rectangular
-shadow is an offscreen pass per frame).
+The dashboard ring now updates its arcs directly once per sample rather than animating
+for 0.45 s of every second; its stroked-arc shadow was also removed. The fixed tick
+marks are rasterised. This targets the main-screen scroll hitches without changing
+sensor cadence. While the user scrolls the first page, a short-lived `CADisplayLink`
+records callback intervals in the problem report. That is a main-run-loop cadence
+proxy, **not** proof of rendered FPS or a promise of 120 Hz. Verify with a Release
+Instruments Core Animation + Time Profiler run on iOS 27 before claiming that goal.
+The `Backdrop`'s full-screen `plusLighter` glow remains a design choice.
 
 ## Conventions
 

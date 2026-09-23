@@ -1,7 +1,7 @@
 import Foundation
 
 /// One point on a session's charge curve.
-nonisolated struct ChargeSample: Codable, Hashable, Identifiable {
+nonisolated struct ChargeSample: Codable, Hashable, Identifiable, Sendable {
     /// Seconds since the session started.
     let offset: TimeInterval
     /// Nil means the corresponding private sensor did not report. It must remain
@@ -19,7 +19,7 @@ nonisolated struct ChargeSample: Codable, Hashable, Identifiable {
 }
 
 /// Everything recorded between plugging in and unplugging.
-nonisolated struct ChargeSession: Codable, Identifiable, Hashable {
+nonisolated struct ChargeSession: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let start: Date
     var end: Date?
@@ -71,7 +71,7 @@ nonisolated struct ChargeSession: Codable, Identifiable, Hashable {
     }
 }
 
-/// Persists charge sessions as a single JSON file in Application Support.
+/// Persists charge sessions and a recoverable copy in Application Support.
 ///
 /// Encoding and writing happen on a background queue. They used to happen inline on
 /// whatever thread called: at the ceiling of 60 sessions × 1,500 samples the file is
@@ -85,6 +85,18 @@ nonisolated struct ChargeSession: Codable, Identifiable, Hashable {
 /// mutable member (`pending`) is touched only from inside `queue`, which is serial,
 /// and `url` is a `let`.
 nonisolated final class SessionStore: @unchecked Sendable {
+    enum LoadResult: Sendable {
+        case loaded([ChargeSession])
+        case recovered([ChargeSession], reason: String)
+        case failed(String)
+    }
+
+    enum SaveResult: Sendable {
+        case saved
+        case backupFailed(String)
+        case failed(String)
+    }
+
     /// Sessions kept on disk; older ones are dropped oldest-first.
     private static let sessionLimit = 60
     /// Points kept per session. Longer sessions are halved in place as they grow.
@@ -93,37 +105,74 @@ nonisolated final class SessionStore: @unchecked Sendable {
     static let sampleInterval: TimeInterval = 5
 
     private let url: URL
+    private let backupURL: URL
     private let queue = DispatchQueue(label: "org.zhaohe.MiniWatts.sessions", qos: .utility)
     /// Guarded by `queue`. Holds at most the newest pending write.
     private var pending: [ChargeSession]?
+    private var pendingCompletions: [@Sendable (SaveResult) -> Void] = []
 
-    init(filename: String = "charge-sessions.json") {
-        let directory = (try? FileManager.default.url(for: .applicationSupportDirectory,
-                                                      in: .userDomainMask,
-                                                      appropriateFor: nil,
-                                                      create: true))
-            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+    init(filename: String = "charge-sessions.json", directory: URL? = nil) {
+        // A temporary-directory fallback would make a failed Application Support
+        // lookup look like a successful but permanently lost history.
+        let directory = directory ?? FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        )[0]
         url = directory.appendingPathComponent(filename)
+        backupURL = directory.appendingPathComponent(filename + ".backup")
     }
 
-    /// Reads the file. Call this off the main thread — `loaded()` does that for you.
-    private func read() -> [ChargeSession] {
-        guard let data = try? Data(contentsOf: url),
-              let sessions = try? JSONDecoder().decode([ChargeSession].self, from: data) else { return [] }
-        return sessions.sorted { $0.start > $1.start }
+    /// Missing is an empty first run; unreadable or invalid is never empty history.
+    private func readFile(_ file: URL) throws -> [ChargeSession]? {
+        guard FileManager.default.fileExists(atPath: file.path) else { return nil }
+        let data = try Data(contentsOf: file)
+        return try JSONDecoder().decode([ChargeSession].self, from: data)
     }
 
-    func loaded() async -> [ChargeSession] {
+    private func failureCode(_ error: Error) -> String {
+        let value = error as NSError
+        // Avoid placing the app-container path or other local details in a
+        // shareable problem report. Domain and code identify the failure class.
+        return "\(value.domain)(\(value.code))"
+    }
+
+    private func read() -> LoadResult {
+        do {
+            if let sessions = try readFile(url) {
+                return .loaded(sessions.sorted { $0.start > $1.start })
+            }
+        } catch {
+            let primaryError = "primary: \(failureCode(error))"
+            do {
+                if let backup = try readFile(backupURL) {
+                    return .recovered(backup.sorted { $0.start > $1.start }, reason: primaryError)
+                }
+                return .failed(primaryError + "; backup missing")
+            } catch {
+                return .failed(primaryError + "; backup: \(failureCode(error))")
+            }
+        }
+        do {
+            if let backup = try readFile(backupURL) {
+                return .recovered(backup.sorted { $0.start > $1.start }, reason: "primary missing")
+            }
+            return .loaded([])
+        } catch {
+            return .failed("primary missing; backup: \(failureCode(error))")
+        }
+    }
+
+    func loaded() async -> LoadResult {
         await withCheckedContinuation { continuation in
             queue.async { continuation.resume(returning: self.read()) }
         }
     }
 
     /// Queues a write and returns immediately.
-    func save(_ sessions: [ChargeSession]) {
+    func save(_ sessions: [ChargeSession], completion: @escaping @Sendable (SaveResult) -> Void) {
         queue.async {
             let hadPending = self.pending != nil
             self.pending = sessions
+            self.pendingCompletions.append(completion)
             // One drain task per burst: if a write is already queued behind us it
             // will pick up whatever `pending` holds by the time it runs.
             guard !hadPending else { return }
@@ -135,15 +184,27 @@ nonisolated final class SessionStore: @unchecked Sendable {
     private func drain() {
         guard let sessions = pending else { return }
         pending = nil
+        let completions = pendingCompletions
+        pendingCompletions = []
         let trimmed = Array(sessions.sorted { $0.start > $1.start }.prefix(Self.sessionLimit))
-        guard let data = try? JSONEncoder().encode(trimmed) else { return }
-        try? data.write(to: url, options: .atomic)
-    }
-
-    func deleteAll() {
-        queue.async {
-            self.pending = nil
-            try? FileManager.default.removeItem(at: self.url)
+        let result: SaveResult
+        do {
+            let data = try JSONEncoder().encode(trimmed)
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
+            // Write the primary first. If this succeeds and the second write
+            // fails, the newest history is still readable on next launch.
+            try data.write(to: url, options: .atomic)
+            do {
+                try data.write(to: backupURL, options: .atomic)
+                result = .saved
+            } catch {
+                result = .backupFailed(failureCode(error))
+            }
+        } catch {
+            result = .failed(failureCode(error))
         }
+        completions.forEach { $0(result) }
     }
 }

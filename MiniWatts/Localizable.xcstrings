@@ -1,6 +1,66 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Loading history" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在载入历史记录" } }
+      }
+    },
+    "Checking saved charges" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在检查已保存的充电记录" } }
+      }
+    },
+    "History could not be read" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法读取历史记录" } }
+      }
+    },
+    "Saved charges were not erased. Recording is paused until the file can be read; export a problem report if retrying fails." : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已保存的记录没有被清除。读取文件成功前会暂停写入；如果重试仍失败，请导出错误报告。" } }
+      }
+    },
+    "Retry loading history" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重试读取历史记录" } }
+      }
+    },
+    "Retry saving history" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重试保存历史记录" } }
+      }
+    },
+    "History recovered" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "历史记录已恢复" } }
+      }
+    },
+    "The main history file could not be read, so MiniWatts loaded its safety copy. The newest unsaved readings may be missing." : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主记录文件无法读取，MiniWatts 已载入安全副本。最近尚未保存的读数可能缺失。" } }
+      }
+    },
+    "History not saved" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "历史记录尚未保存" } }
+      }
+    },
+    "Current charges are still in memory, but the last disk write failed. MiniWatts will retry during the next charge; export a problem report if this continues." : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前充电记录仍在内存中，但上次写入磁盘失败。MiniWatts 会在下次充电期间重试；若持续发生，请导出错误报告。" } }
+      }
+    },
+    "History safety copy unavailable" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "历史记录安全副本不可用" } }
+      }
+    },
+    "The main history file was saved, but its safety copy could not be updated. MiniWatts will retry on the next save." : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主记录文件已保存，但安全副本更新失败。MiniWatts 会在下次保存时重试。" } }
+      }
+    },
     "Battery sensor spread" : {
       "localizations" : {
         "zh-Hans" : {

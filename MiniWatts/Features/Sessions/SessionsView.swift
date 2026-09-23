@@ -16,10 +16,50 @@ struct SessionsView: View {
 
     var body: some View {
         PageScaffold("History", glow: .mwBattery, toolbar: AnyView(toolbar)) {
+            switch monitor.historyStorageState {
+            case .loading:
+                Panel("Loading history", systemImage: "clock.arrow.circlepath") {
+                    ProgressView("Checking saved charges")
+                }
+            case .loadFailed:
+                Panel("History could not be read", systemImage: "exclamationmark.triangle") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        EmptyNote(text: "Saved charges were not erased. Recording is paused until the file can be read; export a problem report if retrying fails.")
+                        Button("Retry loading history") { monitor.retryLoadingHistory() }
+                            .buttonStyle(.bordered)
+                    }
+                }
+            case .recoveredFromBackup:
+                Panel("History recovered", systemImage: "checkmark.shield") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        EmptyNote(text: "The main history file could not be read, so MiniWatts loaded its safety copy. The newest unsaved readings may be missing.")
+                        Button("Retry saving history") { monitor.retrySavingHistory() }
+                            .buttonStyle(.bordered)
+                    }
+                }
+            case .saveFailed:
+                Panel("History not saved", systemImage: "exclamationmark.triangle") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        EmptyNote(text: "Current charges are still in memory, but the last disk write failed. MiniWatts will retry during the next charge; export a problem report if this continues.")
+                        Button("Retry saving history") { monitor.retrySavingHistory() }
+                            .buttonStyle(.bordered)
+                    }
+                }
+            case .backupFailed:
+                Panel("History safety copy unavailable", systemImage: "exclamationmark.triangle") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        EmptyNote(text: "The main history file was saved, but its safety copy could not be updated. MiniWatts will retry on the next save.")
+                        Button("Retry saving history") { monitor.retrySavingHistory() }
+                            .buttonStyle(.bordered)
+                    }
+                }
+            case .ready:
+                EmptyView()
+            }
             if let session = monitor.currentSession {
                 currentPanel(session)
             }
-            if monitor.sessions.isEmpty {
+            if monitor.isLoaded && monitor.sessions.isEmpty {
                 Panel("No finished charges yet", systemImage: "clock.arrow.circlepath") {
                     EmptyNote(text: "A session starts when you plug in and is saved when you unplug. Energy is integrated from the live sensors, so keep MiniWatts in the foreground for the totals to cover the whole charge.",
                               systemImage: "bolt.badge.clock")

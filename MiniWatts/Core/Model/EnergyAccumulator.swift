@@ -6,7 +6,7 @@ import Foundation
 /// voltage and current at ~1 Hz on both sides of the charge IC. Integrating those
 /// gives the two numbers that actually matter — how much energy the adapter
 /// delivered, and how much of it reached the cell.
-nonisolated struct EnergyTotals: Codable, Hashable {
+nonisolated struct EnergyTotals: Codable, Hashable, Sendable {
     /// ∫ V·I dt at the adapter, in watt-hours.
     var inputWattHours: Double = 0
     /// ∫ V·I dt at the battery rail, in watt-hours.

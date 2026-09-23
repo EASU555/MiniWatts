@@ -146,15 +146,18 @@ struct PageScaffold<Content: View>: View {
     let title: LocalizedStringResource
     var glow: Color = .mwAccent
     var toolbar: AnyView?
+    var onScrollingChanged: ((Bool) -> Void)?
     @ViewBuilder var content: () -> Content
 
     init(_ title: LocalizedStringResource,
          glow: Color = .mwAccent,
          toolbar: AnyView? = nil,
+         onScrollingChanged: ((Bool) -> Void)? = nil,
          @ViewBuilder content: @escaping () -> Content) {
         self.title = title
         self.glow = glow
         self.toolbar = toolbar
+        self.onScrollingChanged = onScrollingChanged
         self.content = content
     }
 
@@ -162,24 +165,7 @@ struct PageScaffold<Content: View>: View {
         NavigationStack {
             ZStack {
                 Backdrop(glow: glow)
-                ScrollView {
-                    // Lazy, not a plain `VStack`. History puts up to sixty session
-                    // panels in here, each with its own sparkline, and an eager stack
-                    // builds and measures every one of them — while charging, once a
-                    // second, because the page reads the live session.
-                    LazyVStack(spacing: 14) {
-                        content()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 4)
-                    .padding(.bottom, 24)
-                    // Pinned to the container's width so nothing inside can widen the
-                    // scroll content. A paragraph inside an HStack reports an enormous
-                    // ideal width — the text unwrapped onto one line — and
-                    // `.frame(maxWidth: .infinity)` only expands, it does not clamp, so
-                    // that width propagates up and the page starts scrolling sideways.
-                    .containerRelativeFrame(.horizontal)
-                }
+                scrollView
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.large)
@@ -192,6 +178,31 @@ struct PageScaffold<Content: View>: View {
                     ToolbarItem(placement: .topBarTrailing) { toolbar }
                 }
             }
+        }
+    }
+
+    @ViewBuilder private var scrollView: some View {
+        if #available(iOS 18.0, *), onScrollingChanged != nil {
+            scrollContent.onScrollPhaseChange { _, phase in
+                onScrollingChanged?(phase.isScrolling)
+            }
+        } else {
+            scrollContent
+        }
+    }
+
+    private var scrollContent: some View {
+        ScrollView {
+            // History can hold sixty session panels. Keep layout lazy so only
+            // visible rows are measured during the one-second sensor tick.
+            LazyVStack(spacing: 14) {
+                content()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+            .padding(.bottom, 24)
+            // Clamp long labels to the page width instead of widening the scroll.
+            .containerRelativeFrame(.horizontal)
         }
     }
 }

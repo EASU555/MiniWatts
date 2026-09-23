@@ -2,14 +2,20 @@ import SwiftUI
 
 struct DashboardView: View {
     @Environment(PowerMonitor.self) private var monitor
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showingSettings = false
     @State private var showingProblemReport = false
+    @State private var scrollProbe = DashboardScrollProbe()
 
     private var snapshot: PowerSnapshot { monitor.snapshot }
     private var plugged: Bool { snapshot.externalConnected }
 
     var body: some View {
-        PageScaffold("MiniWatts", glow: glowColor, toolbar: AnyView(toolbarButtons)) {
+        PageScaffold("MiniWatts", glow: glowColor, toolbar: AnyView(toolbarButtons),
+                     onScrollingChanged: { scrolling in
+                         if scrolling { scrollProbe.start() }
+                         else { scrollProbe.stop() }
+                     }) {
             heroPanel
             if monitor.thermal.state.isThrottling { throttleBanner }
             batteryPanel
@@ -23,6 +29,10 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $showingSettings) { SettingsView() }
         .sheet(isPresented: $showingProblemReport) { ProblemReportView() }
+        .onDisappear { scrollProbe.stop() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { scrollProbe.stop() }
+        }
     }
 
     private var glowColor: Color {

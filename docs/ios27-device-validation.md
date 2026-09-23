@@ -45,3 +45,19 @@ service-list index so same-named readings stay distinguishable.
 
 Never include charger serial numbers or other private accessory data in a shared
 report. The built-in report deliberately exports only an allowlist of readings.
+
+## History safety and first-page scrolling
+
+1. After installing the new build, open History and confirm existing sessions are
+   still present. Leave the app during a charge, return and unplug; the finished
+   session should persist across a full app restart. If History shows a recovery or
+   write warning, export a problem report before trying a reinstall. Do not delete
+   the app, because that also deletes its local Application Support history.
+2. On the first page, scroll continuously for 15–20 seconds once on battery and
+   once while charging/PiP is running. Export a problem report. The `scroll` events
+   give median and 95th-percentile `CADisplayLink` callback gaps together with Low
+   Power Mode and thermal state. They are a clue to main-run-loop stalls, not a
+   measurement of actual presented frames.
+3. For a real 120 Hz claim, capture a Release build on the phone with Instruments
+   Core Animation and Time Profiler while repeating the same scroll. Compare
+   before/after hitches, frame rate, Core Animation commits and main-thread work.
