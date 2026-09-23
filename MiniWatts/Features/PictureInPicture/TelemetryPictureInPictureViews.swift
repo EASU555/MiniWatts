@@ -87,6 +87,14 @@ struct TelemetryVideoFrameView: View {
     let layout: TelemetryPictureInPictureLayout
     let temperatureSelection: TelemetryTemperatureSelection
 
+    private var freshness: (label: LocalizedStringResource, seconds: Int, tint: Color) {
+        guard let data else { return ("Waiting", 0, .secondary) }
+        let seconds = max(0, Int(Date.now.timeIntervalSince(data.date)))
+        if seconds >= 30 { return ("Paused", seconds, .orange) }
+        if seconds >= 3 { return ("Delayed", seconds, .orange) }
+        return ("Live", seconds, .green)
+    }
+
     private var displaysPowerPage: Bool {
         guard showPower else { return false }
         guard showTemperatures, layout == .separatePages, let data else { return true }
@@ -145,11 +153,16 @@ struct TelemetryVideoFrameView: View {
     private var footer: some View {
         HStack(spacing: 10) {
             Circle()
-                .fill(data == nil ? Color.secondary : Color.green)
+                .fill(freshness.tint)
                 .frame(width: 8, height: 8)
-            Text(verbatim: data == nil ? "WAITING" : "LIVE · 1S")
+            Text(freshness.label)
                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                 .foregroundStyle(.secondary)
+            if data != nil {
+                Text(verbatim: "· \(freshness.seconds)s")
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
             Spacer()
             systemThermalStatus
             Spacer()

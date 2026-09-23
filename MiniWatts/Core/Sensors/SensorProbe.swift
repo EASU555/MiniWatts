@@ -16,6 +16,10 @@ actor SensorProbe {
         let ioKitAvailable: Bool
         let hidServiceCount: Int?
         let cpuUsagePercent: Double?
+        let cpuSampledAt: Date
+        let cpuIntervalSeconds: TimeInterval?
+        let startedAt: Date
+        let finishedAt: Date
         let elapsedMilliseconds: Double
     }
 
@@ -34,13 +38,16 @@ actor SensorProbe {
     func read(rescanAfterward: Bool) -> Sample {
         let started = Date.now
         prepareIfNeeded()
+        // Read the lightweight CPU counters before the HID/powerd sweep. A slow
+        // private sensor must not shift the CPU interval within this probe.
+        let cpuSample = cpuLoad.read()
         let registry = battery?.readRegistryProperties() ?? [:]
         let sources = battery?.readPowerSources() ?? []
         let adapterDetails = battery?.readAdapterDetails()
         let chargeStatus = battery?.readChargeStatus()
         let readings = hid?.read() ?? []
-        let cpuUsagePercent = cpuLoad.read()
         if rescanAfterward { hid?.rescan() }
+        let finished = Date.now
         return Sample(registry: registry,
                       sources: sources,
                       adapterDetails: adapterDetails,
@@ -48,8 +55,12 @@ actor SensorProbe {
                       sensors: readings,
                       ioKitAvailable: battery != nil,
                       hidServiceCount: hid?.serviceCount,
-                      cpuUsagePercent: cpuUsagePercent,
-                      elapsedMilliseconds: Date.now.timeIntervalSince(started) * 1000)
+                      cpuUsagePercent: cpuSample.percent,
+                      cpuSampledAt: cpuSample.sampledAt,
+                      cpuIntervalSeconds: cpuSample.intervalSeconds,
+                      startedAt: started,
+                      finishedAt: finished,
+                      elapsedMilliseconds: finished.timeIntervalSince(started) * 1000)
     }
 
     func rescan() {

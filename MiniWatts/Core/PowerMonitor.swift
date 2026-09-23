@@ -26,6 +26,8 @@ final class PowerMonitor {
     /// Watts estimated from how fast the percentage moves. The only way to see
     /// discharge power: no discharge-current sensor is exposed to a sandboxed app.
     private(set) var rateEstimateWatts: Double?
+    private(set) var cpuSampledAt: Date?
+    private(set) var cpuIntervalSeconds: TimeInterval?
     private(set) var diagnostics: [String] = []
     private(set) var batteryLevelSource = "unavailable"
     private(set) var batteryLevelSampledAt: Date?
@@ -228,6 +230,10 @@ final class PowerMonitor {
     private var lastThermalObservation: (date: Date, wasThrottling: Bool)?
     private var diagnosticEvents: [String] = []
     private var lastReportCheckpoint = Date.distantPast
+    @ObservationIgnored private var lastPublishedSampleAt: Date?
+    @ObservationIgnored private var recentSampleTimings: [String] = []
+    @ObservationIgnored private var recentActivityUpdates: [String] = []
+    private static let timingTraceLimit = 60
 
     init() {
         let defaults = UserDefaults.standard
@@ -260,6 +266,9 @@ final class PowerMonitor {
         }
         liveActivityController.onDiagnostic = { [weak self] message in
             self?.appendDiagnosticEvent("Live Activity: \(message)")
+        }
+        liveActivityController.onUpdateTrace = { [weak self] trace in
+            self?.recordActivityUpdate(trace)
         }
         collectDiagnostics()
         appendDiagnosticEvent("monitor initialized model=\(Self.machineIdentifier) iOS=\(UIDevice.current.systemVersion)")
@@ -369,7 +378,11 @@ final class PowerMonitor {
         let levelReading = systemBatteryLevel.read(powerSource: internalBattery)
         updateBatteryLevelDiagnostics(levelReading)
 
-        let current = PowerSnapshot(date: .now,
+        let publishedAt = Date.now
+        cpuSampledAt = raw.cpuSampledAt
+        cpuIntervalSeconds = raw.cpuIntervalSeconds
+        recordSampleTiming(raw, publishedAt: publishedAt)
+        let current = PowerSnapshot(date: publishedAt,
                                     systemBatteryPercent: levelReading?.percent,
                                     cpuUsagePercent: raw.cpuUsagePercent,
                                     registry: raw.registry,
@@ -678,6 +691,60 @@ final class PowerMonitor {
         }
     }
 
+    private func recordSampleTiming(_ raw: SensorProbe.Sample, publishedAt: Date) {
+        let gap = lastPublishedSampleAt.map { publishedAt.timeIntervalSince($0) }
+        lastPublishedSampleAt = publishedAt
+        let interval = raw.cpuIntervalSeconds.map { String(format: "%.2f", $0) } ?? "—"
+        let cpu = raw.cpuUsagePercent.map { String(format: "%.1f", $0) } ?? "nil"
+        recentSampleTimings.append(
+            "tick=\(tick) start=\(Self.epoch(raw.startedAt)) "
+                + "cpuAt=\(Self.epoch(raw.cpuSampledAt)) cpuWindow=\(interval)s "
+                + "finish=\(Self.epoch(raw.finishedAt)) publish=\(Self.epoch(publishedAt)) "
+                + "probeMs=\(String(format: "%.0f", raw.elapsedMilliseconds)) cpu=\(cpu)"
+        )
+        if recentSampleTimings.count > Self.timingTraceLimit {
+            recentSampleTimings.removeFirst(recentSampleTimings.count - Self.timingTraceLimit)
+        }
+        if let gap, gap > 2.5 {
+            appendDiagnosticEvent("sampling gap=\(String(format: "%.2f", gap))s "
+                + "probeMs=\(String(format: "%.0f", raw.elapsedMilliseconds))")
+        }
+        if let cpuInterval = raw.cpuIntervalSeconds, cpuInterval > 5 {
+            appendDiagnosticEvent("CPU window reset after \(String(format: "%.2f", cpuInterval))s gap")
+        }
+        if raw.elapsedMilliseconds > 1_000 {
+            appendDiagnosticEvent("slow sensor probe=\(String(format: "%.0f", raw.elapsedMilliseconds))ms")
+        }
+    }
+
+    private func recordActivityUpdate(_ trace: LiveActivityUpdateTrace) {
+        let queueMs = trace.startedAt.timeIntervalSince(trace.enqueuedAt) * 1_000
+        let activityMs = trace.finishedAt.timeIntervalSince(trace.startedAt) * 1_000
+        let sampleAgeMs = trace.sampledAt.map {
+            trace.finishedAt.timeIntervalSince($0) * 1_000
+        }
+        recentActivityUpdates.append(
+            "sample=\(trace.sampledAt.map(Self.epoch) ?? "nil") "
+                + "enqueue=\(Self.epoch(trace.enqueuedAt)) start=\(Self.epoch(trace.startedAt)) "
+                + "return=\(Self.epoch(trace.finishedAt)) queueMs=\(String(format: "%.0f", queueMs)) "
+                + "activityMs=\(String(format: "%.0f", activityMs)) "
+                + "sampleAgeMs=\(sampleAgeMs.map { String(format: "%.0f", $0) } ?? "nil") "
+                + "result=\(trace.returned ? "returned" : "timeout")"
+        )
+        if recentActivityUpdates.count > Self.timingTraceLimit {
+            recentActivityUpdates.removeFirst(recentActivityUpdates.count - Self.timingTraceLimit)
+        }
+        if !trace.returned || queueMs > 2_000 || activityMs > 2_000 {
+            appendDiagnosticEvent("Live Activity update \(trace.returned ? "slow" : "timeout") "
+                + "queueMs=\(String(format: "%.0f", queueMs)) "
+                + "activityMs=\(String(format: "%.0f", activityMs))")
+        }
+    }
+
+    private static func epoch(_ date: Date) -> String {
+        String(format: "%.3f", date.timeIntervalSince1970)
+    }
+
     /// A local-only report the user can explicitly export from Settings. It avoids
     /// serial numbers and identifiers while retaining enough source detail to tell
     /// a frozen UIKit level from a stopped sampling loop.
@@ -695,6 +762,10 @@ final class PowerMonitor {
             "Battery sampled: \(batteryLevelSampledAt.map(Formatting.timestamp) ?? "—")",
             "Battery last changed: \(batteryLevelChangedAt.map(Formatting.timestamp) ?? "—")",
             "Snapshot: \(Formatting.timestamp(snapshot.date))",
+            "Snapshot age: \(String(format: "%.2f s", Date.now.timeIntervalSince(snapshot.date)))",
+            "CPU sampled: \(cpuSampledAt.map(Self.epoch) ?? "—")",
+            "CPU interval: \(cpuIntervalSeconds.map { String(format: "%.2f s", $0) } ?? "—")",
+            "CPU sample age: \(cpuSampledAt.map { String(format: "%.2f s", Date.now.timeIntervalSince($0)) } ?? "—")",
             "Live Activity: \(liveActivityRecoveryStatus)",
             "Live Activity detail: \(liveActivityRecoveryDetail)",
             "External power: \(snapshot.externalConnected)",
@@ -702,7 +773,7 @@ final class PowerMonitor {
             "Input watts: \(snapshot.inputWatts.map { String(format: "%.3f", $0) } ?? "—")",
             "Battery watts: \(snapshot.batteryWatts.map { String(format: "%.3f", $0) } ?? "—")",
             "Thermal state: \(thermal.state.rawValue)",
-            "PiP background tick: \(task == nil ? "stopped" : "running")",
+            "Sampling task: \(task == nil ? "not scheduled" : "scheduled (not proof of execution)")",
             "",
             "# Probe availability"
         ]
@@ -710,6 +781,12 @@ final class PowerMonitor {
         lines.append("")
         lines.append("# Recent events")
         lines.append(contentsOf: diagnosticEvents)
+        lines.append("")
+        lines.append("# Recent sample timing (Unix seconds; latest 45)")
+        lines.append(contentsOf: recentSampleTimings.suffix(45))
+        lines.append("")
+        lines.append("# Recent ActivityKit update timing (return is not render confirmation)")
+        lines.append(contentsOf: recentActivityUpdates.suffix(45))
         lines.append("")
         lines.append("# Live sensors")
         lines.append(contentsOf: snapshot.sensors.sorted { $0.name < $1.name }

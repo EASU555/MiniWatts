@@ -84,15 +84,30 @@ struct ThermalView: View {
         Panel("CPU usage", systemImage: "cpu") {
             if let usage = snapshot.cpuUsagePercent {
                 BarRow(title: Text("Whole-device CPU"),
-                       detail: usage.formatted(.number.precision(.fractionLength(0))) + "%",
+                       detail: usage.formatted(.number.precision(.fractionLength(1))) + "%",
                        fraction: usage / 100,
                        tint: .mwAccent)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Whole-device CPU")
-                    .accessibilityValue(Text(verbatim: (usage / 100).formatted(.percent.precision(.fractionLength(0)))))
+                    .accessibilityValue(Text(verbatim: usage.formatted(.number.precision(.fractionLength(1))) + "%"))
             } else {
-                EmptyNote(text: "No CPU reading yet. Two live samples are needed; if this persists, iOS is not providing CPU counters.",
-                          systemImage: "cpu")
+                if let interval = monitor.cpuIntervalSeconds, interval > 5 {
+                    EmptyNote(text: "CPU sampling was interrupted. Waiting for the next adjacent sample.",
+                              systemImage: "clock.arrow.circlepath")
+                } else {
+                    EmptyNote(text: "No CPU reading yet. Two live samples are needed; if this persists, iOS is not providing CPU counters.",
+                              systemImage: "cpu")
+                }
+            }
+            if let interval = monitor.cpuIntervalSeconds {
+                HStack {
+                    Text("Last CPU sample interval")
+                    Spacer()
+                    Text(verbatim: interval.formatted(.number.precision(.fractionLength(1))) + " s")
+                        .monospacedDigit()
+                }
+                .font(.caption2)
+                .foregroundStyle(interval > 2.5 ? Color.mwLoss : Color.mwMuted)
             }
             Text("Average busy time across the device's CPU cores during the latest sample interval. This is not MiniWatts' own CPU use, CPU frequency, or power consumption.")
                 .font(.caption2)

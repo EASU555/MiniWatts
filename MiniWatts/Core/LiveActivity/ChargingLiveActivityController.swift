@@ -9,6 +9,17 @@ enum LiveActivityRecoveryStatus: Equatable {
     case failed(String)
 }
 
+/// A returned ActivityKit update is not proof that iOS rendered a new island
+/// frame. Keep the three app-observable stages separate in problem reports.
+nonisolated struct LiveActivityUpdateTrace: Sendable {
+    let activityID: String
+    let sampledAt: Date?
+    let enqueuedAt: Date
+    let startedAt: Date
+    let finishedAt: Date
+    let returned: Bool
+}
+
 /// Owns the charging Live Activity without leaking ActivityKit into the sensor model.
 /// Sensor sampling is owned by the app/PiP, not by the activity. Updates are
 /// coalesced through one task: ActivityKit can take
@@ -46,6 +57,7 @@ final class ChargingLiveActivityController {
     private var lastMetric: LiveActivityMetric?
     private var latestState: MiniWattsActivityAttributes.ContentState?
     private var pendingUpdate: ActivityContent<MiniWattsActivityAttributes.ContentState>?
+    private var pendingUpdateEnqueuedAt: Date?
     private var updateInFlight = false
     private var updateGeneration = 0
     private var inFlightActivityID: String?
@@ -62,6 +74,7 @@ final class ChargingLiveActivityController {
     /// from the lifecycle coordinator. A late worker can only end its captured ID.
     private var endingActivityIDs: Set<String> = []
     var onDiagnostic: ((String) -> Void)?
+    var onUpdateTrace: ((LiveActivityUpdateTrace) -> Void)?
     var onDetailChange: ((String) -> Void)?
     private(set) var recoveryDetail = "" {
         didSet { onDetailChange?(recoveryDetail) }
@@ -157,6 +170,7 @@ final class ChargingLiveActivityController {
         lastLeadingItem = leadingItem
         lastMetric = selectedMetric
         pendingUpdate = content(for: state, at: now)
+        pendingUpdateEnqueuedAt = now
         beginUpdatingIfNeeded()
     }
 
@@ -593,6 +607,7 @@ final class ChargingLiveActivityController {
         lastLeadingItem = nil
         lastMetric = nil
         pendingUpdate = nil
+        pendingUpdateEnqueuedAt = nil
         updateGeneration &+= 1
         updateInFlight = false
         inFlightActivityID = nil
@@ -624,7 +639,11 @@ final class ChargingLiveActivityController {
             return
         }
 
+        let enqueuedAt = pendingUpdateEnqueuedAt ?? .now
+        let startedAt = Date.now
+        let sampledAt = content.state.sampledAt
         pendingUpdate = nil
+        pendingUpdateEnqueuedAt = nil
         updateGeneration &+= 1
         let generation = updateGeneration
         let activityID = activity.id
@@ -638,7 +657,10 @@ final class ChargingLiveActivityController {
             self?.finishUpdateAttempt(
                 generation: generation,
                 activityID: activityID,
-                succeeded: false
+                succeeded: false,
+                sampledAt: sampledAt,
+                enqueuedAt: enqueuedAt,
+                startedAt: startedAt
             )
         }
 
@@ -650,7 +672,10 @@ final class ChargingLiveActivityController {
                 await self?.finishUpdateAttempt(
                     generation: generation,
                     activityID: activityID,
-                    succeeded: false
+                    succeeded: false,
+                    sampledAt: sampledAt,
+                    enqueuedAt: enqueuedAt,
+                    startedAt: startedAt
                 )
                 return
             }
@@ -658,7 +683,10 @@ final class ChargingLiveActivityController {
             await self?.finishUpdateAttempt(
                 generation: generation,
                 activityID: activityID,
-                succeeded: true
+                succeeded: true,
+                sampledAt: sampledAt,
+                enqueuedAt: enqueuedAt,
+                startedAt: startedAt
             )
         }
     }
@@ -666,14 +694,26 @@ final class ChargingLiveActivityController {
     private func finishUpdateAttempt(
         generation: Int,
         activityID: String,
-        succeeded: Bool
+        succeeded: Bool,
+        sampledAt: Date?,
+        enqueuedAt: Date,
+        startedAt: Date
     ) {
+        let trace = LiveActivityUpdateTrace(
+            activityID: activityID,
+            sampledAt: sampledAt,
+            enqueuedAt: enqueuedAt,
+            startedAt: startedAt,
+            finishedAt: .now,
+            returned: succeeded
+        )
         // A background timeout may just be a slow system reply. If that exact
         // operation eventually finishes before any replacement/stop, resume the
         // existing pipeline instead of requiring a foreground visit for a blip.
         if succeeded, enabled, needsForegroundRecovery,
            lifecycleTask == nil, updateGeneration == generation,
            activity?.id == activityID {
+            onUpdateTrace?(trace)
             needsForegroundRecovery = false
             lastSuccessfulUpdateAt = .now
             record("Delayed update completed; existing activity resumed")
@@ -683,6 +723,7 @@ final class ChargingLiveActivityController {
         guard updateGeneration == generation,
               updateInFlight,
               inFlightActivityID == activityID else { return }
+        onUpdateTrace?(trace)
 
         updateTimeoutTask?.cancel()
         updateTimeoutTask = nil

@@ -169,5 +169,24 @@ struct PowerSnapshot {
         check(priorityActivity.content.relevanceScore == 1, "Higher relevance did not reach ActivityKit")
         priority.endIfNeeded()
         print("PASS: relevance switches between 0 and 1 on the existing activity")
+
+        // The report needs real enqueue/start/return times, not the one-second
+        // request interval mislabeled as an observed Dynamic Island frame rate.
+        TestSystem.reset()
+        let timed = ChargingLiveActivityController()
+        var traces: [LiveActivityUpdateTrace] = []
+        timed.onUpdateTrace = { traces.append($0) }
+        tick(timed)
+        try? await Task.sleep(for: .milliseconds(100))
+        tick(timed)
+        try? await Task.sleep(for: .milliseconds(150))
+        check(traces.count == 1, "Expected one completed update trace")
+        check(traces[0].returned && traces[0].sampledAt != nil,
+              "Update trace omitted the sample or ActivityKit return")
+        check(traces[0].enqueuedAt <= traces[0].startedAt
+              && traces[0].startedAt <= traces[0].finishedAt,
+              "Update trace stages are not chronological")
+        timed.endIfNeeded()
+        print("PASS: ActivityKit update timing reports sample, enqueue, start and return")
     }
 }
