@@ -93,11 +93,10 @@ A charge session ends when the **charger is unplugged**, not when the app leaves
 foreground. Three things make that work and they are easy to undo by accident:
 
 - `RootView` calls `monitor.pause()` on `.background` only, except while the user-started
-  floating Picture in Picture monitor or manually enabled Live Activity has an active
-  background-audio session. Either mode keeps the same one-second tick alive until the
-  user closes or disables it. The shared audio keeper must remain idempotent: resetting
-  the session category every tick races AVKit's PiP start transition. The app used to
-  call a `stop()`
+  floating Picture in Picture monitor is active or transitioning. A Live Activity
+  alone does **not** grant background sensor execution. `BackgroundSamplingPolicy`
+  covers the PiP start/active/stop states, and the report's `coexistence` events
+  correlate PiP, ActivityKit, scene phase and sample age. The app used to call a `stop()`
   that closed the session on anything that was not `.active`, and `.inactive` fires for
   a pulled-down Control Center, the app switcher, an incoming call and the screen
   locking — so an overnight charge was recorded as a scatter of two-minute fragments.
@@ -107,8 +106,8 @@ foreground. Three things make that work and they are easy to undo by accident:
   session across however long the app was away.
 - Settings has *keep the screen on while charging*, default on, applied in `RootView`
   (`isIdleTimerDisabled`) and gated on the phone being plugged in. Sensors can only be
-  read in the foreground unless PiP or the personal build's Live Activity keeper has
-  deliberately established a playback background session, so without either mode the
+  read in the foreground unless PiP has established its playback background session,
+  so without PiP the
   screen locks and a full charge cannot be recorded. UIKit stays in the view layer;
   `Core` only holds the preference.
 
@@ -201,6 +200,18 @@ against a pack energy the user sets in Settings.
   maximum; `readings` keeps everything, with constants sorted last.
 - Four separate sensors are all named `gas gauge battery`. `HIDSensors.Reading.id`
   therefore includes the service index — name alone gave `ForEach` duplicate ids.
+- An iPhone 18 Pro Max (`iPhone19,7`, iOS 27) report showed three gas-gauge readings
+  at 38.7 °C and a fourth at 45.9 °C in one snapshot. The battery-area number is
+  still the hottest battery-labelled sensor, not a validated pack average. The
+  Thermal page now exposes the spread and median, and the problem report keeps
+  each indexed raw reading. Do not silently discard the hotter value without
+  paired device evidence.
+- That same report contained two `Charger VQ0u` and two `IQ0u` readings near
+  14.5 V and 1.05–1.08 A at the report time, giving roughly 15 W. It does not
+  cover the reported 45 W external-meter phase, so it cannot validate a new
+  formula. The report now records one-minute raw electrical traces and ten-second
+  persisted checkpoints. See `docs/ios27-device-validation.md` for the paired
+  capture procedure.
 - `Charger QQ0u` (usage 2) and `Charger WQ0u` (usage 3) are **unidentified**. They sit
   on the USB-C port, so they cannot be the wireless input; and `WQ0u` is not
   instantaneous power (it read 0.726 while `VQ0u × IQ0u` was 3.91 W). `ALS` has the

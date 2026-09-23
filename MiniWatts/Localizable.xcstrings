@@ -1,6 +1,66 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Battery sensor spread" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "电池传感器读数差异"
+          }
+        }
+      }
+    },
+    "Gas-gauge range" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "电池电量计范围"
+          }
+        }
+      }
+    },
+    "Gas-gauge median" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "电池电量计中位数"
+          }
+        }
+      }
+    },
+    "The battery number is the hottest battery-labelled sensor, not an average. A wide range needs device-specific validation; iOS thermal state is a separate system verdict." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "电池温度显示的是标记为电池的传感器中的最高值，并非平均值。若各读数差异较大，需针对该机型验证；iOS 系统发热状态是独立判断。"
+          }
+        }
+      }
+    },
+    "Live input power uses the phone's Charger VQ0u and IQ0u sensors, not the charger's display. Their meaning on a new device model must be checked against raw readings before correcting the number." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时输入功率来自手机的 Charger VQ0u 和 IQ0u 传感器，而非充电器显示屏。新机型上应先对照原始读数确认其含义，再修正数值。"
+          }
+        }
+      }
+    },
+    "The phone-reported input is below the adapter's rating. This alone cannot tell whether the difference is a charging limit or a sensor-path mismatch." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "手机报告的输入功率低于充电器额定功率。仅凭这一点无法判断差异来自充电限制还是传感器路径不匹配。"
+          }
+        }
+      }
+    },
     "Waiting" : {
       "localizations" : {
         "zh-Hans" : {

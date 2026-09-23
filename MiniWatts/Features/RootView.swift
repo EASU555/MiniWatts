@@ -47,7 +47,7 @@ struct RootView: View {
             }
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
-            ProblemReportRecorder.shared.record("lifecycle", "scene=\(phase)")
+            ProblemReportRecorder.shared.record("coexistence", "scene=\(phase) \(coexistenceEvidence)")
             switch phase {
             case .active:
                 pictureInPicture.recoverAfterEnteringForeground()
@@ -71,7 +71,7 @@ struct RootView: View {
             }
         }
         .onChange(of: keepsBackgroundSamplingActive) { _, keepSampling in
-            ProblemReportRecorder.shared.record("lifecycle", "backgroundSampling=\(keepSampling)")
+            ProblemReportRecorder.shared.record("coexistence", "backgroundSampling=\(keepSampling) \(coexistenceEvidence)")
             guard scenePhase == .background else { return }
             if keepSampling {
                 monitor.start()
@@ -81,6 +81,9 @@ struct RootView: View {
         }
         .onChange(of: shouldStayAwake, initial: true) { _, awake in
             UIApplication.shared.isIdleTimerDisabled = awake
+        }
+        .onChange(of: monitor.liveActivityRecoveryStatus) { _, status in
+            ProblemReportRecorder.shared.record("coexistence", "activity=\(status) \(coexistenceEvidence)")
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
             ProblemReportRecorder.shared.record("lifecycle", "memory warning received")
@@ -101,6 +104,16 @@ struct RootView: View {
 
     private var keepsBackgroundSamplingActive: Bool {
         pictureInPicture.keepsSensorSamplingActive
+    }
+
+    /// A single event ties the three independently owned lifecycles together.
+    /// AVKit and ActivityKit may each report success while the sample loop is
+    /// paused, so a PiP-only or activity-only log cannot diagnose coexistence.
+    private var coexistenceEvidence: String {
+        "pip=[\(pictureInPicture.diagnosticSummary)] "
+            + "activity=\(monitor.liveActivityRecoveryStatus) "
+            + "activityEnabled=\(monitor.liveActivityEnabled) "
+            + "sampleAge=\(String(format: "%.1f", Date.now.timeIntervalSince(monitor.snapshot.date)))s"
     }
 }
 

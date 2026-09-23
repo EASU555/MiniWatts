@@ -181,6 +181,31 @@ struct ThermalView: View {
                                size: 22)
                     }
                 }
+                if let gauges = snapshot.batteryGaugeSummary, gauges.spread >= 3 {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Battery sensor spread", systemImage: "info.circle")
+                            .font(.caption.weight(.semibold))
+                        HStack {
+                            Text("Gas-gauge range")
+                            Spacer()
+                            Text(verbatim: String(format: "%.1f–%.1f °C", gauges.minimum, gauges.maximum))
+                                .monospacedDigit()
+                        }
+                        .font(.caption)
+                        HStack {
+                            Text("Gas-gauge median")
+                            Spacer()
+                            Text(verbatim: String(format: "%.1f °C", gauges.median))
+                                .monospacedDigit()
+                        }
+                        .font(.caption)
+                        Text("The battery number is the hottest battery-labelled sensor, not an average. A wide range needs device-specific validation; iOS thermal state is a separate system verdict.")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(Color.mwMuted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityElement(children: .combine)
+                }
                 Text("The temperatures are measured; the positions are not. iOS reports sensor names and values and no coordinates at all, so each zone is drawn at a fixed spot that follows the usual layout of a recent iPhone — logic board up top behind the cameras, battery through the middle, charge IC by the port. Real layouts differ by model. Read this as a legend for the list below, not as a map of your phone.")
                     .font(.caption2)
                     .foregroundStyle(Color.mwMuted)

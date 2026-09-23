@@ -62,6 +62,12 @@ struct AdapterView: View {
                         .foregroundStyle(Color.mwMuted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if snapshot.inputWatts != nil {
+                    Text("Live input power uses the phone's Charger VQ0u and IQ0u sensors, not the charger's display. Their meaning on a new device model must be checked against raw readings before correcting the number.")
+                        .font(.caption2)
+                        .foregroundStyle(Color.mwMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
@@ -83,7 +89,7 @@ struct AdapterView: View {
         if snapshot.isWirelessInput {
             return "Wireless charging is capped well below what the adapter could deliver over the cable."
         }
-        return "Drawing well under the adapter's rating. A thin cable, a shared port, or a profile the phone declined can all do this."
+        return "The phone-reported input is below the adapter's rating. This alone cannot tell whether the difference is a charging limit or a sensor-path mismatch."
     }
 
     // MARK: Identity

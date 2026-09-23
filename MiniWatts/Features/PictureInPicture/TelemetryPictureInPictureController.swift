@@ -235,7 +235,11 @@ final class TelemetryPictureInPictureController: NSObject {
     var hasSelectedContent: Bool {
         contentMode == .hiddenCarrier || showPower || showTemperatures
     }
-    var keepsSensorSamplingActive: Bool { isActive || isStarting || isStopping }
+    var keepsSensorSamplingActive: Bool {
+        BackgroundSamplingPolicy.keepsSampling(pipActive: isActive,
+                                               pipStarting: isStarting,
+                                               pipStopping: isStopping)
+    }
 
     /// The SwiftUI preview renders itself. The expensive ImageRenderer → CGImage →
     /// pixel-buffer path exists only for an actual or starting system PiP session.

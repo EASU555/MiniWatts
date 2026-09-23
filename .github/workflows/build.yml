@@ -78,6 +78,9 @@ jobs:
       - name: Test persistent problem reports
         run: bash ./scripts/test-problem-reports.sh
 
+      - name: Test sensor evidence and PiP sampling policy
+        run: bash ./scripts/test-sensor-evidence.sh
+
       # On a tag, the tag is the version: build-ipa.sh hands MARKETING_VERSION to
       # xcodebuild, so the project file never has to be edited to cut a release. Taken
       # from the triggering tag explicitly rather than left to the script's own git

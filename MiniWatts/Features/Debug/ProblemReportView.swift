@@ -84,7 +84,10 @@ struct ProblemReportView: View {
     }
 
     private func makeReport(share: Bool) {
-        let summary = monitor.diagnosticReport + "\n\n# Picture in Picture\n" + pictureInPicture.diagnosticSummary
+        // Put PiP state before the longer sensor traces, so the report's size
+        // limit cannot silently remove the coexistence evidence.
+        let summary = "# Picture in Picture\n" + pictureInPicture.diagnosticSummary
+            + "\n\n" + monitor.diagnosticReport
         let description = note
         busy = true
         Task { @MainActor in

@@ -81,7 +81,7 @@ nonisolated final class ProblemReportRecorder: @unchecked Sendable {
                     \(note.prefix(2000))
 
                     # Current snapshot / 当前状态
-                    \(summary.prefix(32000))
+                    \(summary.prefix(48000))
 
                     # Previous run / 上次运行
                     \(previous.isEmpty ? "No previous run recorded." : previous)

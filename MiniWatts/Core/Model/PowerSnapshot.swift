@@ -59,6 +59,9 @@ nonisolated struct PowerSnapshot {
     let temperaturesByZone: [ZoneTemperatures]
     /// The hottest live sensor anywhere in the phone.
     let hottestSensor: HIDSensors.Reading?
+    /// Distribution of same-named battery gas-gauge sensors, if more than one
+    /// exists. A large spread is evidence to inspect, not an automatic outlier.
+    let batteryGaugeSummary: BatteryGaugeSummary?
 
     let usbInputVoltage: Double?
     let usbInputCurrent: Double?
@@ -111,6 +114,9 @@ nonisolated struct PowerSnapshot {
             }
         }
         self.temperatures = temperatures
+        batteryGaugeSummary = BatteryGaugeSummary(values: temperatures
+            .filter { $0.name.localizedCaseInsensitiveCompare("gas gauge battery") == .orderedSame }
+            .map(\.value))
 
         func named(_ name: String) -> Double? { byName[name]?.value }
         func rail(_ kind: HIDSensors.Kind, _ fragments: [String]) -> Double? {

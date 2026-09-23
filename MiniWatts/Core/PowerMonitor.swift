@@ -230,9 +230,11 @@ final class PowerMonitor {
     private var lastThermalObservation: (date: Date, wasThrottling: Bool)?
     private var diagnosticEvents: [String] = []
     private var lastReportCheckpoint = Date.distantPast
+    private var lastElectricalEvidenceWrite = Date.distantPast
     @ObservationIgnored private var lastPublishedSampleAt: Date?
     @ObservationIgnored private var recentSampleTimings: [String] = []
     @ObservationIgnored private var recentActivityUpdates: [String] = []
+    @ObservationIgnored private var recentElectricalEvidence: [String] = []
     private static let timingTraceLimit = 60
 
     init() {
@@ -392,6 +394,7 @@ final class PowerMonitor {
                                     chargeStatus: raw.chargeStatus)
         snapshot = current
         if tick == 1 { collectDiagnostics() }
+        recordElectricalEvidence(current)
         if Date.now.timeIntervalSince(lastReportCheckpoint) >= 30 {
             lastReportCheckpoint = .now
             appendDiagnosticEvent("checkpoint: percent=\(current.percent.map(String.init) ?? "nil") "
@@ -741,6 +744,37 @@ final class PowerMonitor {
         }
     }
 
+    /// Capture both copies of each named rail, not just the first one used by the
+    /// current formula. iPhone19,7 reports duplicate VQ0u/IQ0u sensors and four
+    /// gas gauges; a single final snapshot cannot explain an earlier 45 W vs
+    /// 21 W disagreement. Unknown QQ0u/WQ0u rails are recorded but never treated
+    /// as power until their meaning is verified against a paired meter sample.
+    private func recordElectricalEvidence(_ sample: PowerSnapshot) {
+        guard sample.externalConnected else { return }
+        func named(_ name: String) -> String {
+            let values = sample.sensors.filter { $0.name == name }
+                .map { "\($0.index):\(String(format: "%.3f", $0.value))" }
+            return values.isEmpty ? "—" : values.joined(separator: ",")
+        }
+        let selected = sample.chargingPower
+        let line = "t=\(Self.epoch(sample.date)) charge=\(sample.isCharging) "
+            + "inputW=\(sample.inputWatts.map { String(format: "%.2f", $0) } ?? "—") "
+            + "batteryW=\(sample.batteryWatts.map { String(format: "%.2f", $0) } ?? "—") "
+            + "shown=\(selected.watts.map { String(format: "%.2f", $0) } ?? "—") "
+            + "shownSide=\(selected.isBatterySide ? "battery" : "input") "
+            + "VQ0u=[\(named("Charger VQ0u"))] IQ0u=[\(named("Charger IQ0u"))] "
+            + "QQ0u=[\(named("Charger QQ0u"))] WQ0u=[\(named("Charger WQ0u"))] "
+            + "gaugeC=[\(named("gas gauge battery"))] thermal=\(thermal.state.rawValue)"
+        recentElectricalEvidence.append(line)
+        if recentElectricalEvidence.count > Self.timingTraceLimit {
+            recentElectricalEvidence.removeFirst(recentElectricalEvidence.count - Self.timingTraceLimit)
+        }
+        if sample.date.timeIntervalSince(lastElectricalEvidenceWrite) >= 10 {
+            lastElectricalEvidenceWrite = sample.date
+            ProblemReportRecorder.shared.record("electrical", line)
+        }
+    }
+
     private static func epoch(_ date: Date) -> String {
         String(format: "%.3f", date.timeIntervalSince1970)
     }
@@ -751,6 +785,11 @@ final class PowerMonitor {
     var diagnosticReport: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
+        let gaugeDescription = snapshot.batteryGaugeSummary.map {
+            "n=\($0.count) min=\(String(format: "%.1f", $0.minimum)) "
+                + "median=\(String(format: "%.1f", $0.median)) "
+                + "max=\(String(format: "%.1f", $0.maximum))"
+        } ?? "—"
         var lines = [
             "MiniWatts diagnostics",
             "Generated: \(Formatting.timestamp(.now))",
@@ -771,12 +810,19 @@ final class PowerMonitor {
             "External power: \(snapshot.externalConnected)",
             "Charging: \(snapshot.isCharging)",
             "Input watts: \(snapshot.inputWatts.map { String(format: "%.3f", $0) } ?? "—")",
+            "Input rail: Charger VQ0u × abs(Charger IQ0u); sign and path unverified on this model",
+            "USB selected: V=\(snapshot.usbInputVoltage.map { String(format: "%.3f", $0) } ?? "—") "
+                + "I=\(snapshot.usbInputCurrent.map { String(format: "%.3f", $0) } ?? "—")",
             "Battery watts: \(snapshot.batteryWatts.map { String(format: "%.3f", $0) } ?? "—")",
+            "Battery gauge: \(gaugeDescription) (display remains hottest battery-labelled sensor)",
             "Thermal state: \(thermal.state.rawValue)",
             "Sampling task: \(task == nil ? "not scheduled" : "scheduled (not proof of execution)")",
             "",
-            "# Probe availability"
+            "# Recent electrical evidence (alternate rails are unvalidated; indices identify duplicate sensors)"
         ]
+        lines.append(contentsOf: recentElectricalEvidence.suffix(45))
+        lines.append("")
+        lines.append("# Probe availability")
         lines.append(contentsOf: diagnostics)
         lines.append("")
         lines.append("# Recent events")
