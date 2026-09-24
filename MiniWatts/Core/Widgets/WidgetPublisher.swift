@@ -58,7 +58,7 @@ nonisolated extension WidgetSnapshot.Session {
                   endPercent: session.endPercent,
                   storedWattHours: session.totals.batteryWattHours,
                   deliveredWattHours: session.totals.measuredInputWattHours,
-                  efficiencyPercent: session.totals.efficiencyPercent,
+                  efficiencyPercent: session.totals.inputToCellPercent,
                   peakWatts: max(session.peakInputWatts, session.peakBatteryWatts),
                   isWireless: session.isWireless)
     }

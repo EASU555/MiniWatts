@@ -30,7 +30,7 @@ nonisolated extension Color {
     static let mwAccent = Color.mw(0x0086B3, 0x35DFFF)
     /// Battery side: what actually reaches the cell.
     static let mwBattery = Color.mw(0x0E9B57, 0x3FE08C)
-    /// Energy lost as heat.
+    /// Input not reaching the cell: system load plus electrical losses.
     static let mwLoss = Color.mw(0xB86A00, 0xFFB443)
     static let mwDanger = Color.mw(0xC5342B, 0xFF6058)
     /// Wireless / MagSafe.

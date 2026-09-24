@@ -1419,6 +1419,16 @@
         }
       }
     },
+    "Input to cell" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "入电芯占比"
+          }
+        }
+      }
+    },
     "Internal" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1450,6 +1460,16 @@
       }
     },
     "Into cell" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "充入电芯"
+          }
+        }
+      }
+    },
+    "into cell" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1755,6 +1775,16 @@
         }
       }
     },
+    "No simultaneous input and cell readings were recorded, so their share and difference are unavailable." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有同时获取到输入端和电芯端读数，因此无法计算占比及差值。"
+          }
+        }
+      }
+    },
     "No temperature sensors were found. The simulator has none; on a device they appear as soon as the app has read the HID service list." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1791,6 +1821,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未连接"
+          }
+        }
+      }
+    },
+    "Not into cell" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未进入电芯"
           }
         }
       }

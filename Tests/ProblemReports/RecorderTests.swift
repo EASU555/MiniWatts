@@ -51,6 +51,28 @@ import Foundation
         check(exports.count == 3, "Temporary exports accumulated indefinitely")
         print("PASS: bounded Unicode rotation, notes, preview and export retention")
 
+        let retentionRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        for index in 1...5 {
+            let launch = ProblemReportRecorder(directory: retentionRoot)
+            launch.record("retention", "retained-run-\(index)")
+            let report = try await launch.export(summary: "run \(index)", note: "")
+            let text = try String(contentsOf: report.url, encoding: .utf8)
+            if index == 4 {
+                check(text.contains("retained-run-1"), "Third prior run was lost")
+                check(text.contains("retained-run-4"), "Current run was lost")
+            }
+            if index == 5 {
+                check(!text.contains("retained-run-1"), "Oldest prior run was not pruned")
+                for retained in 2...5 {
+                    check(text.contains("retained-run-\(retained)"), "A recent run was lost")
+                }
+                check(text.range(of: "retained-run-5")!.lowerBound
+                      < text.range(of: "retained-run-4")!.lowerBound,
+                      "Current run should appear before prior runs in the export")
+            }
+        }
+        print("PASS: last three prior launches retained, oldest pruned, current run first")
+
         let blocked = root.appendingPathComponent("not-a-directory")
         try Data("file".utf8).write(to: blocked)
         let unavailable = ProblemReportRecorder(directory: blocked)

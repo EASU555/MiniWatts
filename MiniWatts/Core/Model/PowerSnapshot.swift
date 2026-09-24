@@ -330,15 +330,20 @@ nonisolated struct PowerSnapshot {
         return (batterySide, true)
     }
 
-    /// Share of the adapter's power that actually reaches the cell. The remainder
-    /// leaves as heat in the cable, the charge IC and the coil.
-    var conversionEfficiency: Double? {
-        guard let inputWatts, inputWatts > 0.5, let batteryWatts, batteryWatts > 0 else { return nil }
-        return min(batteryWatts / inputWatts, 1) * 100
+    /// Share of charger-side power reaching the cell at this sample. The rest
+    /// includes the phone's own load as well as conversion and cable losses; it
+    /// is not a charger efficiency or a direct heat measurement.
+    var inputToCellPercent: Double? {
+        guard let inputWatts, inputWatts.isFinite, inputWatts > 0.5,
+              let batteryWatts, batteryWatts.isFinite,
+              batteryWatts >= 0, batteryWatts <= inputWatts else { return nil }
+        return batteryWatts / inputWatts * 100
     }
 
-    var conversionLossWatts: Double? {
-        guard let inputWatts, let batteryWatts, inputWatts > batteryWatts else { return nil }
+    var notToCellWatts: Double? {
+        guard let inputWatts, inputWatts.isFinite, inputWatts > 0.5,
+              let batteryWatts, batteryWatts.isFinite,
+              batteryWatts >= 0, batteryWatts <= inputWatts else { return nil }
         return inputWatts - batteryWatts
     }
 

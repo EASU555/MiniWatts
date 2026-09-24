@@ -13,8 +13,9 @@
 
 An iPhone battery and charging monitor built on Apple's private APIs. It reads the
 phone's own power-management sensors — the ones iOS uses to run the charge — and shows
-what the charger is delivering, how much of it reaches the cell, where the rest goes as
-heat, and what every temperature sensor in the phone is doing while it happens.
+what the charger is delivering, how much of it reaches the cell, the difference
+(including phone power use and conversion losses), and what every temperature
+sensor in the phone is doing while it happens.
 
 | Power | Thermal | Adapter | History |
 |:-:|:-:|:-:|:-:|

@@ -21,6 +21,12 @@ nonisolated struct EnergyTotals: Codable, Hashable, Sendable {
     var inputIntegratedSeconds: TimeInterval = 0
     var batteryIntegratedSeconds: TimeInterval = 0
     var batteryCurrentIntegratedSeconds: TimeInterval = 0
+    /// Energy integrated only over intervals where both input and cell power
+    /// were valid at both ends. Independent channel totals above remain useful,
+    /// but cannot be divided or subtracted when their observed windows differ.
+    var pairedInputWattHours: Double = 0
+    var pairedBatteryWattHours: Double = 0
+    var pairedIntegratedSeconds: TimeInterval = 0
 
     /// Delivered energy, or nil when none could be measured.
     ///
@@ -39,27 +45,21 @@ nonisolated struct EnergyTotals: Codable, Hashable, Sendable {
         batteryCurrentIntegratedSeconds > 0 ? batteryMilliAmpHours : nil
     }
 
-    /// Share of delivered energy that reached the cell, 0…100.
-    var efficiencyPercent: Double? {
-        guard inputWattHours > 0.001,
-              batteryWattHours > 0,
-              inputIntegratedSeconds > 0,
-              batteryIntegratedSeconds > 0 else { return nil }
-        let coverage = min(inputIntegratedSeconds, batteryIntegratedSeconds)
-            / max(inputIntegratedSeconds, batteryIntegratedSeconds)
-        // Comparing energy from materially different time windows would produce
-        // a precise-looking but meaningless efficiency figure.
-        guard coverage >= 0.9 else { return nil }
-        return min(batteryWattHours / inputWattHours, 1) * 100
+    /// Share of paired charger-side energy reaching the cell, 0…100. This is
+    /// not round-trip efficiency: the phone can consume part of the input power.
+    var inputToCellPercent: Double? {
+        guard pairedIntegratedSeconds > 0,
+              pairedInputWattHours > 0.001,
+              pairedBatteryWattHours >= 0,
+              pairedBatteryWattHours <= pairedInputWattHours else { return nil }
+        return pairedBatteryWattHours / pairedInputWattHours * 100
     }
 
-    /// Energy that turned into heat in the cable, the charge IC and the coil.
-    var lossWattHours: Double {
-        max(inputWattHours - batteryWattHours, 0)
-    }
-
-    var measuredLossWattHours: Double? {
-        efficiencyPercent == nil ? nil : lossWattHours
+    /// Input energy not reaching the cell over the *same* observed intervals.
+    /// It includes system consumption and conversion losses, not just heat.
+    var measuredNotToCellWattHours: Double? {
+        guard inputToCellPercent != nil else { return nil }
+        return pairedInputWattHours - pairedBatteryWattHours
     }
 
     var averageInputWatts: Double? {
@@ -75,6 +75,9 @@ nonisolated struct EnergyTotals: Codable, Hashable, Sendable {
         case inputIntegratedSeconds
         case batteryIntegratedSeconds
         case batteryCurrentIntegratedSeconds
+        case pairedInputWattHours
+        case pairedBatteryWattHours
+        case pairedIntegratedSeconds
     }
 
     init() {}
@@ -97,6 +100,11 @@ nonisolated struct EnergyTotals: Codable, Hashable, Sendable {
             TimeInterval.self,
             forKey: .batteryCurrentIntegratedSeconds
         ) ?? legacyCoverage
+        // Older history has no evidence that the channel windows overlap. Keep
+        // its measured totals, but leave the paired ratio unavailable.
+        pairedInputWattHours = try values.decodeIfPresent(Double.self, forKey: .pairedInputWattHours) ?? 0
+        pairedBatteryWattHours = try values.decodeIfPresent(Double.self, forKey: .pairedBatteryWattHours) ?? 0
+        pairedIntegratedSeconds = try values.decodeIfPresent(TimeInterval.self, forKey: .pairedIntegratedSeconds) ?? 0
         integratedSeconds = max(
             inputIntegratedSeconds,
             max(batteryIntegratedSeconds, batteryCurrentIntegratedSeconds)
@@ -112,6 +120,9 @@ nonisolated struct EnergyTotals: Codable, Hashable, Sendable {
         try values.encode(inputIntegratedSeconds, forKey: .inputIntegratedSeconds)
         try values.encode(batteryIntegratedSeconds, forKey: .batteryIntegratedSeconds)
         try values.encode(batteryCurrentIntegratedSeconds, forKey: .batteryCurrentIntegratedSeconds)
+        try values.encode(pairedInputWattHours, forKey: .pairedInputWattHours)
+        try values.encode(pairedBatteryWattHours, forKey: .pairedBatteryWattHours)
+        try values.encode(pairedIntegratedSeconds, forKey: .pairedIntegratedSeconds)
     }
 }
 
@@ -160,6 +171,16 @@ nonisolated final class EnergyAccumulator {
         if let previousBattery = previous.batteryWatts, let battery = sample.batteryWatts {
             totals.batteryWattHours += (previousBattery + battery) / 2 * hours
             totals.batteryIntegratedSeconds += interval
+        }
+        if let previousInput = previous.inputWatts, let input = sample.inputWatts,
+           let previousBattery = previous.batteryWatts, let battery = sample.batteryWatts,
+           previousInput.isFinite, input.isFinite,
+           previousBattery.isFinite, battery.isFinite,
+           previousInput >= previousBattery, input >= battery,
+           previousBattery >= 0, battery >= 0 {
+            totals.pairedInputWattHours += (previousInput + input) / 2 * hours
+            totals.pairedBatteryWattHours += (previousBattery + battery) / 2 * hours
+            totals.pairedIntegratedSeconds += interval
         }
         if let previousCurrent = previous.batteryAmps, let current = sample.batteryAmps {
             totals.batteryMilliAmpHours += (previousCurrent + current) / 2 * hours * 1000

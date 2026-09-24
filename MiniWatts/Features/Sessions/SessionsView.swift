@@ -98,7 +98,7 @@ struct SessionsView: View {
                     Metric(caption: "Delivered",
                            value: monitor.sessionTotals.measuredInputWattHours.map { String(format: "%.2f", $0) } ?? "—",
                            unit: "Wh", tint: .mwAccent, size: 21)
-                    Metric(caption: "Stored",
+                    Metric(caption: "Into cell",
                            value: monitor.sessionTotals.measuredBatteryWattHours.map {
                                String(format: "%.2f", $0)
                            } ?? "—",
@@ -120,19 +120,24 @@ struct SessionsView: View {
 
     private var summaryPanel: some View {
         let totalDelivered = monitor.sessions.reduce(0) { $0 + $1.totals.inputWattHours }
-        let totalStored = monitor.sessions.reduce(0) { $0 + $1.totals.batteryWattHours }
-        let efficiencies = monitor.sessions.compactMap(\.totals.efficiencyPercent)
-        let averageEfficiency = efficiencies.isEmpty ? nil : efficiencies.reduce(0, +) / Double(efficiencies.count)
+        let totalIntoCell = monitor.sessions.reduce(0) { $0 + $1.totals.batteryWattHours }
+        // Weight by paired input energy rather than giving a tiny top-up the
+        // same weight as a full charge. Older sessions without paired evidence
+        // remain in the Wh totals but do not contribute to this percentage.
+        let comparable = monitor.sessions.map(\.totals).filter { $0.inputToCellPercent != nil }
+        let pairedInput = comparable.reduce(0) { $0 + $1.pairedInputWattHours }
+        let pairedBattery = comparable.reduce(0) { $0 + $1.pairedBatteryWattHours }
+        let inputToCell = pairedInput > 0 ? pairedBattery / pairedInput * 100 : nil
         return Panel("All sessions", systemImage: "sum", trailing: Text(verbatim: "\(monitor.sessions.count)")) {
             HStack(alignment: .top, spacing: 10) {
                 Metric(caption: "Delivered",
                        value: String(format: "%.1f", totalDelivered),
                        unit: "Wh", tint: .mwAccent, size: 21)
-                Metric(caption: "Stored",
-                       value: String(format: "%.1f", totalStored),
+                Metric(caption: "Into cell",
+                       value: String(format: "%.1f", totalIntoCell),
                        unit: "Wh", tint: .mwBattery, size: 21)
-                Metric(caption: "Round trip",
-                       value: averageEfficiency.map { String(format: "%.0f", $0) } ?? "—",
+                Metric(caption: "Input to cell",
+                       value: inputToCell.map { String(format: "%.0f", $0) } ?? "—",
                        unit: "%", tint: .mwLoss, size: 21)
             }
         }
@@ -170,8 +175,8 @@ struct SessionRow: View {
                 HStack(spacing: 10) {
                     Sparkline(values: session.samples.map(\.inputWatts))
                         .frame(height: 26)
-                    if let efficiency = session.totals.efficiencyPercent {
-                        Pill(text: Text(verbatim: String(format: "%.0f%%", efficiency)), systemImage: "arrow.triangle.swap", tint: .mwLoss)
+                    if let share = session.totals.inputToCellPercent {
+                        Pill(text: Text(verbatim: String(format: "%.0f%%", share)), systemImage: "arrow.triangle.swap", tint: .mwLoss)
                     }
                     if session.throttledFraction > 0.05 {
                         Pill(text: Text("\(String(format: "%.0f%%", session.throttledFraction * 100)) hot"),
@@ -234,13 +239,13 @@ struct SessionDetailView: View {
                     Metric(caption: "Delivered",
                            value: session.totals.measuredInputWattHours.map { String(format: "%.2f", $0) } ?? "—",
                            unit: "Wh", tint: .mwAccent, size: 21)
-                    Metric(caption: "Stored",
+                    Metric(caption: "Into cell",
                            value: session.totals.measuredBatteryWattHours.map {
                                String(format: "%.2f", $0)
                            } ?? "—",
                            unit: "Wh", tint: .mwBattery, size: 21)
-                    Metric(caption: "Lost",
-                           value: session.totals.measuredLossWattHours.map {
+                    Metric(caption: "Not into cell",
+                           value: session.totals.measuredNotToCellWattHours.map {
                                String(format: "%.2f", $0)
                            } ?? "—",
                            unit: "Wh", tint: .mwLoss, size: 21)
@@ -251,8 +256,8 @@ struct SessionDetailView: View {
                                String(format: "%.0f", $0)
                            } ?? "—",
                            unit: "mAh", size: 21)
-                    Metric(caption: "Round trip",
-                           value: session.totals.efficiencyPercent.map { String(format: "%.0f", $0) } ?? "—",
+                    Metric(caption: "Input to cell",
+                           value: session.totals.inputToCellPercent.map { String(format: "%.0f", $0) } ?? "—",
                            unit: "%", tint: .mwLoss, size: 21)
                     Metric(caption: "Gained",
                            value: "+\(session.gainedPercent)",
@@ -260,6 +265,14 @@ struct SessionDetailView: View {
                 }
                 if session.totals.integratedSeconds < session.duration * 0.9 {
                     Text("Measured for \(Formatting.duration(session.totals.integratedSeconds)) of \(Formatting.duration(session.duration)) — the app was backgrounded for the rest, and those gaps are excluded rather than estimated.")
+                        .font(.caption2)
+                        .foregroundStyle(Color.mwMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if session.totals.inputIntegratedSeconds > 0,
+                   session.totals.batteryIntegratedSeconds > 0,
+                   session.totals.pairedIntegratedSeconds == 0 {
+                    Text("No simultaneous input and cell readings were recorded, so their share and difference are unavailable.")
                         .font(.caption2)
                         .foregroundStyle(Color.mwMuted)
                         .fixedSize(horizontal: false, vertical: true)

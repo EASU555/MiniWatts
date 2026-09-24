@@ -78,6 +78,9 @@ jobs:
       - name: Test persistent problem reports
         run: bash ./scripts/test-problem-reports.sh
 
+      - name: Test energy integration and paired sensor coverage
+        run: bash ./scripts/test-energy-accumulator.sh
+
       - name: Test charge history recovery and write failures
         run: bash ./scripts/test-session-store.sh
 

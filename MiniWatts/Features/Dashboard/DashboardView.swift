@@ -211,17 +211,18 @@ struct DashboardView: View {
                            unit: "W", tint: .mwBattery, size: 22)
                 }
                 HStack(alignment: .top, spacing: 10) {
-                    Metric(caption: "Lost as heat",
-                           value: snapshot.conversionLossWatts.map(Formatting.watts) ?? "—",
+                    Metric(caption: "Not into cell",
+                           value: snapshot.notToCellWatts.map(Formatting.watts) ?? "—",
                            unit: "W", tint: .mwLoss, size: 22)
-                    Metric(caption: "Efficiency",
-                           value: snapshot.conversionEfficiency.map { String(format: "%.0f", $0) } ?? "—",
+                    Metric(caption: "Input to cell",
+                           value: snapshot.inputToCellPercent.map { String(format: "%.0f", $0) } ?? "—",
                            unit: "%",
-                           tint: efficiencyTint,
+                           tint: cellShareTint,
                            footnote: Text("cell watts ÷ charger watts"),
                            size: 22)
                 }
-                if let input = snapshot.inputWatts, input > 0.2, let battery = snapshot.batteryWatts, battery > 0 {
+                if let input = snapshot.inputWatts, input > 0.5,
+                   let battery = snapshot.batteryWatts, battery > 0, battery <= input {
                     PowerFlowBar(input: input, toBattery: battery)
                 }
                 if wirelessInputUnmeasurable {
@@ -232,9 +233,9 @@ struct DashboardView: View {
         }
     }
 
-    private var efficiencyTint: Color {
-        guard let efficiency = snapshot.conversionEfficiency else { return .primary }
-        return efficiency >= 85 ? .mwBattery : (efficiency >= 70 ? .mwLoss : .mwDanger)
+    private var cellShareTint: Color {
+        guard let share = snapshot.inputToCellPercent else { return .primary }
+        return share >= 85 ? .mwBattery : (share >= 70 ? .mwLoss : .mwDanger)
     }
 
     // MARK: Live
@@ -264,7 +265,7 @@ struct DashboardView: View {
                         Metric(caption: "Delivered",
                                value: totals.measuredInputWattHours.map { String(format: "%.2f", $0) } ?? "—",
                                unit: "Wh", tint: .mwAccent, size: 20)
-                        Metric(caption: "Stored",
+                        Metric(caption: "Into cell",
                                value: totals.measuredBatteryWattHours.map {
                                    String(format: "%.2f", $0)
                                } ?? "—",
@@ -276,8 +277,8 @@ struct DashboardView: View {
                                    String(format: "%.0f", $0)
                                } ?? "—",
                                unit: "mAh", size: 20)
-                        Metric(caption: "Round trip",
-                               value: totals.efficiencyPercent.map { String(format: "%.0f", $0) } ?? "—",
+                        Metric(caption: "Input to cell",
+                               value: totals.inputToCellPercent.map { String(format: "%.0f", $0) } ?? "—",
                                unit: "%", tint: .mwLoss, size: 20)
                     }
                 }
@@ -296,7 +297,8 @@ struct DashboardView: View {
     }
 }
 
-/// The input-versus-stored split, drawn as one bar so the loss has a size.
+/// Charger-side power versus cell-side power. The difference includes system
+/// consumption as well as conversion losses, not just heat.
 struct PowerFlowBar: View {
     let input: Double
     let toBattery: Double
@@ -315,7 +317,7 @@ struct PowerFlowBar: View {
             }
             .frame(height: 8)
             HStack {
-                Text("stored in cell").font(.caption2).foregroundStyle(Color.mwBattery)
+                Text("into cell").font(.caption2).foregroundStyle(Color.mwBattery)
                 Spacer()
                 Text("system load + losses").font(.caption2).foregroundStyle(Color.mwLoss)
             }

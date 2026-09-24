@@ -20,6 +20,8 @@ nonisolated struct WidgetSnapshot: Codable, Hashable {
         var storedWattHours: Double
         /// Nil when the input side was never measurable — a wireless charge.
         var deliveredWattHours: Double?
+        /// Historical JSON key retained for old widget snapshots. The value is
+        /// the paired input-to-cell share, not round-trip efficiency.
         var efficiencyPercent: Double?
         var peakWatts: Double
         var isWireless: Bool

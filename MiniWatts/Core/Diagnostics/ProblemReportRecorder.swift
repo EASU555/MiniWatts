@@ -20,9 +20,13 @@ nonisolated final class ProblemReportRecorder: @unchecked Sendable {
                 try prepareDirectory()
                 // Persist the preceding run before starting a new one. No shutdown
                 // callback is required, and a missing callback is not called a crash.
-                let previous = try read("current-older.log") + read("current.log")
-                if !previous.isEmpty {
-                    try write(previous, to: file("previous.log"))
+                let outgoing = try read("current-older.log") + read("current.log")
+                if !outgoing.isEmpty {
+                    // Keep the three most recent completed runs. Rotate only
+                    // when this launch actually has a preceding run to save.
+                    try write(read("previous-2.log"), to: file("previous-3.log"))
+                    try write(read("previous.log"), to: file("previous-2.log"))
+                    try write(outgoing, to: file("previous.log"))
                 }
                 try write(Data(), to: file("current-older.log"))
                 try write(Data(), to: file("current.log"))
@@ -66,8 +70,15 @@ nonisolated final class ProblemReportRecorder: @unchecked Sendable {
                 do {
                     try prepareDirectory()
                     try append("report", "Report requested by user", at: .now)
-                    let previous = String(decoding: try read("previous.log"), as: UTF8.self)
                     let current = String(decoding: try read("current-older.log") + read("current.log"), as: UTF8.self)
+                    let previousSections = try [
+                        ("# Previous run / 上次运行", "previous.log"),
+                        ("# Two runs ago / 前两次运行", "previous-2.log"),
+                        ("# Three runs ago / 前三次运行", "previous-3.log")
+                    ].compactMap { heading, name -> String? in
+                        let content = String(decoding: try read(name), as: UTF8.self)
+                        return content.isEmpty ? nil : "\(heading)\n\(content)"
+                    }.joined(separator: "\n")
                     let text = """
                     MiniWatts problem report / 问题报告 · format 1
                     Generated (UTC): \(formatter.string(from: .now))
@@ -83,11 +94,10 @@ nonisolated final class ProblemReportRecorder: @unchecked Sendable {
                     # Current snapshot / 当前状态
                     \(summary.prefix(48000))
 
-                    # Previous run / 上次运行
-                    \(previous.isEmpty ? "No previous run recorded." : previous)
-
                     # Current run / 本次运行
                     \(current)
+
+                    \(previousSections.isEmpty ? "No previous run recorded." : previousSections)
                     """
                     let exports = directory.appendingPathComponent("Exports", isDirectory: true)
                     try FileManager.default.createDirectory(at: exports, withIntermediateDirectories: true)
