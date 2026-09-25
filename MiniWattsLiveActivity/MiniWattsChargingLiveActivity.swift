@@ -343,7 +343,7 @@ private func unit(for metric: LiveActivityMetric) -> String {
     switch metric {
     case .chargingPower: "W"
     case .cpuUsage: "%"
-    case .downloadSpeed, .uploadSpeed: "B/s"
+    case .downloadSpeed, .uploadSpeed: "KB/s"
     case .socTemperature, .batteryTemperature, .hottestTemperature: "°"
     }
 }
@@ -382,15 +382,18 @@ private func networkRate(
     }
     guard let bytes = numericValue(for: metric, state: state),
           bytes.isFinite, bytes >= 0 else { return nil }
-    let units = ["B/s", "KB/s", "MB/s", "GB/s"]
-    let compactUnits = ["B", "K", "M", "G"]
-    var scaled = bytes
+    // Always start at KB/s. Tiny or idle traffic may read 0.0K, but never
+    // switch the Live Activity down to a noisy B/s readout.
+    let units = ["KB/s", "MB/s", "GB/s"]
+    let compactUnits = ["K", "M", "G"]
+    var scaled = bytes / 1_000
     var index = 0
-    while scaled >= 1_000 && index < units.count - 1 {
+    // Switch just before rounding would turn a compact 999K into a wider 1,000K.
+    while scaled >= 999.5 && index < units.count - 1 {
         scaled /= 1_000
         index += 1
     }
-    let number = scaled < 10 && index > 0
+    let number = scaled < 10
         ? scaled.formatted(.number.precision(.fractionLength(1)))
         : scaled.formatted(.number.precision(.fractionLength(0)))
     let rounded = scaled.formatted(.number.precision(.fractionLength(0)))
