@@ -39,6 +39,10 @@ by several entries.
   `SystemCPULoadReader` samples Mach `HOST_CPU_LOAD_INFO` once per sensor tick;
   adjacent aggregate tick deltas yield whole-device CPU busy time, not this app's
   process usage, clock speed, or power. A missing or unchanged counter is nil.
+  `NetworkTrafficReader` uses public `getifaddrs` link-layer byte counters for
+  whole-device Wi-Fi/cellular upload and download rates. It excludes tunnels to
+  avoid double counting, handles 32-bit wrap and path changes, and needs two
+  adjacent samples; it does not send network traffic or measure per-app usage.
 - `Core/Model/` — `PowerSnapshot` merges all four sources and owns every derived value.
   Anything derived from the HID readings is resolved **once, in `init`, and stored** —
   it used to be computed per access, which meant a body asking for the battery

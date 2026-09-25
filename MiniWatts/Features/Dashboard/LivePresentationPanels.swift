@@ -28,11 +28,15 @@ struct LiveActivityControlPanel: View {
                         Text("Battery temperature icon").tag(LiveActivityLeadingItem.batteryTemperatureIcon)
                         Text("Hottest temperature icon").tag(LiveActivityLeadingItem.hottestTemperatureIcon)
                         Text("CPU icon").tag(LiveActivityLeadingItem.cpuIcon)
+                        Text("Download icon").tag(LiveActivityLeadingItem.downloadIcon)
+                        Text("Upload icon").tag(LiveActivityLeadingItem.uploadIcon)
                         Text("Charging power").tag(LiveActivityLeadingItem.chargingPower)
                         Text("SoC temperature").tag(LiveActivityLeadingItem.socTemperature)
                         Text("Battery temperature").tag(LiveActivityLeadingItem.batteryTemperature)
                         Text("Hottest component").tag(LiveActivityLeadingItem.hottestTemperature)
                         Text("CPU usage").tag(LiveActivityLeadingItem.cpuUsage)
+                        Text("Download speed").tag(LiveActivityLeadingItem.downloadSpeed)
+                        Text("Upload speed").tag(LiveActivityLeadingItem.uploadSpeed)
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
@@ -48,6 +52,8 @@ struct LiveActivityControlPanel: View {
                         Text("Battery temperature").tag(LiveActivityMetric.batteryTemperature)
                         Text("Hottest component").tag(LiveActivityMetric.hottestTemperature)
                         Text("CPU usage").tag(LiveActivityMetric.cpuUsage)
+                        Text("Download speed").tag(LiveActivityMetric.downloadSpeed)
+                        Text("Upload speed").tag(LiveActivityMetric.uploadSpeed)
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
@@ -64,6 +70,8 @@ struct LiveActivityControlPanel: View {
                         Text("Battery temperature").tag(LiveActivityMinimalSelection.batteryTemperature)
                         Text("Hottest component").tag(LiveActivityMinimalSelection.hottestTemperature)
                         Text("CPU usage").tag(LiveActivityMinimalSelection.cpuUsage)
+                        Text("Download speed").tag(LiveActivityMinimalSelection.downloadSpeed)
+                        Text("Upload speed").tag(LiveActivityMinimalSelection.uploadSpeed)
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
@@ -131,6 +139,11 @@ struct LiveActivityControlPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text("When two or three activities share the Dynamic Island, MiniWatts shows one short reading chosen above. iOS decides its position; the left and right choices apply when MiniWatts is alone.")
+                    .font(.caption)
+                    .foregroundStyle(Color.mwMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("Upload and download speeds count traffic from the whole device over the latest sample, including other apps. The first sample, a network change, or a long pause shows no reading until two adjacent samples are available. K and M mean KB/s and MB/s in the compact island.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)

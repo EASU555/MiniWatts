@@ -45,6 +45,9 @@ nonisolated struct PowerSnapshot {
     let systemBatteryPercent: Int?
     /// Busy CPU time across the whole device during the latest sampling interval.
     let cpuUsagePercent: Double?
+    /// Whole-device Wi-Fi/cellular traffic over the latest adjacent sample.
+    let downloadBytesPerSecond: Double?
+    let uploadBytesPerSecond: Double?
     let registry: [String: Any]
     let powerSource: [String: Any]?
     let adapterDetails: [String: Any]?
@@ -85,6 +88,8 @@ nonisolated struct PowerSnapshot {
     init(date: Date = .now,
          systemBatteryPercent: Int? = nil,
          cpuUsagePercent: Double? = nil,
+         downloadBytesPerSecond: Double? = nil,
+         uploadBytesPerSecond: Double? = nil,
          registry: [String: Any] = [:],
          powerSource: [String: Any]? = nil,
          adapterDetails: [String: Any]? = nil,
@@ -94,6 +99,12 @@ nonisolated struct PowerSnapshot {
         self.systemBatteryPercent = systemBatteryPercent.flatMap(Self.validPercent)
         self.cpuUsagePercent = cpuUsagePercent.flatMap {
             $0.isFinite && (0...100).contains($0) ? $0 : nil
+        }
+        self.downloadBytesPerSecond = downloadBytesPerSecond.flatMap {
+            $0.isFinite && $0 >= 0 ? $0 : nil
+        }
+        self.uploadBytesPerSecond = uploadBytesPerSecond.flatMap {
+            $0.isFinite && $0 >= 0 ? $0 : nil
         }
         self.registry = registry
         self.powerSource = powerSource

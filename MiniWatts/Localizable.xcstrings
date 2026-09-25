@@ -1,6 +1,31 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Download speed" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下载速度" } }
+      }
+    },
+    "Upload speed" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上传速度" } }
+      }
+    },
+    "Download icon" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下载图标" } }
+      }
+    },
+    "Upload icon" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上传图标" } }
+      }
+    },
+    "Upload and download speeds count traffic from the whole device over the latest sample, including other apps. The first sample, a network change, or a long pause shows no reading until two adjacent samples are available. K and M mean KB/s and MB/s in the compact island." : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上传和下载速度统计整台设备最近一次采样期间的流量，包括其他 App。首次采样、网络切换或长时间暂停后，需要等到连续两次采样才会出现读数。灵动岛紧凑显示中的 K 和 M 分别表示 KB/s 和 MB/s。" } }
+      }
+    },
     "Loading history" : {
       "localizations" : {
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在载入历史记录" } }

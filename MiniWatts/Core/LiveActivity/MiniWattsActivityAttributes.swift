@@ -9,6 +9,8 @@ nonisolated enum LiveActivityMetric: String, Codable, CaseIterable, Identifiable
     case batteryTemperature
     case hottestTemperature
     case cpuUsage
+    case downloadSpeed
+    case uploadSpeed
 
     var id: Self { self }
 }
@@ -22,6 +24,8 @@ nonisolated enum LiveActivityMinimalSelection: String, CaseIterable, Identifiabl
     case batteryTemperature
     case hottestTemperature
     case cpuUsage
+    case downloadSpeed
+    case uploadSpeed
 
     var id: Self { self }
 
@@ -33,6 +37,8 @@ nonisolated enum LiveActivityMinimalSelection: String, CaseIterable, Identifiabl
         case .batteryTemperature: .batteryTemperature
         case .hottestTemperature: .hottestTemperature
         case .cpuUsage: .cpuUsage
+        case .downloadSpeed: .downloadSpeed
+        case .uploadSpeed: .uploadSpeed
         }
     }
 }
@@ -46,22 +52,29 @@ nonisolated enum LiveActivityLeadingItem: String, Codable, CaseIterable, Identif
     case batteryTemperatureIcon
     case hottestTemperatureIcon
     case cpuIcon
+    case downloadIcon
+    case uploadIcon
     case chargingPower
     case socTemperature
     case batteryTemperature
     case hottestTemperature
     case cpuUsage
+    case downloadSpeed
+    case uploadSpeed
 
     var id: Self { self }
 
     var metric: LiveActivityMetric? {
         switch self {
-        case .statusIcon, .socIcon, .batteryTemperatureIcon, .hottestTemperatureIcon, .cpuIcon: nil
+        case .statusIcon, .socIcon, .batteryTemperatureIcon, .hottestTemperatureIcon,
+             .cpuIcon, .downloadIcon, .uploadIcon: nil
         case .chargingPower: .chargingPower
         case .socTemperature: .socTemperature
         case .batteryTemperature: .batteryTemperature
         case .hottestTemperature: .hottestTemperature
         case .cpuUsage: .cpuUsage
+        case .downloadSpeed: .downloadSpeed
+        case .uploadSpeed: .uploadSpeed
         }
     }
 
@@ -71,8 +84,11 @@ nonisolated enum LiveActivityLeadingItem: String, Codable, CaseIterable, Identif
         case .batteryTemperatureIcon: .batteryTemperature
         case .hottestTemperatureIcon: .hottestTemperature
         case .cpuIcon: .cpuUsage
+        case .downloadIcon: .downloadSpeed
+        case .uploadIcon: .uploadSpeed
         case .statusIcon, .chargingPower, .socTemperature,
-             .batteryTemperature, .hottestTemperature, .cpuUsage: nil
+             .batteryTemperature, .hottestTemperature, .cpuUsage,
+             .downloadSpeed, .uploadSpeed: nil
         }
     }
 }
@@ -90,6 +106,9 @@ nonisolated struct MiniWattsActivityAttributes: ActivityAttributes {
         let batteryPercent: Int?
         /// Optional so an activity persisted by an older build still decodes.
         let cpuUsagePercent: Double?
+        /// Optional so activities created by previous builds still decode.
+        let downloadBytesPerSecond: Double?
+        let uploadBytesPerSecond: Double?
         let socTemperature: Double?
         let batteryTemperature: Double?
         let hottestTemperature: Double?

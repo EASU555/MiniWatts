@@ -37,6 +37,8 @@ final class PowerMonitor {
     private(set) var rateEstimateWatts: Double?
     private(set) var cpuSampledAt: Date?
     private(set) var cpuIntervalSeconds: TimeInterval?
+    private var latestNetworkInterfaceNames: [String] = []
+    private var latestNetworkInterval: TimeInterval?
     private(set) var diagnostics: [String] = []
     private(set) var batteryLevelSource = "unavailable"
     private(set) var batteryLevelSampledAt: Date?
@@ -423,10 +425,14 @@ final class PowerMonitor {
         let publishedAt = Date.now
         cpuSampledAt = raw.cpuSampledAt
         cpuIntervalSeconds = raw.cpuIntervalSeconds
+        latestNetworkInterfaceNames = raw.network.interfaceNames
+        latestNetworkInterval = raw.network.intervalSeconds
         recordSampleTiming(raw, publishedAt: publishedAt)
         let current = PowerSnapshot(date: publishedAt,
                                     systemBatteryPercent: levelReading?.percent,
                                     cpuUsagePercent: raw.cpuUsagePercent,
+                                    downloadBytesPerSecond: raw.network.downloadBytesPerSecond,
+                                    uploadBytesPerSecond: raw.network.uploadBytesPerSecond,
                                     registry: raw.registry,
                                     powerSource: internalBattery,
                                     adapterDetails: raw.adapterDetails,
@@ -878,6 +884,10 @@ final class PowerMonitor {
             "CPU sampled: \(cpuSampledAt.map(Self.epoch) ?? "—")",
             "CPU interval: \(cpuIntervalSeconds.map { String(format: "%.2f s", $0) } ?? "—")",
             "CPU sample age: \(cpuSampledAt.map { String(format: "%.2f s", Date.now.timeIntervalSince($0)) } ?? "—")",
+            "Network interfaces: \(latestNetworkInterfaceNames.joined(separator: ", "))",
+            "Network interval: \(latestNetworkInterval.map { String(format: "%.2f s", $0) } ?? "—")",
+            "Download bytes/s: \(snapshot.downloadBytesPerSecond.map { String(format: "%.0f", $0) } ?? "—")",
+            "Upload bytes/s: \(snapshot.uploadBytesPerSecond.map { String(format: "%.0f", $0) } ?? "—")",
             "Live Activity: \(liveActivityRecoveryStatus)",
             "Live Activity detail: \(liveActivityRecoveryDetail)",
             "External power: \(snapshot.externalConnected)",

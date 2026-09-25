@@ -145,10 +145,12 @@ private struct PrimaryMetricView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(verbatim: numericValue(for: state.selectedMetric, state: state)
-                    .map(oneDecimal) ?? "—")
+                Text(verbatim: networkRate(for: state.selectedMetric, state: state)?.number
+                    ?? numericValue(for: state.selectedMetric, state: state).map(oneDecimal)
+                    ?? "—")
                     .font(.title2.monospacedDigit().weight(.bold))
-                Text(verbatim: unit(for: state.selectedMetric))
+                Text(verbatim: networkRate(for: state.selectedMetric, state: state)?.unit
+                    ?? unit(for: state.selectedMetric))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
@@ -176,6 +178,11 @@ private struct PrimaryMetricView: View {
                     .lineLimit(1)
             } else if state.selectedMetric == .cpuUsage {
                 Text("Whole-device average")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else if state.selectedMetric == .downloadSpeed
+                        || state.selectedMetric == .uploadSpeed {
+                Text("Whole-device traffic")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -233,6 +240,8 @@ private struct CompactMetricValue: View {
     var body: some View {
         Text(verbatim: shortValue(for: state.selectedMetric, state: state))
             .font(.caption.monospacedDigit().weight(.bold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
     }
 }
 
@@ -277,6 +286,8 @@ private func numericValue(
     case .batteryTemperature: state.batteryTemperature
     case .hottestTemperature: state.hottestTemperature
     case .cpuUsage: state.cpuUsagePercent
+    case .downloadSpeed: state.downloadBytesPerSecond
+    case .uploadSpeed: state.uploadBytesPerSecond
     }
 }
 
@@ -287,6 +298,8 @@ private func label(for metric: LiveActivityMetric) -> LocalizedStringKey {
     case .batteryTemperature: "Battery temperature"
     case .hottestTemperature: "Hottest component"
     case .cpuUsage: "CPU usage"
+    case .downloadSpeed: "Download speed"
+    case .uploadSpeed: "Upload speed"
     }
 }
 
@@ -297,6 +310,8 @@ private func shortLabel(for metric: LiveActivityMetric) -> LocalizedStringKey {
     case .batteryTemperature: "Battery"
     case .hottestTemperature: "Hottest"
     case .cpuUsage: "CPU"
+    case .downloadSpeed: "Download"
+    case .uploadSpeed: "Upload"
     }
 }
 
@@ -307,6 +322,8 @@ private func symbol(for metric: LiveActivityMetric) -> String {
     case .batteryTemperature: "battery.75percent"
     case .hottestTemperature: "thermometer.high"
     case .cpuUsage: "cpu"
+    case .downloadSpeed: "arrow.down"
+    case .uploadSpeed: "arrow.up"
     }
 }
 
@@ -317,6 +334,8 @@ private func color(for metric: LiveActivityMetric) -> Color {
     case .batteryTemperature: .green
     case .hottestTemperature: .red
     case .cpuUsage: .cyan
+    case .downloadSpeed: .cyan
+    case .uploadSpeed: .mint
     }
 }
 
@@ -324,6 +343,7 @@ private func unit(for metric: LiveActivityMetric) -> String {
     switch metric {
     case .chargingPower: "W"
     case .cpuUsage: "%"
+    case .downloadSpeed, .uploadSpeed: "B/s"
     case .socTemperature, .batteryTemperature, .hottestTemperature: "°"
     }
 }
@@ -336,8 +356,48 @@ private func shortValue(
     for metric: LiveActivityMetric,
     state: MiniWattsActivityAttributes.ContentState
 ) -> String {
+    if let rate = networkRate(for: metric, state: state) { return rate.compact }
     guard let value = numericValue(for: metric, state: state) else { return "—" }
     return oneDecimal(value) + unit(for: metric)
+}
+
+private struct NetworkRatePresentation {
+    let number: String
+    let unit: String
+    let compact: String
+    let roundedCompact: String
+}
+
+/// Decimal byte units keep the two compact island slots legible. The direction
+/// arrow remains present even in the smallest multi-activity alternative.
+private func networkRate(
+    for metric: LiveActivityMetric,
+    state: MiniWattsActivityAttributes.ContentState
+) -> NetworkRatePresentation? {
+    let direction: String
+    switch metric {
+    case .downloadSpeed: direction = "↓"
+    case .uploadSpeed: direction = "↑"
+    default: return nil
+    }
+    guard let bytes = numericValue(for: metric, state: state),
+          bytes.isFinite, bytes >= 0 else { return nil }
+    let units = ["B/s", "KB/s", "MB/s", "GB/s"]
+    let compactUnits = ["B", "K", "M", "G"]
+    var scaled = bytes
+    var index = 0
+    while scaled >= 1_000 && index < units.count - 1 {
+        scaled /= 1_000
+        index += 1
+    }
+    let number = scaled < 10 && index > 0
+        ? scaled.formatted(.number.precision(.fractionLength(1)))
+        : scaled.formatted(.number.precision(.fractionLength(0)))
+    let rounded = scaled.formatted(.number.precision(.fractionLength(0)))
+    return NetworkRatePresentation(number: number,
+                                   unit: units[index],
+                                   compact: direction + number + compactUnits[index],
+                                   roundedCompact: direction + rounded + compactUnits[index])
 }
 
 private struct MinimalValueVariants {
@@ -353,6 +413,13 @@ private func minimalValueVariants(
     for metric: LiveActivityMetric,
     state: MiniWattsActivityAttributes.ContentState
 ) -> MinimalValueVariants? {
+    if let rate = networkRate(for: metric, state: state) {
+        return MinimalValueVariants(preferredWithUnit: rate.compact,
+                                    precise: rate.roundedCompact,
+                                    roundedWithUnit: rate.compact,
+                                    rounded: rate.roundedCompact)
+    }
+    if metric == .downloadSpeed || metric == .uploadSpeed { return nil }
     guard let value = numericValue(for: metric, state: state), value.isFinite else { return nil }
     if metric == .chargingPower {
         guard value >= 0, value < 1_000 else { return nil }
@@ -375,6 +442,9 @@ private func formattedValue(
     for metric: LiveActivityMetric,
     state: MiniWattsActivityAttributes.ContentState
 ) -> String {
+    if let rate = networkRate(for: metric, state: state) {
+        return "\(rate.number) \(rate.unit)"
+    }
     guard numericValue(for: metric, state: state) != nil else {
         return String(localized: "No reading")
     }

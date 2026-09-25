@@ -1,6 +1,31 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Download" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下载" } }
+      }
+    },
+    "Upload" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上传" } }
+      }
+    },
+    "Download speed" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下载速度" } }
+      }
+    },
+    "Upload speed" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上传速度" } }
+      }
+    },
+    "Whole-device traffic" : {
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "整机网络流量" } }
+      }
+    },
     "CPU usage" : {
       "localizations" : {
         "zh-Hans" : {

@@ -772,6 +772,8 @@ final class ChargingLiveActivityController {
             externalConnected: snapshot.externalConnected,
             batteryPercent: snapshot.percent,
             cpuUsagePercent: snapshot.cpuUsagePercent,
+            downloadBytesPerSecond: snapshot.downloadBytesPerSecond,
+            uploadBytesPerSecond: snapshot.uploadBytesPerSecond,
             socTemperature: snapshot.socTemperature,
             batteryTemperature: snapshot.batteryTemperature,
             hottestTemperature: snapshot.hottestSensor?.value,

@@ -87,6 +87,9 @@ jobs:
       - name: Test sensor evidence and PiP sampling policy
         run: bash ./scripts/test-sensor-evidence.sh
 
+      - name: Test network traffic sampling and counter recovery
+        run: bash ./scripts/test-network-traffic.sh
+
       # On a tag, the tag is the version: build-ipa.sh hands MARKETING_VERSION to
       # xcodebuild, so the project file never has to be edited to cut a release. Taken
       # from the triggering tag explicitly rather than left to the script's own git

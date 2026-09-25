@@ -10,6 +10,8 @@ struct PowerSnapshot {
     var batteryWatts: Double? = 10
     var percent: Int? = 50
     var cpuUsagePercent: Double? = 24
+    var downloadBytesPerSecond: Double? = 1_250_000
+    var uploadBytesPerSecond: Double? = 24_000
     var socTemperature: Double? = 32
     var batteryTemperature: Double? = 30
     var hottestSensor: (value: Double, name: String)? = nil
@@ -39,6 +41,35 @@ struct PowerSnapshot {
         }
     }
     static func main() async {
+        check(LiveActivityLeadingItem.uploadSpeed.metric == .uploadSpeed,
+              "Left upload choice lost its reading")
+        check(LiveActivityLeadingItem.downloadIcon.iconMetric == .downloadSpeed,
+              "Left download icon lost its symbol")
+        check(LiveActivityMinimalSelection.downloadSpeed.resolvedMetric(primary: .chargingPower)
+                == .downloadSpeed, "Multi-activity choice followed the wrong side")
+
+        // Older running activities have no network fields. Installing this build
+        // must decode them and wait for a fresh network sample, not discard them.
+        let legacyState = MiniWattsActivityAttributes.ContentState(
+            chargeWatts: 12, powerIsBatterySide: false, externalConnected: true,
+            batteryPercent: 50, cpuUsagePercent: 24,
+            downloadBytesPerSecond: nil, uploadBytesPerSecond: nil,
+            socTemperature: 32, batteryTemperature: 30,
+            hottestTemperature: nil, hottestSensorName: nil,
+            sampledAt: .now, leadingItem: .statusIcon,
+            selectedMetric: .chargingPower, minimalMetric: .chargingPower,
+            isWireless: false
+        )
+        var oldPayload = try! JSONSerialization.jsonObject(with: JSONEncoder().encode(legacyState))
+            as! [String: Any]
+        oldPayload.removeValue(forKey: "downloadBytesPerSecond")
+        oldPayload.removeValue(forKey: "uploadBytesPerSecond")
+        let oldData = try! JSONSerialization.data(withJSONObject: oldPayload)
+        let decoded = try! JSONDecoder().decode(
+            MiniWattsActivityAttributes.ContentState.self, from: oldData)
+        check(decoded.downloadBytesPerSecond == nil && decoded.uploadBytesPerSecond == nil,
+              "Earlier Live Activity state no longer decodes")
+
         // A pending request used to have its 8 s deadline reset by every tick.
         TestSystem.reset()
         TestSystem.configure(pending: true)

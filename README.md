@@ -21,10 +21,11 @@ sensor in the phone is doing while it happens.
 |:-:|:-:|:-:|:-:|
 | <img src="docs/screenshots/power.jpg" width="200" alt="Power"> | <img src="docs/screenshots/thermal.jpg" width="200" alt="Thermal"> | <img src="docs/screenshots/adapter.jpg" width="200" alt="Adapter"> | <img src="docs/screenshots/history.jpg" width="200" alt="History"> |
 
-The manually enabled Live Activity can put charging power, SoC temperature, battery
-temperature or the hottest component in the Dynamic Island and on the Lock Screen,
-whether or not a charger is currently connected. Choose the compact readout in
-Settings; press and hold the Island to see all four.
+The manually enabled Live Activity can show charging power, temperatures, CPU usage,
+or whole-device upload and download speeds in the Dynamic Island and on the Lock
+Screen, whether or not a charger is connected. Choose the left, right, and
+multi-activity readings independently on the dashboard. Network speed is measured
+from adjacent Wi-Fi/cellular interface byte counters, not from MiniWatts alone.
 
 Settings also has a user-started floating monitor built with system Picture in
 Picture. Its generated video surface refreshes every second and can show charging
@@ -33,15 +34,14 @@ temperatures can be enabled independently; when both are enabled they can share 
 screen or alternate as separate pages. While this window is open, its Picture in
 Picture background mode keeps sensor sampling active.
 
-Build 19 also uses a silent background-audio session to attempt frequent Live Activity
-updates after the app leaves the foreground. iOS still controls scheduling and may
-throttle, pause, dismiss or eventually end the activity. Keeping background sampling
-active consumes additional battery; disable the Live Activity and close the floating
-monitor when you no longer need them.
+The Live Activity refreshes while MiniWatts is running, including in the background
+while the floating monitor is active. A Live Activity alone does not keep sampling
+alive. iOS may pause, dismiss or eventually end it; close the floating monitor when
+you no longer need background sampling.
 
 > **Sideload only.** Private APIs mean this can never be on the App Store — you sign
-> and install it yourself. There is no network code of any kind: nothing it reads
-> leaves your phone.
+> and install it yourself. It reads local network counters but makes no network
+> requests or uploads: nothing it reads leaves your phone.
 
 ## Install
 

@@ -18,6 +18,7 @@ actor SensorProbe {
         let cpuUsagePercent: Double?
         let cpuSampledAt: Date
         let cpuIntervalSeconds: TimeInterval?
+        let network: NetworkTrafficReader.Sample
         let startedAt: Date
         let finishedAt: Date
         let elapsedMilliseconds: Double
@@ -26,6 +27,7 @@ actor SensorProbe {
     private var battery: IOKitBattery?
     private var hid: HIDSensors?
     private var cpuLoad = SystemCPULoadReader()
+    private var networkTraffic = NetworkTrafficReader()
     private var initialized = false
 
     private func prepareIfNeeded() {
@@ -41,6 +43,7 @@ actor SensorProbe {
         // Read the lightweight CPU counters before the HID/powerd sweep. A slow
         // private sensor must not shift the CPU interval within this probe.
         let cpuSample = cpuLoad.read()
+        let networkSample = networkTraffic.read()
         let registry = battery?.readRegistryProperties() ?? [:]
         let sources = battery?.readPowerSources() ?? []
         let adapterDetails = battery?.readAdapterDetails()
@@ -58,6 +61,7 @@ actor SensorProbe {
                       cpuUsagePercent: cpuSample.percent,
                       cpuSampledAt: cpuSample.sampledAt,
                       cpuIntervalSeconds: cpuSample.intervalSeconds,
+                      network: networkSample,
                       startedAt: started,
                       finishedAt: finished,
                       elapsedMilliseconds: finished.timeIntervalSince(started) * 1000)
