@@ -2860,6 +2860,16 @@
         }
       }
     },
+    "Reset and reopen floating monitor" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重置并重新打开悬浮监视器"
+          }
+        }
+      }
+    },
     "Restarting Live Activity" : {
       "localizations" : {
         "zh-Hans" : {

@@ -60,13 +60,19 @@ by several entries.
   updates and gives each update a 30-second `staleDate`. It re-adopts ActivityKit's
   system-owned activity if the local reference is lost and replaces an activity that
   remains stuck in `.pending`. `MiniWattsLiveActivity/` is the WidgetKit extension
-  that renders the Lock Screen and Dynamic Island presentations.
+  that renders the Lock Screen and Dynamic Island presentations. An explicit
+  restart supersedes any unfinished lifecycle task; a stalled ActivityKit end
+  worker has a bounded lease so later retries are not silently ignored.
 - `Features/PictureInPicture/` — converts the current snapshot to a 640×360 SwiftUI
   instrument frame, then enqueues it on `AVSampleBufferDisplayLayer` for a user-started
   `AVPictureInPictureController`. Power and temperatures are independently selectable;
   the combined mode can be one page or a four-second two-page rotation. Start attempts
   have a bounded watchdog and discard a wedged AVKit controller, so a missing delegate
-  callback cannot leave Settings spinning until process restart.
+  callback cannot leave Settings spinning until process restart. Observe AVKit's
+  active state as well as its delegate callbacks. When PiP disappears unexpectedly,
+  restore the hidden 0.1 pt carrier to visible size and recreate the VideoCall
+  source before the next start. Settings has a reset-and-reopen action for a
+  transition that remains wedged despite automatic reconciliation.
 - `Design/` — palette (`Color.mw(light:dark:)`, no asset catalog entries), `Panel`/
   `Metric`/`Pill`/`BarRow`, `PowerRing`, Swift Charts wrappers, `PhoneHeatMap`.
 - `Features/` — one folder per tab, plus Settings. `DebugView` (Raw data) is

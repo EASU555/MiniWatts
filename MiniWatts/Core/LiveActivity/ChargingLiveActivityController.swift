@@ -40,6 +40,9 @@ final class ChargingLiveActivityController {
     private static let operationTimeoutSeconds: TimeInterval = 8
     private static let requestRetryInterval: TimeInterval = 5
     private static let systemReleaseTimeout: Duration = .seconds(5)
+    /// An ActivityKit end call can fail to return even after its own UI is gone.
+    /// Permit a later explicit retry instead of keeping its ID locked forever.
+    private static let endOperationLease: Duration = .seconds(20)
     private static let replacementAttemptCount = 4
     /// ActivityKit can take a moment to publish a newly requested activity through
     /// `Activity.activities`. Do not mistake that short hand-off for a vanished
@@ -72,7 +75,7 @@ final class ChargingLiveActivityController {
     private var retiredActivityIDs: Set<String> = []
     /// End calls may never return. Keep one worker per old ID and never await it
     /// from the lifecycle coordinator. A late worker can only end its captured ID.
-    private var endingActivityIDs: Set<String> = []
+    private var endingActivityTokens: [String: UUID] = [:]
     var onDiagnostic: ((String) -> Void)?
     var onUpdateTrace: ((LiveActivityUpdateTrace) -> Void)?
     var onDetailChange: ((String) -> Void)?
@@ -190,6 +193,15 @@ final class ChargingLiveActivityController {
                                       selectedMetric: selectedMetric,
                                       minimalMetric: minimalMetric)
         latestState = state
+        // A previous restart may be waiting for ActivityKit to release an old
+        // presentation. A second user request must replace that attempt, rather
+        // than silently returning until the app process is relaunched.
+        if lifecycleTask != nil {
+            lifecycleGeneration &+= 1
+            lifecycleTask?.cancel()
+            lifecycleTask = nil
+            record("Superseding unfinished restart")
+        }
         beginRestart(state: state,
                      leadingItem: leadingItem,
                      selectedMetric: selectedMetric,
@@ -455,16 +467,30 @@ final class ChargingLiveActivityController {
     }
 
     private func scheduleEnds(for ids: Set<String>) {
-        for id in ids where endingActivityIDs.insert(id).inserted {
+        for id in ids where endingActivityTokens[id] == nil {
+            let token = UUID()
+            endingActivityTokens[id] = token
             Task.detached { [weak self] in
                 await Self.endActivities(withIDs: [id])
-                await self?.didEnd(id)
+                await self?.didEnd(id, token: token)
+            }
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: Self.endOperationLease)
+                guard !Task.isCancelled else { return }
+                self?.expireEndLease(id, token: token)
             }
         }
     }
 
-    private func didEnd(_ id: String) {
-        endingActivityIDs.remove(id)
+    private func didEnd(_ id: String, token: UUID) {
+        guard endingActivityTokens[id] == token else { return }
+        endingActivityTokens.removeValue(forKey: id)
+    }
+
+    private func expireEndLease(_ id: String, token: UUID) {
+        guard endingActivityTokens[id] == token else { return }
+        endingActivityTokens.removeValue(forKey: id)
+        record("End call for \(id) exceeded 20 seconds; a later restart may retry")
     }
 
     private static func isOngoing(_ state: ActivityState) -> Bool {

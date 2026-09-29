@@ -105,6 +105,29 @@ struct PowerSnapshot {
         try? await Task.sleep(for: .milliseconds(300))
         print("PASS: hung end is bounded, ticks cannot resurrect old activity, late cleanup is scoped")
 
+        // A second tap during a slow end/replacement must supersede the old
+        // lifecycle attempt. The old behavior silently ignored every tap until
+        // its task returned, making force-quitting look like the only recovery.
+        TestSystem.reset()
+        let repeated = ChargingLiveActivityController()
+        var restartEvents: [String] = []
+        repeated.onDiagnostic = { restartEvents.append($0) }
+        tick(repeated)
+        try? await Task.sleep(for: .milliseconds(100))
+        TestSystem.configure(endDelay: .seconds(4))
+        restart(repeated)
+        try? await Task.sleep(for: .seconds(1))
+        restart(repeated)
+        check(restartEvents.contains("Superseding unfinished restart"),
+              "Second restart was ignored while the first was still pending")
+        await sample(repeated, seconds: 5)
+        check(TestSystem.requests == 2 && repeated.recoveryStatus == .running,
+              "Repeated restart did not recover in the same process")
+        TestSystem.configure()
+        repeated.endIfNeeded()
+        try? await Task.sleep(for: .milliseconds(300))
+        print("PASS: repeated manual restart supersedes a pending lifecycle task")
+
         // Background update timeout must never end the only visible activity.
         TestSystem.reset()
         let background = ChargingLiveActivityController()

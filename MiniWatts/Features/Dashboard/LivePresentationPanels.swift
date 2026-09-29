@@ -103,16 +103,15 @@ struct LiveActivityControlPanel: View {
                             if monitor.liveActivityRecoveryStatus == .restarting {
                                 ProgressView()
                                     .controlSize(.small)
-                                Text("Restarting Live Activity")
                             } else {
-                                Label("Restart Live Activity", systemImage: "arrow.clockwise")
+                                Image(systemName: "arrow.clockwise")
                             }
+                            Text("Restart Live Activity")
                         }
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                     .tint(.mwAccent)
-                    .disabled(monitor.liveActivityRecoveryStatus == .restarting)
                 }
 
                 if case .failed = monitor.liveActivityRecoveryStatus {
@@ -283,6 +282,16 @@ struct FloatingMonitorControlPanel: View {
                           || !pictureInPicture.isSupported
                           || (!pictureInPicture.isActive
                               && !pictureInPicture.hasSelectedContent))
+
+                Button {
+                    pictureInPicture.resetAndRestart()
+                } label: {
+                    Label("Reset and reopen floating monitor", systemImage: "arrow.clockwise")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(!pictureInPicture.isSupported
+                          || !pictureInPicture.hasSelectedContent)
 
                 if !pictureInPicture.isSupported {
                     EmptyNote(text: "Picture in Picture is not supported on this device.",
