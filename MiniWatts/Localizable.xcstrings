@@ -2870,6 +2870,16 @@
         }
       }
     },
+    "Picture in Picture could not stop. Try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画中画未能停止，请重试。"
+          }
+        }
+      }
+    },
     "Restarting Live Activity" : {
       "localizations" : {
         "zh-Hans" : {

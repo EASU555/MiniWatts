@@ -62,7 +62,12 @@ by several entries.
   remains stuck in `.pending`. `MiniWattsLiveActivity/` is the WidgetKit extension
   that renders the Lock Screen and Dynamic Island presentations. An explicit
   restart supersedes any unfinished lifecycle task; a stalled ActivityKit end
-  worker has a bounded lease so later retries are not silently ignored.
+  worker has a four-second lease so cleanup can retry. Never request a replacement
+  while a retiring activity is still active, stale or pending, including after the
+  twelve-second release deadline. Explicit restarts temporarily release PiP first,
+  wait for a replacement to become active, then restore the window and its hidden
+  state. `RootView` supplies those AVKit hooks; automatic foreground reconciliation
+  does not interrupt PiP. ActivityKit acceptance is not proof of island visibility.
 - `Features/PictureInPicture/` — converts the current snapshot to a 640×360 SwiftUI
   instrument frame, then enqueues it on `AVSampleBufferDisplayLayer` for a user-started
   `AVPictureInPictureController`. Power and temperatures are independently selectable;

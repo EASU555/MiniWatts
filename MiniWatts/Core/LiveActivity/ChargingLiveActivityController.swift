@@ -39,10 +39,10 @@ final class ChargingLiveActivityController {
     private static let operationTimeout: Duration = .seconds(8)
     private static let operationTimeoutSeconds: TimeInterval = 8
     private static let requestRetryInterval: TimeInterval = 5
-    private static let systemReleaseTimeout: Duration = .seconds(5)
+    private static let systemReleaseTimeout: Duration = .seconds(12)
     /// An ActivityKit end call can fail to return even after its own UI is gone.
     /// Permit a later explicit retry instead of keeping its ID locked forever.
-    private static let endOperationLease: Duration = .seconds(20)
+    private static let endOperationLease: Duration = .seconds(4)
     private static let replacementAttemptCount = 4
     /// ActivityKit can take a moment to publish a newly requested activity through
     /// `Activity.activities`. Do not mistake that short hand-off for a vanished
@@ -73,12 +73,19 @@ final class ChargingLiveActivityController {
     private var needsForegroundRecovery = false
     private var automaticRecoveryCount = 0
     private var retiredActivityIDs: Set<String> = []
-    /// End calls may never return. Keep one worker per old ID and never await it
-    /// from the lifecycle coordinator. A late worker can only end its captured ID.
+    private var blockedActivityIDs: Set<String> = []
+    private var pendingPresentationRepair = false
+    /// End calls may never return. Retry an ID only after its lease expires and
+    /// never await the worker. A late worker can only end its captured old ID.
     private var endingActivityTokens: [String: UUID] = [:]
+    private var endRetryNotBefore: [String: Date] = [:]
     var onDiagnostic: ((String) -> Void)?
     var onUpdateTrace: ((LiveActivityUpdateTrace) -> Void)?
     var onDetailChange: ((String) -> Void)?
+    /// Explicit recovery releases AVKit's presentation before replacing an
+    /// ActivityKit presentation, then restores the user's PiP session.
+    var preparePresentationForRestart: (@MainActor () async -> Bool)?
+    var finishPresentationRestart: (@MainActor () -> Void)?
     private(set) var recoveryDetail = "" {
         didSet { onDetailChange?(recoveryDetail) }
     }
@@ -110,6 +117,15 @@ final class ChargingLiveActivityController {
     }
 
     var isRunning: Bool { activity != nil }
+
+    var diagnosticSummary: String {
+        let system = Activity<MiniWattsActivityAttributes>.activities
+            .map { "\($0.id):\($0.activityState)" }.sorted().joined(separator: ",")
+        return "cached=\(activity?.id ?? "none") system=[\(system)] "
+            + "blocked=\(ongoingActivityIDs(in: blockedActivityIDs).count) "
+            + "restarting=\(lifecycleTask != nil) relevance=\(relevanceScore) "
+            + "appState=\(UIApplication.shared.applicationState)"
+    }
 
     func setRelevanceScore(_ score: Int) {
         relevanceScore = score == 0 ? 0 : 1
@@ -153,6 +169,22 @@ final class ChargingLiveActivityController {
         let now = Date.now
 
         if activity == nil {
+            let blocked = ongoingActivityIDs(in: blockedActivityIDs)
+            if !blocked.isEmpty {
+                scheduleEnds(for: blocked)
+                return
+            }
+            blockedActivityIDs.removeAll()
+            if pendingPresentationRepair, UIApplication.shared.applicationState == .active {
+                guard Self.areActivitiesEnabled,
+                      now.timeIntervalSince(lastRequestAt) >= Self.requestRetryInterval else { return }
+                beginRestart(state: state,
+                             leadingItem: leadingItem,
+                             selectedMetric: selectedMetric,
+                             at: now,
+                             repairsPresentation: true)
+                return
+            }
             guard lifecycleTask == nil else { return }
             guard Self.areActivitiesEnabled else { return }
             guard UIApplication.shared.applicationState == .active else { return }
@@ -185,9 +217,11 @@ final class ChargingLiveActivityController {
     func restart(snapshot: PowerSnapshot,
                  leadingItem: LiveActivityLeadingItem,
                  selectedMetric: LiveActivityMetric,
-                 minimalMetric: LiveActivityMetric) {
+                 minimalMetric: LiveActivityMetric,
+                 repairsPresentation: Bool = true) {
         enabled = true
         automaticRecoveryCount = 0
+        if repairsPresentation { pendingPresentationRepair = true }
         let state = Self.contentState(from: snapshot,
                                       leadingItem: leadingItem,
                                       selectedMetric: selectedMetric,
@@ -205,14 +239,16 @@ final class ChargingLiveActivityController {
         beginRestart(state: state,
                      leadingItem: leadingItem,
                      selectedMetric: selectedMetric,
-                     at: snapshot.date)
+                     at: snapshot.date,
+                     repairsPresentation: repairsPresentation)
     }
 
     private func beginRestart(
         state: MiniWattsActivityAttributes.ContentState,
         leadingItem: LiveActivityLeadingItem,
         selectedMetric: LiveActivityMetric,
-        at date: Date
+        at date: Date,
+        repairsPresentation: Bool = false
     ) {
         guard enabled else { return }
         guard UIApplication.shared.applicationState == .active else {
@@ -223,31 +259,56 @@ final class ChargingLiveActivityController {
             return
         }
         guard lifecycleTask == nil else { return }
+        let repairsPresentation = repairsPresentation || pendingPresentationRepair
         needsForegroundRecovery = false
-        // Only IDs cross into ActivityKit's `@concurrent` end operation. The
-        // framework objects aren't Sendable under Swift 6 strict isolation.
-        let activityIDs = allKnownActivityIDs()
-        retiredActivityIDs.formUnion(activityIDs)
-
         lifecycleGeneration &+= 1
         let generation = lifecycleGeneration
         lifecycleTask?.cancel()
         lifecycleTask = nil
-        resetLocalActivity()
         recoveryStatus = .restarting
-        record("Ending old activities: \(activityIDs.count)")
-        scheduleEnds(for: activityIDs)
+        record("Restart requested; \(diagnosticSummary)")
 
         lifecycleTask = Task { @MainActor [weak self] in
             guard let self,
                   self.lifecycleGeneration == generation else { return }
+            defer {
+                if self.lifecycleGeneration == generation {
+                    self.lifecycleTask = nil
+                    if repairsPresentation { self.finishPresentationRestart?() }
+                }
+            }
+            if repairsPresentation, let prepare = self.preparePresentationForRestart {
+                self.record("Releasing PiP presentation before ActivityKit restart")
+                let prepared = await prepare()
+                guard !Task.isCancelled, self.lifecycleGeneration == generation else { return }
+                guard prepared else {
+                    self.recoveryStatus = .failed("Picture in Picture did not release its system presentation.")
+                    self.record("PiP release failed; existing activity retained")
+                    return
+                }
+            }
+
+            // Only IDs cross into ActivityKit's concurrent end operation. The
+            // framework objects aren't Sendable under Swift 6 strict isolation.
+            let activityIDs = self.allKnownActivityIDs()
+            self.retiredActivityIDs.formUnion(activityIDs)
+            self.blockedActivityIDs.formUnion(activityIDs)
+            self.resetLocalActivity()
+            self.record("Ending old activities: \(activityIDs.count)")
+            self.scheduleEnds(for: activityIDs)
 
             // `end` returning does not mean the old presentation has released its
             // ActivityKit slot. Wait for the framework's source-of-truth list to
             // confirm release instead of relying on a fixed 400 ms delay.
-            await self.waitForSystemRelease(of: activityIDs, generation: generation)
+            let released = await self.waitForSystemRelease(of: activityIDs, generation: generation)
             guard !Task.isCancelled,
                   self.lifecycleGeneration == generation else { return }
+            guard released else {
+                self.recoveryStatus = .failed("ActivityKit has not released the previous Live Activity.")
+                self.record("Old activities still active; replacement deferred. \(self.diagnosticSummary)")
+                return
+            }
+            self.blockedActivityIDs.subtract(activityIDs)
 
             await self.requestReplacement(
                 state: state,
@@ -256,8 +317,16 @@ final class ChargingLiveActivityController {
                 at: date,
                 generation: generation
             )
-            if self.lifecycleGeneration == generation {
-                self.lifecycleTask = nil
+            if repairsPresentation, self.activity != nil {
+                let activated = await self.waitForReplacementActivation(generation: generation)
+                guard !Task.isCancelled, self.lifecycleGeneration == generation else { return }
+                if activated {
+                    self.pendingPresentationRepair = false
+                    self.record("Replacement accepted; restoring PiP. \(self.diagnosticSummary)")
+                } else {
+                    self.recoveryStatus = .failed("The replacement Live Activity did not become active.")
+                    self.record("Replacement activation was not confirmed; \(self.diagnosticSummary)")
+                }
             }
         }
     }
@@ -296,7 +365,8 @@ final class ChargingLiveActivityController {
             restart(snapshot: snapshot,
                     leadingItem: leadingItem,
                     selectedMetric: selectedMetric,
-                    minimalMetric: minimalMetric)
+                    minimalMetric: minimalMetric,
+                    repairsPresentation: false)
         } else {
             reconcile(snapshot: snapshot,
                       leadingItem: leadingItem,
@@ -311,12 +381,14 @@ final class ChargingLiveActivityController {
         // The disabled sensor tick must not repeatedly cancel an in-progress stop.
         guard enabled || activity != nil || lifecycleTask != nil else { return }
         enabled = false
+        pendingPresentationRepair = false
         needsForegroundRecovery = false
         // Capture every ID before clearing local state. Older recovery races could
         // leave more than one activity behind, and ending only `.first` allowed the
         // remainder to consume the system activity limit.
         let activityIDs = allKnownActivityIDs()
         retiredActivityIDs.formUnion(activityIDs)
+        blockedActivityIDs.formUnion(activityIDs)
         lifecycleGeneration &+= 1
         lifecycleTask?.cancel()
         lifecycleTask = nil
@@ -324,6 +396,7 @@ final class ChargingLiveActivityController {
         recoveryStatus = .idle
         record("Stopped by user")
         scheduleEnds(for: activityIDs)
+        finishPresentationRestart?()
     }
 
     private func requestActivity(
@@ -333,6 +406,7 @@ final class ChargingLiveActivityController {
         at date: Date
     ) {
         guard enabled, automaticRecoveryCount <= 2 else { return }
+        guard ongoingActivityIDs(in: blockedActivityIDs).isEmpty else { return }
         guard Self.areActivitiesEnabled else { return }
         guard UIApplication.shared.applicationState == .active else { return }
         do {
@@ -363,35 +437,58 @@ final class ChargingLiveActivityController {
         Set(
             Activity<MiniWattsActivityAttributes>.activities.map(\.id)
                 + [activity?.id].compactMap { $0 }
-        )
+        ).union(blockedActivityIDs)
     }
 
-    private func waitForSystemRelease(of activityIDs: Set<String>, generation: Int) async {
+    private func ongoingActivityIDs(in ids: Set<String>) -> Set<String> {
+        Set(Activity<MiniWattsActivityAttributes>.activities.filter {
+            ids.contains($0.id) && Self.isOngoing($0.activityState)
+        }.map(\.id))
+    }
+
+    private func waitForReplacementActivation(generation: Int) async -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: Self.operationTimeout)
+        while !Task.isCancelled && lifecycleGeneration == generation {
+            guard let activity else { return false }
+            switch activity.activityState {
+            case .active, .stale:
+                // Give the new presentation a turn before AVKit starts again.
+                try? await Task.sleep(for: .milliseconds(350))
+                return !Task.isCancelled && lifecycleGeneration == generation
+            case .ended, .dismissed: return false
+            case .pending: break
+            @unknown default: return false
+            }
+            if clock.now >= deadline { return false }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        return false
+    }
+
+    private func waitForSystemRelease(of activityIDs: Set<String>, generation: Int) async -> Bool {
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: Self.systemReleaseTimeout)
         var consecutiveEmptyChecks = 0
 
         while !Task.isCancelled && lifecycleGeneration == generation {
-            let ongoingActivityIDs = Set(Activity<MiniWattsActivityAttributes>.activities.filter {
-                Self.isOngoing($0.activityState)
-            }.map(\.id))
-            let oldActivityIDs = ongoingActivityIDs.intersection(activityIDs)
+            let oldActivityIDs = ongoingActivityIDs(in: activityIDs)
 
             if oldActivityIDs.isEmpty {
                 consecutiveEmptyChecks += 1
-                if consecutiveEmptyChecks >= 3 { return }
+                if consecutiveEmptyChecks >= 3 { return true }
             } else {
                 consecutiveEmptyChecks = 0
                 scheduleEnds(for: oldActivityIDs)
             }
             if clock.now >= deadline {
-                // Do not await a stuck end call, or this deadline is meaningless.
-                // Try a fresh request; if the OS refuses, show its actual error.
-                record("End deadline reached; trying a fresh request")
-                return
+                // Creating another activity while an old one is still active
+                // can leave a Lock Screen card without repairing the island.
+                return false
             }
             try? await Task.sleep(for: .milliseconds(200))
         }
+        return false
     }
 
     private func requestReplacement(
@@ -406,6 +503,10 @@ final class ChargingLiveActivityController {
         for attempt in 0..<Self.replacementAttemptCount {
             guard !Task.isCancelled,
                   lifecycleGeneration == generation else { return }
+            guard ongoingActivityIDs(in: blockedActivityIDs).isEmpty else {
+                recoveryStatus = .failed("ActivityKit has not released the previous Live Activity.")
+                return
+            }
             guard Self.areActivitiesEnabled else {
                 recoveryStatus = .failed("Live Activities are disabled by the system.")
                 return
@@ -467,9 +568,12 @@ final class ChargingLiveActivityController {
     }
 
     private func scheduleEnds(for ids: Set<String>) {
-        for id in ids where endingActivityTokens[id] == nil {
+        let now = Date.now
+        for id in ids where endingActivityTokens[id] == nil
+            && now >= (endRetryNotBefore[id] ?? .distantPast) {
             let token = UUID()
             endingActivityTokens[id] = token
+            endRetryNotBefore[id] = now.addingTimeInterval(4)
             Task.detached { [weak self] in
                 await Self.endActivities(withIDs: [id])
                 await self?.didEnd(id, token: token)
@@ -490,7 +594,7 @@ final class ChargingLiveActivityController {
     private func expireEndLease(_ id: String, token: UUID) {
         guard endingActivityTokens[id] == token else { return }
         endingActivityTokens.removeValue(forKey: id)
-        record("End call for \(id) exceeded 20 seconds; a later restart may retry")
+        record("End call for \(id) exceeded 4 seconds; cleanup may retry")
     }
 
     private static func isOngoing(_ state: ActivityState) -> Bool {

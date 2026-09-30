@@ -82,20 +82,23 @@ struct PowerSnapshot {
         try? await Task.sleep(for: .milliseconds(300))
         print("PASS: pending deadline fires while samples continue")
 
-        // Simulate a system end that outlasts the entire restart deadline.
+        // The first end wedges, but a later ID-scoped end releases the old
+        // presentation. No replacement may be created before that release.
         TestSystem.reset()
         let hung = ChargingLiveActivityController()
         tick(hung)
         try? await Task.sleep(for: .milliseconds(100))
         let oldID = Activity<MiniWattsActivityAttributes>.activities.first!.id
-        TestSystem.configure(endDelay: .seconds(12))
+        TestSystem.configure(endDelays: [.seconds(12)])
         restart(hung)
-        await sample(hung, seconds: 6)
-        check(TestSystem.requests == 2, "A stuck end blocked replacement indefinitely")
+        await sample(hung, seconds: 2)
+        check(TestSystem.requests == 1, "Replacement was created before the old activity ended")
+        await sample(hung, seconds: 4)
+        check(TestSystem.requests == 2, "ID-scoped end retry did not unblock replacement")
         check(hung.recoveryStatus == .running, "Restart button remained stuck")
         check(!TestSystem.updates.contains(oldID), "Sampling re-adopted the retiring activity")
-        check(TestSystem.endings.filter { $0 == oldID }.count == 1,
-              "Duplicate end workers were launched for a stuck activity")
+        check(TestSystem.endings.filter { $0 == oldID }.count == 2,
+              "Expected one bounded retry of the stuck end")
         // The old end finishes late, after a replacement is already running.
         await sample(hung, seconds: 7)
         check(hung.isRunning, "Late cleanup removed the new activity")
@@ -103,7 +106,70 @@ struct PowerSnapshot {
         TestSystem.configure()
         hung.endIfNeeded()
         try? await Task.sleep(for: .milliseconds(300))
-        print("PASS: hung end is bounded, ticks cannot resurrect old activity, late cleanup is scoped")
+        print("PASS: end retry waits for release, ticks cannot resurrect old activity, late cleanup is scoped")
+
+        // A deadline must report failure, not create a second active activity.
+        // Even the ordinary one-second reconcile path must honor that block.
+        TestSystem.reset()
+        let blocked = ChargingLiveActivityController()
+        tick(blocked)
+        TestSystem.configure(endDelay: .seconds(20))
+        restart(blocked)
+        await sample(blocked, seconds: 13)
+        check(TestSystem.requests == 1, "End deadline created competing active activities")
+        if case .failed = blocked.recoveryStatus {} else {
+            fatalError("Unreleased activity was incorrectly reported as a successful restart")
+        }
+        TestSystem.configure()
+        await sample(blocked, seconds: 6)
+        check(TestSystem.requests == 2 && blocked.isRunning,
+              "Releasing the old activity did not unblock recovery")
+        blocked.endIfNeeded()
+        try? await Task.sleep(for: .milliseconds(300))
+        print("PASS: release deadline blocks replacement and subsequent ticks until cleanup succeeds")
+
+        // PiP preparation happens before old activities are ended, and only the
+        // latest restart may resume the user's window after replacement succeeds.
+        TestSystem.reset()
+        let coordinated = ChargingLiveActivityController()
+        tick(coordinated)
+        var prepared = 0
+        var restored = 0
+        coordinated.preparePresentationForRestart = {
+            check(TestSystem.endings.isEmpty, "Activity teardown preceded PiP preparation")
+            prepared += 1
+            try? await Task.sleep(for: .milliseconds(400))
+            return !Task.isCancelled
+        }
+        coordinated.finishPresentationRestart = {
+            check(TestSystem.requests == 2, "PiP resumed before replacement was requested")
+            check(Activity<MiniWattsActivityAttributes>.activities.count == 1,
+                  "PiP resumed while old and new activities were both registered")
+            restored += 1
+        }
+        restart(coordinated)
+        try? await Task.sleep(for: .milliseconds(100))
+        restart(coordinated)
+        await sample(coordinated, seconds: 2)
+        check(prepared == 2 && restored == 1,
+              "Superseded restart lost or duplicated PiP resume intent")
+        coordinated.finishPresentationRestart = nil
+        coordinated.endIfNeeded()
+        try? await Task.sleep(for: .milliseconds(300))
+        print("PASS: only latest explicit recovery restores PiP after a single replacement")
+
+        TestSystem.reset()
+        let preparationFailed = ChargingLiveActivityController()
+        tick(preparationFailed)
+        preparationFailed.preparePresentationForRestart = { false }
+        restart(preparationFailed)
+        await sample(preparationFailed, seconds: 1)
+        check(TestSystem.requests == 1 && TestSystem.endings.isEmpty
+              && preparationFailed.isRunning,
+              "Failed PiP release destroyed the existing activity")
+        preparationFailed.endIfNeeded()
+        try? await Task.sleep(for: .milliseconds(300))
+        print("PASS: failed PiP release preserves the existing activity")
 
         // A second tap during a slow end/replacement must supersede the old
         // lifecycle attempt. The old behavior silently ignored every tap until

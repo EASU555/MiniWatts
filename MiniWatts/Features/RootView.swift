@@ -31,6 +31,12 @@ struct RootView: View {
                 .allowsHitTesting(false)
         }
         .task {
+            monitor.prepareLiveActivityPresentationForRestart = { [weak pictureInPicture] in
+                await pictureInPicture?.prepareForLiveActivityRecovery() ?? true
+            }
+            monitor.finishLiveActivityPresentationRestart = { [weak pictureInPicture] in
+                pictureInPicture?.finishLiveActivityRecovery()
+            }
             pictureInPicture.backgroundPulse = { [weak monitor] in
                 monitor?.refreshIfDue()
             }

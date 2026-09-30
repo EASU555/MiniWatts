@@ -167,6 +167,7 @@ final class TelemetryPictureInPictureController: NSObject {
             + "stopping=\(isStopping) possible=\(isPossible) hidden=\(isVisuallyHidden) "
             + "systemActive=\(pictureInPictureController?.isPictureInPictureActive.description ?? "none") "
             + "systemSuspended=\(pictureInPictureController?.isPictureInPictureSuspended.description ?? "none") "
+            + "activityRepair=\(activityRecoveryResume != nil) "
             + "power=\(showPower) temperatures=\(showTemperatures) "
             + "layout=\(layout.rawValue) component=\(temperatureSelection.rawValue) "
             + "lastFrameSample=\(latestData?.date.timeIntervalSince1970.description ?? "none") "
@@ -193,6 +194,13 @@ final class TelemetryPictureInPictureController: NSObject {
     @ObservationIgnored private var stopAttempt = 0
     @ObservationIgnored private var pendingStartAfterStop = false
     @ObservationIgnored private var deferredStartGeneration = 0
+    private struct ActivityRecoveryResume {
+        var shouldResume: Bool
+        let hidden: Bool
+    }
+    @ObservationIgnored private var activityRecoveryResume: ActivityRecoveryResume?
+    @ObservationIgnored private var hideAfterRecoveryStart = false
+    @ObservationIgnored private var resumeAfterActivityRecoveryPending = false
     @ObservationIgnored private var backgroundPulseDisplayLink: CADisplayLink?
     @ObservationIgnored private var lastBackgroundPulseTimestamp: CFTimeInterval = 0
     @ObservationIgnored private var hiddenPulsePhase = false
@@ -307,7 +315,8 @@ final class TelemetryPictureInPictureController: NSObject {
 
     func start() {
         recordState("action: start requested; \(diagnosticSummary)")
-        guard isSupported, hasSelectedContent, !keepsSensorSamplingActive else { return }
+        guard isSupported, hasSelectedContent, !keepsSensorSamplingActive,
+              activityRecoveryResume == nil else { return }
         deferredStartGeneration &+= 1
         if pictureInPictureController?.isPictureInPictureActive == true {
             // AVKit still owns a window even though the local active flag was
@@ -354,6 +363,11 @@ final class TelemetryPictureInPictureController: NSObject {
 
     func stop() {
         recordState("action: stop requested")
+        if activityRecoveryResume != nil {
+            activityRecoveryResume?.shouldResume = false
+        }
+        hideAfterRecoveryStart = false
+        resumeAfterActivityRecoveryPending = false
         deferredStartGeneration &+= 1
         pendingStartAfterStop = false
         invalidateStartAttempt()
@@ -451,6 +465,88 @@ final class TelemetryPictureInPictureController: NSObject {
         attachToPendingPreviewIfNeeded()
     }
 
+    /// Keep the resume intent across superseded ActivityKit retries. We must
+    /// observe the original AVKit controller stopping, rather than considering a
+    /// locally discarded controller proof that iOS released its presentation.
+    func prepareForLiveActivityRecovery() async -> Bool {
+        if activityRecoveryResume == nil {
+            activityRecoveryResume = ActivityRecoveryResume(
+                shouldResume: keepsSensorSamplingActive
+                    || pictureInPictureController?.isPictureInPictureActive == true
+                    || resumeAfterActivityRecoveryPending,
+                hidden: isVisuallyHidden || hideAfterRecoveryStart
+            )
+        }
+        recordState("activity recovery: releasing PiP; \(diagnosticSummary)")
+        deferredStartGeneration &+= 1
+        pendingStartAfterStop = false
+        invalidateStartAttempt()
+        invalidateStopAttempt()
+        let original = pictureInPictureController
+        isStarting = false
+        isStopping = true
+        stopBackgroundPulseDriver()
+        original?.stopPictureInPicture()
+
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(6))
+        var nextStopRequest = clock.now.advanced(by: .seconds(2))
+        var inactiveChecks = 0
+        while !Task.isCancelled {
+            if original?.isPictureInPictureActive != true {
+                inactiveChecks += 1
+                if inactiveChecks >= 3 {
+                    completeStopAttempt()
+                    rebuildRenderingPipeline(recreateVideoCallCarrier: true)
+                    attachToPendingPreviewIfNeeded()
+                    recordState("activity recovery: original AVKit presentation released")
+                    return true
+                }
+            } else {
+                inactiveChecks = 0
+                if clock.now >= nextStopRequest {
+                    original?.stopPictureInPicture()
+                    nextStopRequest = clock.now.advanced(by: .seconds(2))
+                }
+            }
+            if clock.now >= deadline { break }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        guard !Task.isCancelled else { return false }
+        isStopping = false
+        isActive = original?.isPictureInPictureActive == true
+        if isActive { startBackgroundPulseDriver() }
+        errorMessage = "Picture in Picture could not stop. Try again."
+        recordState("activity recovery: original AVKit presentation did not release")
+        return false
+    }
+
+    func finishLiveActivityRecovery() {
+        guard let resume = activityRecoveryResume else { return }
+        activityRecoveryResume = nil
+        guard resume.shouldResume else { return }
+        hideAfterRecoveryStart = resume.hidden
+        resumeAfterActivityRecoveryPending = true
+        recordState("activity recovery: restoring PiP; hidden=\(resume.hidden)")
+        if pictureInPictureController?.isPictureInPictureActive == true {
+            invalidateStopAttempt()
+            isStopping = false
+            isActive = true
+            restoreHiddenAfterRecoveryStart()
+            startBackgroundPulseDriver()
+        } else {
+            if isStopping { completeStopAttempt() }
+            scheduleDeferredStart()
+        }
+    }
+
+    private func restoreHiddenAfterRecoveryStart() {
+        resumeAfterActivityRecoveryPending = false
+        guard hideAfterRecoveryStart else { return }
+        hideAfterRecoveryStart = false
+        if contentMode == .hiddenCarrier { applyVideoCallGeometry(hidden: true) }
+    }
+
     private func performStart(attempt: Int, repairsRemaining: Int) async {
         // AVKit needs a committed, displayed source before PiP becomes possible.
         // KVO usually updates immediately; this bounded poll covers late delivery.
@@ -535,6 +631,7 @@ final class TelemetryPictureInPictureController: NSObject {
         isStarting = false
         isActive = true
         errorMessage = nil
+        restoreHiddenAfterRecoveryStart()
         startBackgroundPulseDriver()
     }
 
@@ -1119,6 +1216,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         } else {
             isActive = true
             errorMessage = nil
+            restoreHiddenAfterRecoveryStart()
             startBackgroundPulseDriver()
         }
     }

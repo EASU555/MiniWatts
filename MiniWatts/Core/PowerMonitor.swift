@@ -179,6 +179,12 @@ final class PowerMonitor {
     /// Direct fan-out from the sensor tick. Unlike a SwiftUI `onChange`, this
     /// continues while Picture in Picture keeps the process running off screen.
     @ObservationIgnored var onTick: ((PowerSnapshot) -> Void)?
+    @ObservationIgnored var prepareLiveActivityPresentationForRestart: (@MainActor () async -> Bool)? {
+        didSet { liveActivityController.preparePresentationForRestart = prepareLiveActivityPresentationForRestart }
+    }
+    @ObservationIgnored var finishLiveActivityPresentationRestart: (@MainActor () -> Void)? {
+        didSet { liveActivityController.finishPresentationRestart = finishLiveActivityPresentationRestart }
+    }
 
     /// Usable pack energy, used to turn %/h into watts. Read from IOKit where the
     /// sandbox allows it, otherwise from the value the user sets in Settings.
@@ -890,6 +896,7 @@ final class PowerMonitor {
             "Upload bytes/s: \(snapshot.uploadBytesPerSecond.map { String(format: "%.0f", $0) } ?? "—")",
             "Live Activity: \(liveActivityRecoveryStatus)",
             "Live Activity detail: \(liveActivityRecoveryDetail)",
+            "Live Activity system state: \(liveActivityController.diagnosticSummary)",
             "External power: \(snapshot.externalConnected)",
             "Charging: \(snapshot.isCharging)",
             "Input watts: \(snapshot.inputWatts.map { String(format: "%.3f", $0) } ?? "—")",

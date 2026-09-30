@@ -28,6 +28,7 @@ private final class Store: @unchecked Sendable {
     var updates: [String] = []
     var pending = false
     var endDelay: Duration = .zero
+    var endDelays: [Duration] = []
     var updateDelay: Duration = .zero
 }
 
@@ -36,10 +37,12 @@ public enum TestSystem {
     public static var endings: [String] { Store.shared.lock.withLock { Store.shared.endings } }
     public static var updates: [String] { Store.shared.lock.withLock { Store.shared.updates } }
     public static func configure(pending: Bool = false, endDelay: Duration = .zero,
+                                 endDelays: [Duration] = [],
                                  updateDelay: Duration = .zero) {
         Store.shared.lock.withLock {
             Store.shared.pending = pending
             Store.shared.endDelay = endDelay
+            Store.shared.endDelays = endDelays
             Store.shared.updateDelay = updateDelay
         }
     }
@@ -51,6 +54,7 @@ public enum TestSystem {
             Store.shared.updates = []
             Store.shared.pending = false
             Store.shared.endDelay = .zero
+            Store.shared.endDelays = []
             Store.shared.updateDelay = .zero
         }
     }
@@ -90,6 +94,7 @@ public final class Activity<A: ActivityAttributes>: @unchecked Sendable {
                     dismissalPolicy: ActivityUIDismissalPolicy) async {
         let delay = Store.shared.lock.withLock {
             Store.shared.endings.append(id)
+            if !Store.shared.endDelays.isEmpty { return Store.shared.endDelays.removeFirst() }
             return Store.shared.endDelay
         }
         try? await Task.sleep(for: delay)
