@@ -150,9 +150,13 @@ nonisolated struct ChargeReading: Codable, Hashable {
                                                prefix: "percent") { $0.percent.map(Double.init) }
         check(thinned[0].series == thinned[1].series,
               "Chart invented an unknown interval from intentionally thinned sample spacing")
-        let sparklineSamples = (0..<100).map { index in
-            ChargeSample(offset: Double(index),
-                         inputWatts: index == 20 ? nil : (index == 25 ? 200 : Double(index)),
+        let sparklineSamples: [ChargeSample] = (0..<100).map { (index: Int) -> ChargeSample in
+            let input: Double?
+            if index == 20 { input = nil }
+            else if index == 25 { input = 200 }
+            else { input = Double(index) }
+            return ChargeSample(offset: Double(index),
+                         inputWatts: input,
                          batteryWatts: nil, percent: nil, batteryTemperature: nil,
                          hottestTemperature: nil, throttled: false,
                          startsNewSegment: index == 33 ? true : nil)
