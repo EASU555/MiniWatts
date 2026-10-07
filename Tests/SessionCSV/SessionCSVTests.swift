@@ -215,7 +215,13 @@ nonisolated struct PowerSnapshot {
         }
         let files = try FileManager.default.contentsOfDirectory(at: destination,
                                                                includingPropertiesForKeys: nil)
-        precondition(Set(files) == Set(urls), "Atomic writer left an unexpected file")
+        // Enumeration may normalize the temporary directory's symlink/URL
+        // representation. The directory and contents were verified above;
+        // compare its entries rather than comparing absolute URL spelling.
+        let actualNames = Set(files.map(\.lastPathComponent))
+        let expectedNames = Set(urls.map(\.lastPathComponent))
+        precondition(actualNames == expectedNames,
+                     "Atomic writer left unexpected entries: \(actualNames)")
 
         let blocker = root.appendingPathComponent("blocked")
         try Data("keep this file".utf8).write(to: blocker)
