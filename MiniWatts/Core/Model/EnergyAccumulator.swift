@@ -105,10 +105,14 @@ nonisolated struct EnergyTotals: Codable, Hashable, Sendable {
         pairedInputWattHours = try values.decodeIfPresent(Double.self, forKey: .pairedInputWattHours) ?? 0
         pairedBatteryWattHours = try values.decodeIfPresent(Double.self, forKey: .pairedBatteryWattHours) ?? 0
         pairedIntegratedSeconds = try values.decodeIfPresent(TimeInterval.self, forKey: .pairedIntegratedSeconds) ?? 0
-        integratedSeconds = max(
+        // New records store the union of measured windows. Recomputing this as
+        // the longest channel loses coverage when independent rails alternate.
+        // Legacy records only stored a lower bound; their missing overlap data
+        // cannot be reconstructed, so retain that bound without inventing time.
+        integratedSeconds = max(legacyCoverage, max(
             inputIntegratedSeconds,
             max(batteryIntegratedSeconds, batteryCurrentIntegratedSeconds)
-        )
+        ))
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -152,6 +156,12 @@ nonisolated final class EnergyAccumulator {
         previous = nil
     }
 
+    /// Keep measured totals, but never interpolate across a known pause or
+    /// failed connection observation, even if the gap is shorter than ten seconds.
+    func breakContinuity() {
+        previous = nil
+    }
+
     func add(_ snapshot: PowerSnapshot) {
         let sample = Sample(date: snapshot.date,
                             inputWatts: snapshot.inputWatts,
@@ -164,13 +174,16 @@ nonisolated final class EnergyAccumulator {
         guard interval > 0, interval <= Self.maximumInterval else { return }
 
         let hours = interval / 3600
+        var integratedAnyChannel = false
         if let previousInput = previous.inputWatts, let input = sample.inputWatts {
             totals.inputWattHours += (previousInput + input) / 2 * hours
             totals.inputIntegratedSeconds += interval
+            integratedAnyChannel = true
         }
         if let previousBattery = previous.batteryWatts, let battery = sample.batteryWatts {
             totals.batteryWattHours += (previousBattery + battery) / 2 * hours
             totals.batteryIntegratedSeconds += interval
+            integratedAnyChannel = true
         }
         if let previousInput = previous.inputWatts, let input = sample.inputWatts,
            let previousBattery = previous.batteryWatts, let battery = sample.batteryWatts,
@@ -185,10 +198,8 @@ nonisolated final class EnergyAccumulator {
         if let previousCurrent = previous.batteryAmps, let current = sample.batteryAmps {
             totals.batteryMilliAmpHours += (previousCurrent + current) / 2 * hours * 1000
             totals.batteryCurrentIntegratedSeconds += interval
+            integratedAnyChannel = true
         }
-        totals.integratedSeconds = max(
-            totals.inputIntegratedSeconds,
-            max(totals.batteryIntegratedSeconds, totals.batteryCurrentIntegratedSeconds)
-        )
+        if integratedAnyChannel { totals.integratedSeconds += interval }
     }
 }

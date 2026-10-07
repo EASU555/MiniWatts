@@ -893,13 +893,16 @@ final class ChargingLiveActivityController {
         selectedMetric: LiveActivityMetric,
         minimalMetric: LiveActivityMetric
     ) -> MiniWattsActivityAttributes.ContentState {
-        let power: (watts: Double?, isBatterySide: Bool) = snapshot.externalConnected
-            ? snapshot.chargingPower
-            : (snapshot.batteryWatts.map(abs), true)
+        let power: (watts: Double?, isBatterySide: Bool)
+        switch snapshot.externalConnectionObservation {
+        case true: power = snapshot.chargingPower
+        case false: power = (snapshot.batteryWatts.map(abs), true)
+        case nil: power = (nil, false)
+        }
         return MiniWattsActivityAttributes.ContentState(
             chargeWatts: power.watts,
             powerIsBatterySide: power.isBatterySide,
-            externalConnected: snapshot.externalConnected,
+            externalConnected: snapshot.externalConnectionObservation,
             batteryPercent: snapshot.percent,
             cpuUsagePercent: snapshot.cpuUsagePercent,
             downloadBytesPerSecond: snapshot.downloadBytesPerSecond,

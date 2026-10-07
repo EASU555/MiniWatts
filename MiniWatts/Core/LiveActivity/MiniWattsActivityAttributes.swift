@@ -101,7 +101,9 @@ nonisolated struct MiniWattsActivityAttributes: ActivityAttributes {
         let powerIsBatterySide: Bool
         /// Optional for compatibility with an activity created by build 11, whose
         /// persisted content state predates this field. Nil means the old charging
-        /// presentation until the first new update arrives.
+        /// presentation until the first new update arrives. New updates also
+        /// use nil when the external-power connection could not be observed;
+        /// chargeWatts is then nil, not an inferred discharge reading.
         let externalConnected: Bool?
         let batteryPercent: Int?
         /// Optional so an activity persisted by an older build still decodes.

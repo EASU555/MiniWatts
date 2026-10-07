@@ -367,6 +367,7 @@ struct TelemetryVideoFrameView: View {
     }
 
     private var powerSourceText: LocalizedStringKey {
+        guard data?.externalConnectionObservation != nil else { return "No reading" }
         guard data?.externalConnected == true else { return "Not charging" }
         if data?.powerIsBatterySide == true { return "Into battery" }
         return data?.isWireless == true ? "From wireless charger" : "From charger"

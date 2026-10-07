@@ -1,6 +1,86 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Finish this charging session before exporting its CSV.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请在本次充电记录结束后再导出 CSV。"
+          }
+        }
+      }
+    },
+    "This charging session has invalid dates and cannot be exported.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此充电记录的时间无效，无法导出。"
+          }
+        }
+      }
+    },
+    "No reading": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无读数"
+          }
+        }
+      }
+    },
+    "Preparing session CSV": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在生成充电记录 CSV"
+          }
+        }
+      }
+    },
+    "Export session CSV": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导出充电记录 CSV"
+          }
+        }
+      }
+    },
+    "Could not export session": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法导出充电记录"
+          }
+        }
+      }
+    },
+    "Measured for %@ of %@ — intervals without valid readings are excluded rather than estimated.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实际测量 %@，记录总时长 %@；没有有效读数的时段已排除，不作估算。"
+          }
+        }
+      }
+    },
+    "The external-power connection could not be read. MiniWatts will try again on the next sample; any charging record stays open until a disconnection is confirmed.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂时无法读取外接电源状态。MiniWatts 会在下一次采样时重试；只有确认断开连接后，才会结束当前充电记录。"
+          }
+        }
+      }
+    },
     "Enable Live Activity": {
       "localizations": {
         "zh-Hans": {

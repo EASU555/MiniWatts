@@ -119,6 +119,15 @@ foreground. Three things make that work and they are easy to undo by accident:
   that actually saw a charger, not from `.now`. Unplug while the app is suspended and
   the first tick after it wakes is the first that knows; `.now` there would stretch the
   session across however long the app was away.
+- `externalConnectionObservation` is optional: failed/empty registry and powerd
+  reads are **unknown**, not an unplug. Only an explicit false closes a session.
+  Unknown/pause breaks energy and thermal/rate continuity without clearing totals.
+  Screen-awake policy may retain the last confirmed plug state; live measurements
+  must not use that retained state to invent charge/discharge power.
+- `SensorSamplingGate` gates every read and its publication. A queued battery
+  notification or PiP pulse cannot start a probe while paused, and the result of
+  a read started before pause cannot publish after a restart. Keep at most one
+  blocking probe in flight.
 - Settings has *keep the screen on while charging*, default on, applied in `RootView`
   (`isIdleTimerDisabled`) and gated on the phone being plugged in. Sensors can only be
   read in the foreground unless PiP has established its playback background session,
@@ -135,6 +144,24 @@ copies are **not** treated as empty history. The History page shows load/write f
 and offers a safe retry. `persist()` remains a no-op until a valid load completes,
 or a save landing before the load could truncate history to nothing. Explicit Delete
 All writes an empty primary **and** backup so old sessions cannot reappear on restart.
+
+Session and sample percentages are optional. `recordPercent` establishes the first
+valid baseline rather than substituting zero, and a missing current endpoint leaves
+the gain unavailable. Old integer JSON still decodes. Do not repair older invented
+zero baselines without original evidence. `EnergyTotals.integratedSeconds` counts
+the union of measured intervals, not the maximum channel coverage; legacy coverage
+is only a lower bound because it did not preserve overlap information. Summaries
+sum only measured channels, and paired energy alone determines their weighted share.
+
+`startsNewSegment` marks the next saved real sample after an explicit pause or
+unknown connection. Preserve this flag when thinning long records. History chart
+series break on it and missing channel values; time spacing alone is not proof of
+a gap because old records have been thinned. The session detail toolbar exports
+a local CSV using `SessionCSVExporter` off the main actor. It contains metadata,
+channel coverage and saved samples (usually five-second spacing, not a continuous
+raw trace), UTC timestamps, blanks for unknowns and a continuity marker. Export
+does not upload anything. See `docs/functional-reliability.md` for regression and
+device validation scope.
 
 ## Localization
 

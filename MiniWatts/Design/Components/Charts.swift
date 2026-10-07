@@ -8,13 +8,6 @@ private struct DatedPowerPoint: Identifiable {
     var id: Date { date }
 }
 
-private struct ElapsedPowerPoint: Identifiable {
-    let offset: TimeInterval
-    let watts: Double
-    let series: String
-    var id: TimeInterval { offset }
-}
-
 /// Rolling three-minute view of adapter power against battery power. The area is
 /// what comes in; the line is what reaches the cell.
 struct LivePowerChart: View {
@@ -112,58 +105,50 @@ struct SessionPowerChart: View {
         return max((values.filter(\.isFinite).max() ?? 0) * 1.2, 5)
     }
 
-    private var inputPoints: [ElapsedPowerPoint] {
-        segmentedPoints(prefix: "input", value: \.inputWatts)
+    private var inputPoints: [SessionChartPoint] {
+        SessionChartSeries.points(samples, prefix: "input") { $0.inputWatts }
     }
 
-    private var batteryPoints: [ElapsedPowerPoint] {
-        segmentedPoints(prefix: "battery", value: \.batteryWatts)
-    }
-
-    private func segmentedPoints(
-        prefix: String,
-        value keyPath: KeyPath<ChargeSample, Double?>
-    ) -> [ElapsedPowerPoint] {
-        var segment = 0
-        return samples.compactMap { sample in
-            guard let watts = sample[keyPath: keyPath], watts.isFinite else {
-                segment += 1
-                return nil
-            }
-            return ElapsedPowerPoint(
-                offset: sample.offset,
-                watts: watts,
-                series: "\(prefix)-\(segment)"
-            )
-        }
+    private var batteryPoints: [SessionChartPoint] {
+        SessionChartSeries.points(samples, prefix: "battery") { $0.batteryWatts }
     }
 
     var body: some View {
+        let input = inputPoints
+        let battery = batteryPoints
         Chart {
-            ForEach(inputPoints) { point in
+            ForEach(input) { point in
                 AreaMark(x: .value("Elapsed", point.offset),
-                         y: .value("Watts", point.watts),
+                         y: .value("Watts", point.value),
                          series: .value("Segment", point.series))
                     .foregroundStyle(LinearGradient(colors: [Color.mwAccent.opacity(0.4), Color.mwAccent.opacity(0.02)],
                                                     startPoint: .top,
                                                     endPoint: .bottom))
                     .interpolationMethod(.monotone)
             }
-            ForEach(inputPoints) { point in
+            ForEach(input) { point in
                 LineMark(x: .value("Elapsed", point.offset),
-                         y: .value("Watts", point.watts),
+                         y: .value("Watts", point.value),
                          series: .value("Segment", point.series))
                     .foregroundStyle(Color.mwAccent)
                     .lineStyle(StrokeStyle(lineWidth: 1.8))
                     .interpolationMethod(.monotone)
             }
-            ForEach(batteryPoints) { point in
+            ForEach(SessionChartSeries.singletonPoints(in: input)) { point in
+                PointMark(x: .value("Elapsed", point.offset), y: .value("Watts", point.value))
+                    .foregroundStyle(Color.mwAccent)
+            }
+            ForEach(battery) { point in
                 LineMark(x: .value("Elapsed", point.offset),
-                         y: .value("Watts", point.watts),
+                         y: .value("Watts", point.value),
                          series: .value("Segment", point.series))
                     .foregroundStyle(Color.mwBattery)
                     .lineStyle(StrokeStyle(lineWidth: 1.4, dash: [4, 3]))
                     .interpolationMethod(.monotone)
+            }
+            ForEach(SessionChartSeries.singletonPoints(in: battery)) { point in
+                PointMark(x: .value("Elapsed", point.offset), y: .value("Watts", point.value))
+                    .foregroundStyle(Color.mwBattery)
             }
             // Shade the stretches where iOS was thermally throttling, which is
             // where the curve usually falls off a cliff.
@@ -219,25 +204,38 @@ struct SessionClimateChart: View {
         return 0...max(last, 1)
     }
 
-    private var temperatures: [ChargeSample] {
-        samples.filter { $0.batteryTemperature != nil }
+    private var percentages: [SessionChartPoint] {
+        SessionChartSeries.points(samples, prefix: "percent") { $0.percent.map(Double.init) }
+    }
+
+    private var temperatures: [SessionChartPoint] {
+        SessionChartSeries.points(samples, prefix: "temperature") { $0.batteryTemperature }
     }
 
     private var temperatureDomain: ClosedRange<Double> {
-        let values = temperatures.compactMap(\.batteryTemperature)
+        let values = temperatures.map(\.value)
         guard let low = values.min(), let high = values.max() else { return 20...45 }
         let padding = max((high - low) * 0.2, 1)
         return (low - padding)...(high + padding)
     }
 
     var body: some View {
+        let percentagePoints = percentages
+        let temperaturePoints = temperatures
         VStack(spacing: 4) {
-            Chart(samples) { sample in
-                LineMark(x: .value("Elapsed", sample.offset),
-                         y: .value("Percent", Double(sample.percent)))
-                    .foregroundStyle(Color.mwWireless)
-                    .lineStyle(StrokeStyle(lineWidth: 1.8))
-                    .interpolationMethod(.monotone)
+            Chart {
+                ForEach(percentagePoints) { point in
+                    LineMark(x: .value("Elapsed", point.offset),
+                             y: .value("Percent", point.value),
+                             series: .value("Segment", point.series))
+                        .foregroundStyle(Color.mwWireless)
+                        .lineStyle(StrokeStyle(lineWidth: 1.8))
+                        .interpolationMethod(.monotone)
+                }
+                ForEach(SessionChartSeries.singletonPoints(in: percentagePoints)) { point in
+                    PointMark(x: .value("Elapsed", point.offset), y: .value("Percent", point.value))
+                        .foregroundStyle(Color.mwWireless)
+                }
             }
             .chartYScale(domain: 0...100)
             .chartXScale(domain: xDomain)
@@ -258,15 +256,22 @@ struct SessionClimateChart: View {
             }
             .frame(height: height * 0.55)
 
-            if temperatures.isEmpty {
+            if temperaturePoints.isEmpty {
                 EmptyNote(text: "No cell temperature was recorded for this session.")
             } else {
-                Chart(temperatures) { sample in
-                    LineMark(x: .value("Elapsed", sample.offset),
-                             y: .value("Celsius", sample.batteryTemperature ?? 0))
-                        .foregroundStyle(Color.mwLoss)
-                        .lineStyle(StrokeStyle(lineWidth: 1.4))
-                        .interpolationMethod(.monotone)
+                Chart {
+                    ForEach(temperaturePoints) { point in
+                        LineMark(x: .value("Elapsed", point.offset),
+                                 y: .value("Celsius", point.value),
+                                 series: .value("Segment", point.series))
+                            .foregroundStyle(Color.mwLoss)
+                            .lineStyle(StrokeStyle(lineWidth: 1.4))
+                            .interpolationMethod(.monotone)
+                    }
+                    ForEach(SessionChartSeries.singletonPoints(in: temperaturePoints)) { point in
+                        PointMark(x: .value("Elapsed", point.offset), y: .value("Celsius", point.value))
+                            .foregroundStyle(Color.mwLoss)
+                    }
                 }
                 .chartYScale(domain: temperatureDomain)
                 .chartXScale(domain: xDomain)
@@ -300,7 +305,7 @@ struct SessionClimateChart: View {
 
 /// Compact inline sparkline, used in the session list.
 struct Sparkline: View {
-    let values: [Double?]
+    let samples: [ChargeSample]
     var tint: Color = .mwAccent
 
     /// Points actually drawn. A session holds up to 1,500 samples and this is
@@ -309,35 +314,28 @@ struct Sparkline: View {
     /// thinning cannot hide a spike, which plain striding would.
     private static let resolution = 64
 
-    private var thinned: [Double?] {
-        guard values.count > Self.resolution else { return values }
-        let bucket = Double(values.count) / Double(Self.resolution)
-        return (0..<Self.resolution).map { index in
-            let start = Int(Double(index) * bucket)
-            let end = max(start + 1, Int(Double(index + 1) * bucket))
-            return values[start..<min(end, values.count)].compactMap { $0 }.max()
-        }
+    private var thinned: [SessionChartPoint] {
+        SessionChartSeries.sparklinePoints(samples, resolution: Self.resolution)
     }
 
     var body: some View {
         GeometryReader { geometry in
             let points = thinned
-            let peak = max(points.compactMap { $0 }.max() ?? 1, 0.001)
+            let peak = max(points.map(\.value).max() ?? 1, 0.001)
+            let end = max(samples.last?.offset ?? 0, 1)
+            let singletons = Set(SessionChartSeries.singletonPoints(in: points).map(\.id))
             Path { path in
-                guard points.count > 1 else { return }
-                var hasCurrentSubpath = false
-                for (index, value) in points.enumerated() {
-                    guard let value, value.isFinite else {
-                        hasCurrentSubpath = false
-                        continue
-                    }
-                    let x = geometry.size.width * CGFloat(index) / CGFloat(points.count - 1)
-                    let y = geometry.size.height * (1 - CGFloat(value / peak))
-                    if hasCurrentSubpath { path.addLine(to: CGPoint(x: x, y: y)) }
+                var previousSeries: String?
+                for point in points {
+                    let x = geometry.size.width * CGFloat(point.offset / end)
+                    let y = geometry.size.height * (1 - CGFloat(point.value / peak))
+                    if singletons.contains(point.id) {
+                        path.addEllipse(in: CGRect(x: x - 1, y: y - 1, width: 2, height: 2))
+                    } else if previousSeries == point.series { path.addLine(to: CGPoint(x: x, y: y)) }
                     else {
                         path.move(to: CGPoint(x: x, y: y))
-                        hasCurrentSubpath = true
                     }
+                    previousSeries = point.series
                 }
             }
             .stroke(tint, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))

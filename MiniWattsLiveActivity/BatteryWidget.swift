@@ -235,8 +235,8 @@ struct LastChargeSummary: View {
                 .textCase(.uppercase)
                 .foregroundStyle(palette.muted)
             HStack(spacing: 6) {
-                Text(verbatim: "+\(max(session.endPercent - session.startPercent, 0))%")
-                Text(verbatim: Formatting.wattHours(session.storedWattHours))
+                Text(verbatim: session.gainedPercent.map { "+\($0)%" } ?? "—")
+                Text(verbatim: session.storedWattHours.map(Formatting.wattHours) ?? "—")
                 if let efficiency = session.efficiencyPercent {
                     Text(verbatim: String(format: "%.0f%%", efficiency))
                         .foregroundStyle(palette.loss)

@@ -6,6 +6,7 @@ import UIKit
 struct PowerSnapshot {
     var date = Date.now
     var externalConnected = true
+    var externalConnectionObservation: Bool? = true
     var chargingPower: (watts: Double?, isBatterySide: Bool) = (12, false)
     var batteryWatts: Double? = 10
     var percent: Int? = 50
@@ -69,6 +70,27 @@ struct PowerSnapshot {
             MiniWattsActivityAttributes.ContentState.self, from: oldData)
         check(decoded.downloadBytesPerSecond == nil && decoded.uploadBytesPerSecond == nil,
               "Earlier Live Activity state no longer decodes")
+
+        // A failed connection observation must not turn a positive charging
+        // battery rail into an apparent discharge-power readout on the island.
+        TestSystem.reset()
+        let unavailable = ChargingLiveActivityController()
+        var unknownSnapshot = PowerSnapshot()
+        unknownSnapshot.externalConnected = false
+        unknownSnapshot.externalConnectionObservation = nil
+        unavailable.reconcile(snapshot: unknownSnapshot, leadingItem: .statusIcon,
+                              selectedMetric: .chargingPower, minimalMetric: .chargingPower,
+                              enabled: true, forceUpdate: true)
+        try? await Task.sleep(for: .milliseconds(300))
+        guard let unavailableActivity = Activity<MiniWattsActivityAttributes>.activities.first else {
+            fatalError("Unknown-reading test did not create an activity")
+        }
+        check(unavailableActivity.content.state.chargeWatts == nil
+              && unavailableActivity.content.state.externalConnected == nil,
+              "Unknown external power invented a discharge reading")
+        unavailable.endIfNeeded()
+        try? await Task.sleep(for: .milliseconds(100))
+        print("PASS: unknown power state does not invent a Live Activity reading")
 
         // A pending request used to have its 8 s deadline reset by every tick.
         TestSystem.reset()

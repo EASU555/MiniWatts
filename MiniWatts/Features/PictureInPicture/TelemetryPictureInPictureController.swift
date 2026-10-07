@@ -50,6 +50,7 @@ nonisolated enum TelemetrySystemThermalState: Int, Hashable {
 nonisolated struct TelemetryFrameData: Hashable {
     let date: Date
     let externalConnected: Bool
+    let externalConnectionObservation: Bool?
     let isWireless: Bool
     let chargeWatts: Double?
     let powerIsBatterySide: Bool
@@ -65,8 +66,9 @@ nonisolated struct TelemetryFrameData: Hashable {
         let power = snapshot.chargingPower
         date = snapshot.date
         externalConnected = snapshot.externalConnected
+        externalConnectionObservation = snapshot.externalConnectionObservation
         isWireless = snapshot.isWirelessInput
-        chargeWatts = power.watts
+        chargeWatts = snapshot.externalConnectionObservation == nil ? nil : power.watts
         powerIsBatterySide = power.isBatterySide
         batteryPercent = snapshot.percent
         socTemperature = snapshot.socTemperature

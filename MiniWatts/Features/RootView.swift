@@ -104,7 +104,7 @@ struct RootView: View {
     /// on battery would be a poor joke.
     private var shouldStayAwake: Bool {
         monitor.keepScreenAwakeWhileCharging
-            && monitor.snapshot.externalConnected
+            && monitor.externalPowerConnectedForLifecycle
             && scenePhase == .active
     }
 

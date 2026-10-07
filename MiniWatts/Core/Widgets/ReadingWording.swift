@@ -18,6 +18,7 @@ nonisolated extension ChargeReading.Source {
 
 nonisolated extension ChargeReading {
     var statusTitle: LocalizedStringResource {
+        guard externalConnectionObservation != nil else { return "No reading" }
         if isOnHold { return "Charging on hold" }
         if isFull { return "Full" }
         if isCharging { return "Charging" }

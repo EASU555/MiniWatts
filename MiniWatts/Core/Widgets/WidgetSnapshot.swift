@@ -15,9 +15,10 @@ nonisolated struct WidgetSnapshot: Codable, Hashable {
     struct Session: Codable, Hashable {
         var start: Date
         var end: Date
-        var startPercent: Int
-        var endPercent: Int
-        var storedWattHours: Double
+        var startPercent: Int?
+        var endPercent: Int?
+        /// Nil when the battery side was never measured.
+        var storedWattHours: Double?
         /// Nil when the input side was never measurable — a wireless charge.
         var deliveredWattHours: Double?
         /// Historical JSON key retained for old widget snapshots. The value is
@@ -27,6 +28,11 @@ nonisolated struct WidgetSnapshot: Codable, Hashable {
         var isWireless: Bool
 
         var duration: TimeInterval { end.timeIntervalSince(start) }
+
+        var gainedPercent: Int? {
+            guard let startPercent, let endPercent else { return nil }
+            return max(endPercent - startPercent, 0)
+        }
     }
 
     var reading: ChargeReading

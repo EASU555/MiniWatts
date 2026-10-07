@@ -24,6 +24,9 @@ nonisolated struct ChargeReading: Codable, Hashable {
     var date: Date
     var percent: Int?
     var externalConnected: Bool
+    /// Optional for compatibility with widget JSON written before missing
+    /// connection observations were distinguished from a reported unplug.
+    var externalConnectionUnavailable: Bool?
     var isCharging: Bool
     var isOnHold: Bool
     var isFull: Bool
@@ -35,6 +38,7 @@ nonisolated struct ChargeReading: Codable, Hashable {
     init(date: Date,
          percent: Int?,
          externalConnected: Bool,
+         externalConnectionUnavailable: Bool? = false,
          isCharging: Bool,
          isOnHold: Bool = false,
          isFull: Bool = false,
@@ -45,6 +49,7 @@ nonisolated struct ChargeReading: Codable, Hashable {
         self.date = date
         self.percent = percent
         self.externalConnected = externalConnected
+        self.externalConnectionUnavailable = externalConnectionUnavailable
         self.isCharging = isCharging
         self.isOnHold = isOnHold
         self.isFull = isFull
@@ -61,13 +66,17 @@ nonisolated struct ChargeReading: Codable, Hashable {
         date = snapshot.date
         percent = snapshot.percent
         externalConnected = snapshot.externalConnected
+        externalConnectionUnavailable = snapshot.externalConnectionObservation == nil
         isCharging = snapshot.isCharging
         isOnHold = snapshot.isChargingOnHold
         isFull = snapshot.fullyCharged && snapshot.externalConnected
         isWireless = snapshot.isWirelessInput || snapshot.adapterIsWireless
         batteryTemperature = snapshot.batteryTemperature
 
-        if snapshot.externalConnected {
+        if snapshot.externalConnectionObservation == nil {
+            watts = nil
+            source = nil
+        } else if snapshot.externalConnected {
             let power = snapshot.chargingPower
             watts = power.watts
             if power.watts == nil {
@@ -89,4 +98,8 @@ nonisolated struct ChargeReading: Codable, Hashable {
     /// True when this reading carries anything beyond what the system's own battery
     /// indicator already shows — i.e. the PMU sensors actually answered.
     var hasPower: Bool { watts != nil }
+
+    var externalConnectionObservation: Bool? {
+        externalConnectionUnavailable == true ? nil : externalConnected
+    }
 }

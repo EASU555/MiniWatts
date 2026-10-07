@@ -47,6 +47,34 @@ nonisolated struct PowerSnapshot {
               "Test setup must have equal independent coverage")
         check(disjoint.totals.inputToCellPercent == nil, "Disjoint rails invented a percentage")
         check(disjoint.totals.measuredNotToCellWattHours == nil, "Disjoint rails invented a difference")
+        check(disjoint.totals.integratedSeconds == 2,
+              "Overall coverage must count the union of disjoint measured intervals")
+        let disjointRestored = try JSONDecoder().decode(
+            EnergyTotals.self, from: JSONEncoder().encode(disjoint.totals))
+        check(disjointRestored == disjoint.totals,
+              "Persistence lost disjoint union coverage")
+
+        let overlap = EnergyAccumulator()
+        overlap.add(PowerSnapshot(date: Date(timeIntervalSince1970: 0),
+                                  inputWatts: 10, batteryWatts: 5, batteryCurrent: 1))
+        overlap.add(PowerSnapshot(date: Date(timeIntervalSince1970: 1),
+                                  inputWatts: 10, batteryWatts: 5, batteryCurrent: 1))
+        check(overlap.totals.integratedSeconds == 1,
+              "Three simultaneous channels must count as one interval")
+        overlap.breakContinuity()
+        overlap.add(sample(2, input: 10, cell: 5))
+        check(overlap.totals.integratedSeconds == 1,
+              "A short known pause must not interpolate energy")
+        overlap.add(sample(3, input: 10, cell: 5))
+        check(overlap.totals.integratedSeconds == 2,
+              "Sampling must integrate again after a fresh baseline")
+        overlap.add(sample(14, input: 10, cell: 5))
+        check(overlap.totals.integratedSeconds == 2,
+              "Long unobserved gaps must remain excluded")
+        overlap.add(sample(15, input: nil, cell: nil))
+        overlap.add(sample(16, input: nil, cell: nil))
+        check(overlap.totals.integratedSeconds == 2,
+              "Missing channels cannot increase coverage")
 
         let legacy = try JSONDecoder().decode(EnergyTotals.self, from: Data(
             "{\"inputWattHours\":0.01,\"batteryWattHours\":0.005,\"integratedSeconds\":10}".utf8))
@@ -72,6 +100,6 @@ nonisolated struct PowerSnapshot {
         check(recovered.totals.pairedIntegratedSeconds == 2,
               "Invalid intervals were included in paired coverage")
 
-        print("PASS: paired intervals, disjoint rails, legacy history, persistence and invalid rails")
+        print("PASS: paired intervals, coverage union, continuity breaks, legacy history, persistence and invalid rails")
     }
 }

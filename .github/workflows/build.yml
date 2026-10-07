@@ -84,6 +84,15 @@ jobs:
       - name: Test charge history recovery and write failures
         run: bash ./scripts/test-session-store.sh
 
+      - name: Test sampling suspension and unavailable connection observations
+        run: bash ./scripts/test-sampling-policy.sh
+
+      - name: Test optional history readings and measured summaries
+        run: bash ./scripts/test-history-integrity.sh
+
+      - name: Test local charging-curve CSV exports
+        run: bash ./scripts/test-session-csv.sh
+
       - name: Test sensor evidence and PiP sampling policy
         run: bash ./scripts/test-sensor-evidence.sh
 

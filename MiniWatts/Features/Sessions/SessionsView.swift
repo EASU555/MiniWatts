@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 extension ChargeSession {
     /// The adapter's own name is hardware and is shown verbatim; the fallback is
@@ -112,7 +113,7 @@ struct SessionsView: View {
                            } ?? "—",
                            unit: "Wh", tint: .mwBattery, size: 21)
                     Metric(caption: "Gained",
-                           value: "+\(session.gainedPercent)",
+                           value: session.gainedPercent.map { "+\($0)" } ?? "—",
                            unit: "%", size: 21)
                 }
                 if !session.samples.isEmpty {
@@ -127,25 +128,17 @@ struct SessionsView: View {
     }
 
     private var summaryPanel: some View {
-        let totalDelivered = monitor.sessions.reduce(0) { $0 + $1.totals.inputWattHours }
-        let totalIntoCell = monitor.sessions.reduce(0) { $0 + $1.totals.batteryWattHours }
-        // Weight by paired input energy rather than giving a tiny top-up the
-        // same weight as a full charge. Older sessions without paired evidence
-        // remain in the Wh totals but do not contribute to this percentage.
-        let comparable = monitor.sessions.map(\.totals).filter { $0.inputToCellPercent != nil }
-        let pairedInput = comparable.reduce(0) { $0 + $1.pairedInputWattHours }
-        let pairedBattery = comparable.reduce(0) { $0 + $1.pairedBatteryWattHours }
-        let inputToCell = pairedInput > 0 ? pairedBattery / pairedInput * 100 : nil
+        let summary = HistorySummary(sessions: monitor.sessions)
         return Panel("All sessions", systemImage: "sum", trailing: Text(verbatim: "\(monitor.sessions.count)")) {
             HStack(alignment: .top, spacing: 10) {
                 Metric(caption: "Delivered",
-                       value: String(format: "%.1f", totalDelivered),
+                       value: summary.measuredInputWattHours.map { String(format: "%.1f", $0) } ?? "—",
                        unit: "Wh", tint: .mwAccent, size: 21)
                 Metric(caption: "Into cell",
-                       value: String(format: "%.1f", totalIntoCell),
+                       value: summary.measuredBatteryWattHours.map { String(format: "%.1f", $0) } ?? "—",
                        unit: "Wh", tint: .mwBattery, size: 21)
                 Metric(caption: "Input to cell",
-                       value: inputToCell.map { String(format: "%.0f", $0) } ?? "—",
+                       value: summary.inputToCellPercent.map { String(format: "%.0f", $0) } ?? "—",
                        unit: "%", tint: .mwLoss, size: 21)
             }
         }
@@ -184,12 +177,12 @@ struct SessionRow: View {
                             .mwReadout(size: 16)
                             .foregroundStyle(session.totals.measuredInputWattHours == nil
                                              ? Color.mwBattery : Color.mwAccent)
-                        Text("\(session.startPercent)% → \(session.endPercent)%")
+                        Text(verbatim: "\(session.startPercent.map(String.init) ?? "—")% → \(session.endPercent.map(String.init) ?? "—")%")
                             .mwMono(size: 10)
                             .foregroundStyle(Color.mwMuted)
                     }
                 }
-                Sparkline(values: session.samples.map(\.inputWatts))
+                Sparkline(samples: session.samples)
                     .frame(height: 26)
                     .accessibilityHidden(true)
                 if session.totals.inputToCellPercent != nil || session.throttledFraction > 0.05 || session.isWireless {
@@ -225,6 +218,9 @@ struct SessionDetailView: View {
     @Environment(PowerMonitor.self) private var monitor
     @Environment(\.dismiss) private var dismiss
     @State private var confirmingDelete = false
+    @State private var preparingCSV = false
+    @State private var csvFile: SessionShareFile?
+    @State private var exportError: String?
 
     var body: some View {
         ZStack {
@@ -249,7 +245,17 @@ struct SessionDetailView: View {
         .navigationTitle(session.titleText)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button { exportCSV() } label: {
+                    if preparingCSV {
+                        ProgressView()
+                            .accessibilityLabel("Preparing session CSV")
+                    } else {
+                        Label("Export session CSV", systemImage: "square.and.arrow.up")
+                            .labelStyle(.iconOnly)
+                    }
+                }
+                .disabled(preparingCSV || session.isOpen)
                 Button(role: .destructive) {
                     confirmingDelete = true
                 } label: {
@@ -257,7 +263,17 @@ struct SessionDetailView: View {
                         .labelStyle(.iconOnly)
                 }
                 .tint(.mwDanger)
+                .disabled(preparingCSV)
             }
+        }
+        .sheet(item: $csvFile) { file in SessionShareSheet(url: file.url) }
+        .alert("Could not export session", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("OK", role: .cancel) { exportError = nil }
+        } message: {
+            Text(verbatim: exportError ?? "")
         }
         .confirmationDialog("Delete this session?",
                             isPresented: $confirmingDelete,
@@ -269,6 +285,20 @@ struct SessionDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This removes this saved charge from history. This cannot be undone.")
+        }
+    }
+
+    private func exportCSV() {
+        guard !preparingCSV, !session.isOpen else { return }
+        preparingCSV = true
+        Task { @MainActor in
+            defer { preparingCSV = false }
+            do {
+                let url = try await SessionCSVExporter.export(session)
+                csvFile = SessionShareFile(url: url)
+            } catch {
+                exportError = error.localizedDescription
+            }
         }
     }
 
@@ -301,11 +331,11 @@ struct SessionDetailView: View {
                            value: session.totals.inputToCellPercent.map { String(format: "%.0f", $0) } ?? "—",
                            unit: "%", tint: .mwLoss, size: 21)
                     Metric(caption: "Gained",
-                           value: "+\(session.gainedPercent)",
+                           value: session.gainedPercent.map { "+\($0)" } ?? "—",
                            unit: "%", tint: .mwBattery, size: 21)
                 }
                 if session.totals.integratedSeconds < session.duration * 0.9 {
-                    Text("Measured for \(Formatting.duration(session.totals.integratedSeconds)) of \(Formatting.duration(session.duration)) — the app was backgrounded for the rest, and those gaps are excluded rather than estimated.")
+                    Text("Measured for \(Formatting.duration(session.totals.integratedSeconds)) of \(Formatting.duration(session.duration)) — intervals without valid readings are excluded rather than estimated.")
                         .font(.caption2)
                         .foregroundStyle(Color.mwMuted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -389,4 +419,19 @@ struct SessionDetailView: View {
             }
         }
     }
+}
+
+private struct SessionShareFile: Identifiable {
+    let url: URL
+    var id: URL { url }
+}
+
+private struct SessionShareSheet: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }

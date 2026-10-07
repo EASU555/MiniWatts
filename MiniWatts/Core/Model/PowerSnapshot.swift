@@ -221,11 +221,21 @@ nonisolated struct PowerSnapshot {
         return bool("Is Charging", in: powerSource)
     }
 
-    var externalConnected: Bool {
-        if registry["ExternalConnected"] != nil { return bool("ExternalConnected", in: registry) }
-        if let state = powerSource?["Power Source State"] as? String { return state == "AC Power" }
-        return bool("Raw External Connected", in: powerSource)
+    /// Nil means neither source reported a recognizable connection state. Keep
+    /// that separate from a positively observed unplug throughout sampling.
+    var externalConnectionObservation: Bool? {
+        if let connected = Self.optionalBool("ExternalConnected", in: registry) { return connected }
+        if let state = powerSource?["Power Source State"] as? String {
+            switch state {
+            case "AC Power": return true
+            case "Battery Power": return false
+            default: break
+            }
+        }
+        return Self.optionalBool("Raw External Connected", in: powerSource)
     }
+
+    var externalConnected: Bool { externalConnectionObservation == true }
 
     var fullyCharged: Bool {
         if registry["FullyCharged"] != nil { return bool("FullyCharged", in: registry) }
@@ -260,6 +270,7 @@ nonisolated struct PowerSnapshot {
     var holdIsInferred: Bool { chargeStatusText == nil && isChargingOnHold }
 
     var statusText: LocalizedStringResource {
+        guard externalConnectionObservation != nil else { return "no reading" }
         if isChargingOnHold { return "Charging on hold" }
         if fullyCharged && externalConnected { return "Full" }
         if isCharging { return isFinishingCharge ? "Finishing charge" : "Charging" }
@@ -469,9 +480,13 @@ nonisolated struct PowerSnapshot {
     }
 
     private func bool(_ key: String, in dictionary: [String: Any]?) -> Bool {
-        guard let dictionary else { return false }
+        Self.optionalBool(key, in: dictionary) ?? false
+    }
+
+    private static func optionalBool(_ key: String, in dictionary: [String: Any]?) -> Bool? {
+        guard let dictionary else { return nil }
         if let value = dictionary[key] as? Bool { return value }
         if let number = dictionary[key] as? NSNumber { return number.boolValue }
-        return false
+        return nil
     }
 }

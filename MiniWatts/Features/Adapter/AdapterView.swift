@@ -7,7 +7,13 @@ struct AdapterView: View {
 
     var body: some View {
         PageScaffold("Adapter", glow: snapshot.isWirelessInput ? .mwWireless : .mwAccent) {
-            if snapshot.externalConnected {
+            if snapshot.externalConnectionObservation == nil {
+                Panel("No reading", systemImage: "questionmark.circle") {
+                    EmptyNote(text: "The external-power connection could not be read. MiniWatts will try again on the next sample; any charging record stays open until a disconnection is confirmed.",
+                              systemImage: "arrow.clockwise")
+                }
+                railsPanel
+            } else if snapshot.externalConnected {
                 headlinePanel
                 identityPanel
                 profilesPanel

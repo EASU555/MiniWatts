@@ -203,6 +203,13 @@ final class PowerMonitor {
 
     var deviceModelIdentifier: String { Self.machineIdentifier }
 
+    /// For screen/lifecycle policy only: a failed source read must not release
+    /// the screen while the last confirmed observation still had a charger.
+    /// This retained state is not a current measurement.
+    var externalPowerConnectedForLifecycle: Bool {
+        snapshot.externalConnectionObservation ?? lastExternalConnected ?? false
+    }
+
     // MARK: Private
 
     private static let nominalCellVoltage = 3.87
@@ -227,8 +234,7 @@ final class PowerMonitor {
     private let liveActivityController = ChargingLiveActivityController()
 
     private var task: Task<Void, Never>?
-    private var refreshInFlight = false
-    private var refreshGeneration = 0
+    private var samplingGate = SensorSamplingGate()
     private var ioKitAvailable = false
     private var hidServiceCount: Int?
     private var lastRefreshStartedAt = Date.distantPast
@@ -248,6 +254,7 @@ final class PowerMonitor {
     private var percentLog: [(date: Date, percent: Int)] = []
     private var lastChargingFlag: Bool?
     private var lastThermalObservation: (date: Date, wasThrottling: Bool)?
+    private var sessionNeedsNewSegment = false
     private var diagnosticEvents: [String] = []
     private var lastReportCheckpoint = Date.distantPast
     private var lastElectricalEvidenceWrite = Date.distantPast
@@ -354,6 +361,7 @@ final class PowerMonitor {
     func start() {
         systemBatteryLevel.prepareForForeground()
         guard task == nil else { return }
+        samplingGate.start()
         appendDiagnosticEvent("sampling started")
         refresh()
         task = Task { [weak self] in
@@ -380,7 +388,8 @@ final class PowerMonitor {
         task = nil
         // A blocking probe cannot be cancelled midway. Discard its result if it
         // arrives after sampling was stopped, without ever blocking the UI actor.
-        refreshGeneration &+= 1
+        samplingGate.pause()
+        breakSampleContinuity()
         appendDiagnosticEvent("sampling paused")
         persist()
     }
@@ -389,6 +398,7 @@ final class PowerMonitor {
     /// than a sleeping task in the background. Coalesce both drivers here so they
     /// never perform the relatively expensive IOKit/HID read twice in one second.
     func refreshIfDue(minimumInterval: TimeInterval = 0.8) {
+        guard samplingGate.isSampling else { return }
         guard Date.now.timeIntervalSince(lastRefreshStartedAt) >= minimumInterval else { return }
         refresh()
     }
@@ -398,17 +408,14 @@ final class PowerMonitor {
     func refresh() {
         // The HID and powerd calls may take longer than one frame. Never queue
         // overlapping probes when PiP and the regular timer pulse together.
-        guard !refreshInFlight else { return }
-        refreshInFlight = true
+        guard let generation = samplingGate.beginRead() else { return }
         lastRefreshStartedAt = .now
         tick += 1
-        let generation = refreshGeneration
         let rescanAfterward = tick % 15 == 0
         Task { [weak self, probe] in
             let raw = await probe.read(rescanAfterward: rescanAfterward)
             guard let self else { return }
-            self.refreshInFlight = false
-            guard self.refreshGeneration == generation else { return }
+            guard self.samplingGate.finishRead(generation: generation) else { return }
             self.apply(raw)
         }
     }
@@ -457,13 +464,15 @@ final class PowerMonitor {
                 + "thermal=\(thermal.state.rawValue) activity=\(liveActivityRecoveryStatus) "
                 + "probeMs=\(String(format: "%.1f", raw.elapsedMilliseconds))")
         }
-        if lastExternalConnected != current.externalConnected {
-            appendDiagnosticEvent("power: externalConnected=\(current.externalConnected)")
+        if let connected = current.externalConnectionObservation,
+           lastExternalConnected != connected {
+            appendDiagnosticEvent("power: externalConnected=\(connected)")
         }
 
         // Charger-side sensors only exist while something is plugged in, so the
         // service list is re-enumerated on every plug event and occasionally after.
-        if lastExternalConnected != current.externalConnected {
+        if let connected = current.externalConnectionObservation,
+           lastExternalConnected != connected {
             // The next sample sees newly enumerated charger sensors. The scan
             // itself stays on the probe actor instead of stalling scrolling.
             Task { [probe] in await probe.rescan() }
@@ -480,7 +489,9 @@ final class PowerMonitor {
                                          selectedMetric: liveActivityMetric,
                                          minimalMetric: liveActivityMinimalSelection.resolvedMetric(primary: liveActivityMetric),
                                          enabled: liveActivityEnabled)
-        lastExternalConnected = current.externalConnected
+        if let connected = current.externalConnectionObservation {
+            lastExternalConnected = connected
+        }
         onTick?(current)
     }
 
@@ -498,7 +509,8 @@ final class PowerMonitor {
     // MARK: Sessions
 
     private func updateSession(_ snapshot: PowerSnapshot) {
-        if snapshot.externalConnected {
+        switch SamplingSessionAction.decide(externalConnection: snapshot.externalConnectionObservation) {
+        case .record:
             lastConnectedObservation = snapshot.date
             if currentSession == nil {
                 openSession(snapshot)
@@ -506,8 +518,13 @@ final class PowerMonitor {
             energy.add(snapshot)
             sessionTotals = energy.totals
             recordSample(snapshot)
-        } else {
+        case .close:
             closeSessionIfNeeded()
+        case .hold:
+            breakSampleContinuity()
+            // Preserve the last confirmed charger observation and the open
+            // session. A missing reading cannot identify its end.
+            return
         }
 
         if currentSession != nil, snapshot.date.timeIntervalSince(lastPersist) >= 30 {
@@ -519,18 +536,19 @@ final class PowerMonitor {
         energy.reset()
         sessionTotals = energy.totals
         currentSession = ChargeSession(start: snapshot.date,
-                                       startPercent: snapshot.percent ?? 0,
+                                       startPercent: snapshot.percent,
                                        adapterName: snapshot.adapterName,
                                        adapterRatedWatts: snapshot.adapterRatedWatts,
                                        isWireless: snapshot.isWirelessInput)
         lastSampleWrite = .distantPast
         lastThermalObservation = nil
+        sessionNeedsNewSegment = false
     }
 
     private func recordSample(_ snapshot: PowerSnapshot) {
         guard var session = currentSession else { return }
 
-        session.endPercent = snapshot.percent ?? session.endPercent
+        session.recordPercent(snapshot.percent)
         session.totals = energy.totals
         if let inputWatts = snapshot.inputWatts {
             session.peakInputWatts = max(session.peakInputWatts, inputWatts)
@@ -560,14 +578,26 @@ final class PowerMonitor {
             session.samples.append(ChargeSample(offset: snapshot.date.timeIntervalSince(session.start),
                                                 inputWatts: snapshot.inputWatts,
                                                 batteryWatts: snapshot.batteryWatts,
-                                                percent: snapshot.percent ?? session.endPercent,
+                                                percent: snapshot.percent,
                                                 batteryTemperature: snapshot.batteryTemperature,
                                                 hottestTemperature: snapshot.hottestSensor?.value,
-                                                throttled: thermal.state.isThrottling))
+                                                throttled: thermal.state.isThrottling,
+                                                startsNewSegment: sessionNeedsNewSegment ? true : nil))
+            sessionNeedsNewSegment = false
             // A very long charge is thinned in place: every other point goes, which
             // halves the resolution without losing the shape of the curve.
             if session.samples.count > SessionStore.sampleLimit {
-                session.samples = session.samples.enumerated().compactMap { $0.offset.isMultiple(of: 2) ? $0.element : nil }
+                var startsNewSegment = false
+                session.samples = session.samples.enumerated().compactMap { index, sample in
+                    // A discarded boundary still applies to the next retained
+                    // point; thinning must not reconnect a known sampling gap.
+                    startsNewSegment = startsNewSegment || sample.startsNewSegment == true
+                    guard index.isMultiple(of: 2) else { return nil }
+                    var retained = sample
+                    if startsNewSegment { retained.startsNewSegment = true }
+                    startsNewSegment = false
+                    return retained
+                }
             }
         }
         currentSession = session
@@ -584,6 +614,7 @@ final class PowerMonitor {
         session.totals = energy.totals
         currentSession = nil
         lastThermalObservation = nil
+        sessionNeedsNewSegment = false
         energy.reset()
         sessionTotals = EnergyTotals()
         if Self.isWorthKeeping(session) {
@@ -599,7 +630,7 @@ final class PowerMonitor {
     private static func isWorthKeeping(_ session: ChargeSession) -> Bool {
         session.totals.inputWattHours > 0.001
             || session.totals.batteryWattHours > 0.001
-            || session.gainedPercent > 0
+            || (session.gainedPercent ?? 0) > 0
     }
 
     private func persist() {
@@ -647,6 +678,7 @@ final class PowerMonitor {
         sessions.removeAll()
         currentSession = nil
         lastThermalObservation = nil
+        sessionNeedsNewSegment = false
         energy.reset()
         sessionTotals = EnergyTotals()
         // Save an empty valid primary and backup. Removing only the primary
@@ -656,10 +688,22 @@ final class PowerMonitor {
 
     // MARK: Rate estimate
 
+    private func breakSampleContinuity() {
+        energy.breakContinuity()
+        if currentSession != nil { sessionNeedsNewSegment = true }
+        lastThermalObservation = nil
+        percentLog.removeAll()
+        lastChargingFlag = nil
+        rateEstimateWatts = nil
+    }
+
     /// Tracks 1 % transitions and converts the slope into watts. Two transitions
     /// are needed because the first sample lands mid-percent.
     private func updateRateEstimate(_ snapshot: PowerSnapshot) {
-        guard let percent = snapshot.percent else {
+        guard snapshot.externalConnectionObservation != nil,
+              let percent = snapshot.percent else {
+            percentLog.removeAll()
+            lastChargingFlag = nil
             rateEstimateWatts = nil
             return
         }
@@ -701,6 +745,7 @@ final class PowerMonitor {
     /// question, which nothing called, while `DashboardView` open-coded this. One
     /// answer, in the layer that can actually give it.
     var headline: (watts: Double, caption: LocalizedStringResource)? {
+        guard snapshot.externalConnectionObservation != nil else { return nil }
         if snapshot.externalConnected {
             let power = snapshot.chargingPower
             if let watts = power.watts, !power.isBatterySide {
@@ -897,7 +942,7 @@ final class PowerMonitor {
             "Live Activity: \(liveActivityRecoveryStatus)",
             "Live Activity detail: \(liveActivityRecoveryDetail)",
             "Live Activity system state: \(liveActivityController.diagnosticSummary)",
-            "External power: \(snapshot.externalConnected)",
+            "External power: \(snapshot.externalConnectionObservation.map(String.init) ?? "unknown")",
             "Charging: \(snapshot.isCharging)",
             "Input watts: \(snapshot.inputWatts.map { String(format: "%.3f", $0) } ?? "—")",
             "Input rail: Charger VQ0u × abs(Charger IQ0u); sign and path unverified on this model",

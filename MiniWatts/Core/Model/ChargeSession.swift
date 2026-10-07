@@ -9,11 +9,14 @@ nonisolated struct ChargeSample: Codable, Hashable, Identifiable, Sendable {
     /// power dropout.
     let inputWatts: Double?
     let batteryWatts: Double?
-    let percent: Int
+    let percent: Int?
     let batteryTemperature: Double?
     let hottestTemperature: Double?
     /// True while `ProcessInfo.thermalState` was `.serious` or `.critical`.
     let throttled: Bool
+    /// True when measurement continuity ended before this recorded point.
+    /// Optional for histories created before continuity was recorded explicitly.
+    var startsNewSegment: Bool? = nil
 
     var id: TimeInterval { offset }
 }
@@ -23,8 +26,8 @@ nonisolated struct ChargeSession: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let start: Date
     var end: Date?
-    var startPercent: Int
-    var endPercent: Int
+    var startPercent: Int?
+    var endPercent: Int?
     var totals: EnergyTotals
     var samples: [ChargeSample]
     var peakInputWatts: Double
@@ -38,7 +41,10 @@ nonisolated struct ChargeSession: Codable, Identifiable, Hashable, Sendable {
 
     var isOpen: Bool { end == nil }
     var duration: TimeInterval { (end ?? .now).timeIntervalSince(start) }
-    var gainedPercent: Int { max(endPercent - startPercent, 0) }
+    var gainedPercent: Int? {
+        guard let startPercent, let endPercent else { return nil }
+        return max(endPercent - startPercent, 0)
+    }
 
     /// Copy to fall back to when the adapter never identified itself. The adapter's
     /// own name is hardware and is shown verbatim; this is the only half that is
@@ -53,7 +59,7 @@ nonisolated struct ChargeSession: Codable, Identifiable, Hashable, Sendable {
         return min(throttledSeconds / duration, 1)
     }
 
-    init(start: Date, startPercent: Int, adapterName: String?, adapterRatedWatts: Double?, isWireless: Bool) {
+    init(start: Date, startPercent: Int?, adapterName: String?, adapterRatedWatts: Double?, isWireless: Bool) {
         self.id = UUID()
         self.start = start
         self.end = nil
@@ -68,6 +74,14 @@ nonisolated struct ChargeSession: Codable, Identifiable, Hashable, Sendable {
         self.adapterRatedWatts = adapterRatedWatts
         self.isWireless = isWireless
         self.throttledSeconds = 0
+    }
+
+    /// The first available percentage establishes the observed starting level.
+    /// A missing current reading must stay missing, including after a valid one.
+    mutating func recordPercent(_ percent: Int?) {
+        let valid = percent.flatMap { (0...100).contains($0) ? $0 : nil }
+        if startPercent == nil { startPercent = valid }
+        endPercent = valid
     }
 }
 

@@ -27,7 +27,7 @@ Screen, whether or not a charger is connected. Choose the left, right, and
 multi-activity readings independently on the dashboard. Network speed is measured
 from adjacent Wi-Fi/cellular interface byte counters, not from MiniWatts alone.
 
-Settings also has a user-started floating monitor built with system Picture in
+The dashboard also has a user-started floating monitor built with system Picture in
 Picture. Its generated video surface refreshes every second and can show charging
 power, SoC, battery, charger and hottest-component temperatures. Power and
 temperatures can be enabled independently; when both are enabled they can share one
@@ -38,6 +38,13 @@ The Live Activity refreshes while MiniWatts is running, including in the backgro
 while the floating monitor is active. A Live Activity alone does not keep sampling
 alive. iOS may pause, dismiss or eventually end it; close the floating monitor when
 you no longer need background sampling.
+
+History distinguishes unmeasured energy from measured zero. Temporary connection
+read failures do not end a charge; known pauses remain gaps rather than estimated
+energy. Open a saved charge and use its share button to export a local CSV with
+UTC sample times, power, battery level, temperatures and channel coverage. This is
+the saved curve (normally every five seconds, with older points thinned), not a
+continuous raw trace. Nothing is uploaded automatically.
 
 > **Sideload only.** Private APIs mean this can never be on the App Store — you sign
 > and install it yourself. It reads local network counters but makes no network
