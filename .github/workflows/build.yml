@@ -72,6 +72,12 @@ jobs:
       - name: Run project quality checks
         run: ./scripts/quality-checks.sh
 
+      - name: Test performance policies and chart domain parity
+        run: bash ./scripts/test-performance-policy.sh
+
+      - name: Test deferred monitoring traces and report ordering
+        run: bash ./scripts/test-monitoring-trace.sh
+
       - name: Test local charging-curve CSV exports
         run: bash ./scripts/test-session-csv.sh
 

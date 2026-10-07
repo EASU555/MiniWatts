@@ -31,7 +31,8 @@ nonisolated enum SessionChartSeries {
 
     /// A line cannot show a segment with only one observation. Draw its point.
     static func singletonPoints(in points: [SessionChartPoint]) -> [SessionChartPoint] {
-        let counts = Dictionary(grouping: points, by: \.series).mapValues(\.count)
+        var counts: [String: Int] = [:]
+        for point in points { counts[point.series, default: 0] += 1 }
         return points.filter { counts[$0.series] == 1 }
     }
 

@@ -118,6 +118,9 @@ struct SessionsView: View {
                 }
                 if !session.samples.isEmpty {
                     SessionPowerChart(samples: session.samples, height: 110)
+                        // Totals update every second; recorded samples every five.
+                        // Compare only chart inputs, not the entire live session.
+                        .equatable()
                 }
             }
         }

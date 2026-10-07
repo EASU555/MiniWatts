@@ -259,9 +259,10 @@ final class PowerMonitor {
     private var lastReportCheckpoint = Date.distantPast
     private var lastElectricalEvidenceWrite = Date.distantPast
     @ObservationIgnored private var lastPublishedSampleAt: Date?
-    @ObservationIgnored private var recentSampleTimings: [String] = []
-    @ObservationIgnored private var recentActivityUpdates: [String] = []
-    @ObservationIgnored private var recentElectricalEvidence: [String] = []
+    @ObservationIgnored private var recentSampleTimings: [SampleTimingTrace] = []
+    @ObservationIgnored private var recentActivityUpdates: [ActivityTimingTrace] = []
+    @ObservationIgnored private var recentElectricalEvidence: [ElectricalEvidenceTrace] = []
+    @ObservationIgnored private var latestBatteryLevelCandidates: BatteryLevelCandidates?
     private static let timingTraceLimit = 60
 
     init() {
@@ -787,10 +788,16 @@ final class PowerMonitor {
     private func updateBatteryLevelDiagnostics(_ reading: SystemBatteryLevelReader.Reading?) {
         let oldPercent = snapshot.percent
         let oldSource = batteryLevelSource
+        let candidates = BatteryLevelCandidates(mobileGestaltPercent: reading?.mobileGestaltPercent,
+                                               powerSourcePercent: reading?.powerSourcePercent,
+                                               uiDevicePercent: reading?.uiDevicePercent)
+        if candidates != latestBatteryLevelCandidates {
+            latestBatteryLevelCandidates = candidates
+            batteryLevelCandidates = candidates.formatted
+        }
         guard let reading else {
             batteryLevelSource = "unavailable"
             batteryLevelSampledAt = .now
-            batteryLevelCandidates = "MobileGestalt — · powerd — · UIDevice —"
             if oldSource != batteryLevelSource {
                 appendDiagnosticEvent("battery level unavailable")
             }
@@ -799,11 +806,6 @@ final class PowerMonitor {
 
         batteryLevelSource = reading.source.rawValue
         batteryLevelSampledAt = reading.sampledAt
-        batteryLevelCandidates = [
-            "MobileGestalt \(reading.mobileGestaltPercent.map(String.init) ?? "—")",
-            "powerd \(reading.powerSourcePercent.map(String.init) ?? "—")",
-            "UIDevice \(reading.uiDevicePercent.map(String.init) ?? "—")"
-        ].joined(separator: " · ")
 
         if oldPercent != reading.percent || oldSource != batteryLevelSource {
             batteryLevelChangedAt = reading.sampledAt
@@ -825,17 +827,15 @@ final class PowerMonitor {
     private func recordSampleTiming(_ raw: SensorProbe.Sample, publishedAt: Date) {
         let gap = lastPublishedSampleAt.map { publishedAt.timeIntervalSince($0) }
         lastPublishedSampleAt = publishedAt
-        let interval = raw.cpuIntervalSeconds.map { String(format: "%.2f", $0) } ?? "—"
-        let cpu = raw.cpuUsagePercent.map { String(format: "%.1f", $0) } ?? "nil"
-        recentSampleTimings.append(
-            "tick=\(tick) start=\(Self.epoch(raw.startedAt)) "
-                + "cpuAt=\(Self.epoch(raw.cpuSampledAt)) cpuWindow=\(interval)s "
-                + "finish=\(Self.epoch(raw.finishedAt)) publish=\(Self.epoch(publishedAt)) "
-                + "probeMs=\(String(format: "%.0f", raw.elapsedMilliseconds)) cpu=\(cpu)"
-        )
-        if recentSampleTimings.count > Self.timingTraceLimit {
-            recentSampleTimings.removeFirst(recentSampleTimings.count - Self.timingTraceLimit)
-        }
+        let trace = SampleTimingTrace(tick: tick,
+                                      startedAt: raw.startedAt,
+                                      cpuSampledAt: raw.cpuSampledAt,
+                                      cpuIntervalSeconds: raw.cpuIntervalSeconds,
+                                      finishedAt: raw.finishedAt,
+                                      publishedAt: publishedAt,
+                                      elapsedMilliseconds: raw.elapsedMilliseconds,
+                                      cpuUsagePercent: raw.cpuUsagePercent)
+        MonitoringTrace.append(trace, to: &recentSampleTimings, limit: Self.timingTraceLimit)
         if let gap, gap > 2.5 {
             appendDiagnosticEvent("sampling gap=\(String(format: "%.2f", gap))s "
                 + "probeMs=\(String(format: "%.0f", raw.elapsedMilliseconds))")
@@ -849,22 +849,14 @@ final class PowerMonitor {
     }
 
     private func recordActivityUpdate(_ trace: LiveActivityUpdateTrace) {
-        let queueMs = trace.startedAt.timeIntervalSince(trace.enqueuedAt) * 1_000
-        let activityMs = trace.finishedAt.timeIntervalSince(trace.startedAt) * 1_000
-        let sampleAgeMs = trace.sampledAt.map {
-            trace.finishedAt.timeIntervalSince($0) * 1_000
-        }
-        recentActivityUpdates.append(
-            "sample=\(trace.sampledAt.map(Self.epoch) ?? "nil") "
-                + "enqueue=\(Self.epoch(trace.enqueuedAt)) start=\(Self.epoch(trace.startedAt)) "
-                + "return=\(Self.epoch(trace.finishedAt)) queueMs=\(String(format: "%.0f", queueMs)) "
-                + "activityMs=\(String(format: "%.0f", activityMs)) "
-                + "sampleAgeMs=\(sampleAgeMs.map { String(format: "%.0f", $0) } ?? "nil") "
-                + "result=\(trace.returned ? "returned" : "timeout")"
-        )
-        if recentActivityUpdates.count > Self.timingTraceLimit {
-            recentActivityUpdates.removeFirst(recentActivityUpdates.count - Self.timingTraceLimit)
-        }
+        let timing = ActivityTimingTrace(sampledAt: trace.sampledAt,
+                                         enqueuedAt: trace.enqueuedAt,
+                                         startedAt: trace.startedAt,
+                                         finishedAt: trace.finishedAt,
+                                         returned: trace.returned)
+        MonitoringTrace.append(timing, to: &recentActivityUpdates, limit: Self.timingTraceLimit)
+        let queueMs = timing.queueMilliseconds
+        let activityMs = timing.activityMilliseconds
         if !trace.returned || queueMs > 2_000 || activityMs > 2_000 {
             appendDiagnosticEvent("Live Activity update \(trace.returned ? "slow" : "timeout") "
                 + "queueMs=\(String(format: "%.0f", queueMs)) "
@@ -879,27 +871,21 @@ final class PowerMonitor {
     /// as power until their meaning is verified against a paired meter sample.
     private func recordElectricalEvidence(_ sample: PowerSnapshot) {
         guard sample.externalConnected else { return }
-        func named(_ name: String) -> String {
-            let values = sample.sensors.filter { $0.name == name }
-                .map { "\($0.index):\(String(format: "%.3f", $0.value))" }
-            return values.isEmpty ? "—" : values.joined(separator: ",")
-        }
         let selected = sample.chargingPower
-        let line = "t=\(Self.epoch(sample.date)) charge=\(sample.isCharging) "
-            + "inputW=\(sample.inputWatts.map { String(format: "%.2f", $0) } ?? "—") "
-            + "batteryW=\(sample.batteryWatts.map { String(format: "%.2f", $0) } ?? "—") "
-            + "shown=\(selected.watts.map { String(format: "%.2f", $0) } ?? "—") "
-            + "shownSide=\(selected.isBatterySide ? "battery" : "input") "
-            + "VQ0u=[\(named("Charger VQ0u"))] IQ0u=[\(named("Charger IQ0u"))] "
-            + "QQ0u=[\(named("Charger QQ0u"))] WQ0u=[\(named("Charger WQ0u"))] "
-            + "gaugeC=[\(named("gas gauge battery"))] thermal=\(thermal.state.rawValue)"
-        recentElectricalEvidence.append(line)
-        if recentElectricalEvidence.count > Self.timingTraceLimit {
-            recentElectricalEvidence.removeFirst(recentElectricalEvidence.count - Self.timingTraceLimit)
+        var trace = ElectricalEvidenceTrace(date: sample.date,
+                                            isCharging: sample.isCharging,
+                                            inputWatts: sample.inputWatts,
+                                            batteryWatts: sample.batteryWatts,
+                                            shownWatts: selected.watts,
+                                            shownIsBatterySide: selected.isBatterySide,
+                                            thermalState: thermal.state.rawValue)
+        for reading in sample.sensors {
+            trace.capture(name: reading.name, index: reading.index, value: reading.value)
         }
+        MonitoringTrace.append(trace, to: &recentElectricalEvidence, limit: Self.timingTraceLimit)
         if sample.date.timeIntervalSince(lastElectricalEvidenceWrite) >= 10 {
             lastElectricalEvidenceWrite = sample.date
-            ProblemReportRecorder.shared.record("electrical", line)
+            ProblemReportRecorder.shared.recordElectrical(trace)
         }
     }
 
@@ -955,7 +941,7 @@ final class PowerMonitor {
             "",
             "# Recent electrical evidence (alternate rails are unvalidated; indices identify duplicate sensors)"
         ]
-        lines.append(contentsOf: recentElectricalEvidence.suffix(45))
+        lines.append(contentsOf: recentElectricalEvidence.suffix(45).map { $0.formatted })
         lines.append("")
         lines.append("# Probe availability")
         lines.append(contentsOf: diagnostics)
@@ -964,10 +950,10 @@ final class PowerMonitor {
         lines.append(contentsOf: diagnosticEvents)
         lines.append("")
         lines.append("# Recent sample timing (Unix seconds; latest 45)")
-        lines.append(contentsOf: recentSampleTimings.suffix(45))
+        lines.append(contentsOf: recentSampleTimings.suffix(45).map { $0.formatted })
         lines.append("")
         lines.append("# Recent ActivityKit update timing (return is not render confirmation)")
-        lines.append(contentsOf: recentActivityUpdates.suffix(45))
+        lines.append(contentsOf: recentActivityUpdates.suffix(45).map { $0.formatted })
         lines.append("")
         lines.append("# Live sensors")
         lines.append(contentsOf: snapshot.sensors.sorted { $0.name < $1.name }

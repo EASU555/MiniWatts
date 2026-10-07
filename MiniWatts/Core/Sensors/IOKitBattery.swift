@@ -95,7 +95,8 @@ nonisolated final class IOKitBattery {
     /// powerd's charge status, e.g. `chargeStatus = "Charging On Hold"`.
     /// Privileged on iOS; kept because it works on macOS and in the simulator.
     func readChargeStatus() -> [String: Any]? {
-        guard let copyChargeStatus else { return nil }
+        guard ChargeStatusReadPolicy.shouldRetry(after: chargeStatusError),
+              let copyChargeStatus else { return nil }
         var out: Unmanaged<CFTypeRef>?
         let result = copyChargeStatus(&out)
         chargeStatusError = result

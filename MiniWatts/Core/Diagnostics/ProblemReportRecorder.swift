@@ -45,6 +45,16 @@ nonisolated final class ProblemReportRecorder: @unchecked Sendable {
         }
     }
 
+    /// Sensor producers retain only values. Serialize the ten-second electrical
+    /// checkpoint on the same utility queue that owns its ordered file writes.
+    func recordElectrical(_ trace: ElectricalEvidenceTrace) {
+        let date = Date.now
+        queue.async { [self] in
+            do { try append("electrical", trace.formatted, at: date) }
+            catch { storageError = String(describing: error) }
+        }
+    }
+
     /// The UI only confirms a marker after it has reached the local file.
     func markIssue() async throws -> Date {
         try await withCheckedThrowingContinuation { continuation in

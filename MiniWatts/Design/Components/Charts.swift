@@ -15,12 +15,9 @@ struct LivePowerChart: View {
     var height: CGFloat = 130
 
     private var ceiling: Double {
-        let peak = samples
-            .flatMap { [$0.inputWatts, $0.batteryWatts] }
-            .compactMap { $0 }
-            .filter(\.isFinite)
-            .max() ?? 0
-        return max(peak * 1.25, 5)
+        ChartDomain.powerCeiling(samples, headroom: 1.25) {
+            ($0.inputWatts, $0.batteryWatts)
+        }
     }
 
     private var inputPoints: [DatedPowerPoint] {
@@ -50,8 +47,11 @@ struct LivePowerChart: View {
     }
 
     var body: some View {
+        let input = inputPoints
+        let battery = batteryPoints
+        let yCeiling = ceiling
         Chart {
-            ForEach(inputPoints) { point in
+            ForEach(input) { point in
                 AreaMark(x: .value("Time", point.date),
                          y: .value("Watts", point.watts),
                          series: .value("Segment", point.series))
@@ -60,7 +60,7 @@ struct LivePowerChart: View {
                                                     endPoint: .bottom))
                     .interpolationMethod(.monotone)
             }
-            ForEach(inputPoints) { point in
+            ForEach(input) { point in
                 LineMark(x: .value("Time", point.date),
                          y: .value("Watts", point.watts),
                          series: .value("Segment", point.series))
@@ -68,7 +68,7 @@ struct LivePowerChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 2, lineJoin: .round))
                     .interpolationMethod(.monotone)
             }
-            ForEach(batteryPoints) { point in
+            ForEach(battery) { point in
                 LineMark(x: .value("Time", point.date),
                          y: .value("Watts", point.watts),
                          series: .value("Segment", point.series))
@@ -77,7 +77,7 @@ struct LivePowerChart: View {
                     .interpolationMethod(.monotone)
             }
         }
-        .chartYScale(domain: 0...ceiling)
+        .chartYScale(domain: 0...yCeiling)
         .chartXAxis(.hidden)
         .chartYAxis {
             AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { value in
@@ -96,13 +96,14 @@ struct LivePowerChart: View {
 }
 
 /// Power over the length of a finished session, plotted against elapsed time.
-struct SessionPowerChart: View {
+struct SessionPowerChart: View, Equatable {
     let samples: [ChargeSample]
     var height: CGFloat = 150
 
     private var ceiling: Double {
-        let values = samples.flatMap { [$0.inputWatts, $0.batteryWatts] }.compactMap { $0 }
-        return max((values.filter(\.isFinite).max() ?? 0) * 1.2, 5)
+        ChartDomain.powerCeiling(samples, headroom: 1.2) {
+            ($0.inputWatts, $0.batteryWatts)
+        }
     }
 
     private var inputPoints: [SessionChartPoint] {
@@ -116,6 +117,9 @@ struct SessionPowerChart: View {
     var body: some View {
         let input = inputPoints
         let battery = batteryPoints
+        // Compute this once, not once per throttling mark (O(n × marks)).
+        let yCeiling = ceiling
+        let throttled = samples.filter(\.throttled)
         Chart {
             ForEach(input) { point in
                 AreaMark(x: .value("Elapsed", point.offset),
@@ -152,15 +156,15 @@ struct SessionPowerChart: View {
             }
             // Shade the stretches where iOS was thermally throttling, which is
             // where the curve usually falls off a cliff.
-            ForEach(samples.filter(\.throttled)) { sample in
+            ForEach(throttled) { sample in
                 RectangleMark(x: .value("Elapsed", sample.offset),
                               yStart: .value("Watts", 0),
-                              yEnd: .value("Watts", ceiling),
+                              yEnd: .value("Watts", yCeiling),
                               width: .fixed(2))
                     .foregroundStyle(Color.mwDanger.opacity(0.12))
             }
         }
-        .chartYScale(domain: 0...ceiling)
+        .chartYScale(domain: 0...yCeiling)
         .chartXAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine().foregroundStyle(Color.mwGrid)
@@ -212,16 +216,13 @@ struct SessionClimateChart: View {
         SessionChartSeries.points(samples, prefix: "temperature") { $0.batteryTemperature }
     }
 
-    private var temperatureDomain: ClosedRange<Double> {
-        let values = temperatures.map(\.value)
-        guard let low = values.min(), let high = values.max() else { return 20...45 }
-        let padding = max((high - low) * 0.2, 1)
-        return (low - padding)...(high + padding)
-    }
-
     var body: some View {
         let percentagePoints = percentages
         let temperaturePoints = temperatures
+        let temperatureDomain = ChartDomain.temperature(
+            temperaturePoints.lazy.map(\.value),
+            paddingFraction: 0.2, minimumPadding: 1, fallback: 20...45
+        )
         VStack(spacing: 4) {
             Chart {
                 ForEach(percentagePoints) { point in
@@ -319,11 +320,11 @@ struct Sparkline: View {
     }
 
     var body: some View {
+        let points = thinned
+        let peak = max(points.lazy.map(\.value).max() ?? 1, 0.001)
+        let end = max(samples.last?.offset ?? 0, 1)
+        let singletons = Set(SessionChartSeries.singletonPoints(in: points).map(\.id))
         GeometryReader { geometry in
-            let points = thinned
-            let peak = max(points.map(\.value).max() ?? 1, 0.001)
-            let end = max(samples.last?.offset ?? 0, 1)
-            let singletons = Set(SessionChartSeries.singletonPoints(in: points).map(\.id))
             Path { path in
                 var previousSeries: String?
                 for point in points {
@@ -352,17 +353,13 @@ struct LiveTemperatureChart: View {
         samples.filter { ($0.hottestTemperature ?? .nan).isFinite }
     }
 
-    private var domain: ClosedRange<Double> {
-        let values = points.compactMap(\.hottestTemperature)
-        guard let low = values.min(), let high = values.max(), low.isFinite, high.isFinite else {
-            return 20...50
-        }
-        let padding = max((high - low) * 0.3, 1.5)
-        return (low - padding)...(high + padding)
-    }
-
     var body: some View {
-        Chart(points) { sample in
+        let plotted = points
+        let domain = ChartDomain.temperature(
+            plotted.lazy.compactMap(\.hottestTemperature),
+            paddingFraction: 0.3, minimumPadding: 1.5, fallback: 20...50
+        )
+        Chart(plotted) { sample in
             AreaMark(x: .value("Time", sample.date),
                      y: .value("°C", sample.hottestTemperature ?? 0))
                 .foregroundStyle(LinearGradient(colors: [Color.mwLoss.opacity(0.35), Color.mwLoss.opacity(0.02)],

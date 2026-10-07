@@ -318,6 +318,28 @@ and the `INFOPLIST_FILE` setting on the next build. Do not re-add it — put new
 
 `PageScaffold` uses a `LazyVStack`. History puts up to sixty session panels through it.
 
+The personal performance pass is described in `docs/performance-monitoring.md`.
+`ChartDomain` reduces finite readings without intermediate arrays. Calculate a
+chart's domain and series once per body, never inside each throttling mark.
+The in-progress `SessionPowerChart` is equatable on samples/height, so one-second
+totals need not rebuild a five-second recorded curve. `singletonPoints` counts
+segments without allocating grouped copies of all points. Keep missing values,
+explicit segment boundaries and singleton marks intact.
+
+Recent sample/Activity/electrical traces retain immutable `MonitoringTrace`
+values and are formatted on explicit export; the ten-second electrical checkpoint
+is formatted on `ProblemReportRecorder`'s utility queue. Its sensor capture is one
+ordered pass and preserves duplicate indices. Battery candidate copy only changes
+when the actual three candidate levels change, not their sample timestamps.
+PiP option didSets skip identical assignments and `attach` owns source layout.
+No sampling, video frame or Live Activity cadence was reduced. These are source
+optimizations, not a new on-device FPS/CPU/energy benchmark.
+
+`ChargeStatusReadPolicy` stops the privileged charge-status request only after
+`kIOReturnNotPrivileged`, retaining that error for this process. Do not cache
+success or transient failures, and do not suppress other battery/adapter/HID reads.
+This shared dependency is explicitly included in the WidgetKit target.
+
 Already removed: `contentTransition(.numericText())` on every readout (it is opt-in
 via `mwReadout(rolling:)` now, used only by the dial), and the heat map's 0.6 s
 animation, which was retriggered every second on a `blur` + `plusLighter` layer.

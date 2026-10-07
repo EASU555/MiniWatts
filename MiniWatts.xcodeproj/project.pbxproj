@@ -25,6 +25,7 @@
 		B2000000000000000000000B /* IOKitBattery.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* IOKitBattery.swift */; };
 		B2000000000000000000000C /* SensorCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* SensorCatalog.swift */; };
 		B2000000000000000000000D /* BatteryGaugeSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* BatteryGaugeSummary.swift */; };
+		B2000000000000000000000E /* ChargeStatusReadPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* ChargeStatusReadPolicy.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,6 +73,7 @@
 		A2000000000000000000000B /* IOKitBattery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = IOKitBattery.swift; path = MiniWatts/Core/Sensors/IOKitBattery.swift; sourceTree = SOURCE_ROOT; };
 		A2000000000000000000000C /* SensorCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SensorCatalog.swift; path = MiniWatts/Core/Sensors/SensorCatalog.swift; sourceTree = SOURCE_ROOT; };
 		A2000000000000000000000D /* BatteryGaugeSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BatteryGaugeSummary.swift; path = MiniWatts/Core/Model/BatteryGaugeSummary.swift; sourceTree = SOURCE_ROOT; };
+		A2000000000000000000000E /* ChargeStatusReadPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChargeStatusReadPolicy.swift; path = MiniWatts/Core/Sensors/ChargeStatusReadPolicy.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -137,6 +139,7 @@
 				A2000000000000000000000B /* IOKitBattery.swift */,
 				A2000000000000000000000C /* SensorCatalog.swift */,
 				A2000000000000000000000D /* BatteryGaugeSummary.swift */,
+				A2000000000000000000000E /* ChargeStatusReadPolicy.swift */,
 				A10000000000000000000005 /* Localizable.xcstrings */,
 				A10000000000000000000004 /* Info.plist */,
 			);
@@ -270,6 +273,7 @@
 				B2000000000000000000000B /* IOKitBattery.swift in Sources */,
 				B2000000000000000000000C /* SensorCatalog.swift in Sources */,
 				B2000000000000000000000D /* BatteryGaugeSummary.swift in Sources */,
+				B2000000000000000000000E /* ChargeStatusReadPolicy.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

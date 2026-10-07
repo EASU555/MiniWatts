@@ -98,6 +98,7 @@ final class TelemetryPictureInPictureController: NSObject {
 
     var showPower: Bool {
         didSet {
+            guard showPower != oldValue else { return }
             UserDefaults.standard.set(showPower, forKey: Self.showPowerKey)
             renderLatest()
         }
@@ -105,6 +106,7 @@ final class TelemetryPictureInPictureController: NSObject {
 
     var showTemperatures: Bool {
         didSet {
+            guard showTemperatures != oldValue else { return }
             UserDefaults.standard.set(showTemperatures, forKey: Self.showTemperaturesKey)
             renderLatest()
         }
@@ -112,6 +114,7 @@ final class TelemetryPictureInPictureController: NSObject {
 
     var layout: TelemetryPictureInPictureLayout {
         didSet {
+            guard layout != oldValue else { return }
             UserDefaults.standard.set(layout.rawValue, forKey: Self.layoutKey)
             renderLatest()
         }
@@ -119,6 +122,7 @@ final class TelemetryPictureInPictureController: NSObject {
 
     var temperatureSelection: TelemetryTemperatureSelection {
         didSet {
+            guard temperatureSelection != oldValue else { return }
             UserDefaults.standard.set(
                 temperatureSelection.rawValue,
                 forKey: Self.temperatureSelectionKey
@@ -129,9 +133,9 @@ final class TelemetryPictureInPictureController: NSObject {
 
     var contentMode: TelemetryPictureInPictureContentMode {
         didSet {
+            guard contentMode != oldValue else { return }
             ProblemReportRecorder.shared.record("pip", "mode=\(contentMode.rawValue)")
             UserDefaults.standard.set(contentMode.rawValue, forKey: Self.contentModeKey)
-            guard contentMode != oldValue else { return }
             if keepsSensorSamplingActive {
                 pendingPipelineRebuild = true
                 stop()

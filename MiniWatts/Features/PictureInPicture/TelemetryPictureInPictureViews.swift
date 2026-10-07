@@ -16,8 +16,8 @@ struct TelemetryPictureInPicturePreview: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: TelemetryPictureInPictureSourceView, context: Context) {
+        // attach also lays out the active surface, including existing attachments.
         controller.attach(to: uiView)
-        controller.layoutSource(in: uiView.bounds, hostedBy: uiView)
     }
 
     static func dismantleUIView(
