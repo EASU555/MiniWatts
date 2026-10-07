@@ -134,8 +134,10 @@ nonisolated enum SessionCSVExporter {
     private static func flag(_ value: Bool) -> String { value ? "1" : "0" }
 
     private static func spreadsheetText(_ value: String) -> String {
-        let trimmed = value.drop { $0.isWhitespace || $0 == "\u{FEFF}" }
-        let formulaPrefix = trimmed.first.map { "=+-@".contains($0) } ?? false
+        let trimmed = value.unicodeScalars.drop { $0.properties.isWhitespace || $0.value == 0xFEFF }
+        let formulaPrefix = trimmed.first.map {
+            $0.value == 61 || $0.value == 43 || $0.value == 45 || $0.value == 64
+        } ?? false
         // Swift groups CRLF as one Character. Compare Unicode scalars so a
         // standalone CR/LF and a CRLF prefix all receive the same protection.
         let controlPrefix = value.unicodeScalars.first.map {
@@ -145,7 +147,11 @@ nonisolated enum SessionCSVExporter {
     }
 
     private static func escaped(_ value: String) -> String {
-        guard value.contains(",") || value.contains("\"") || value.contains("\r") || value.contains("\n") else {
+        // Delimiters are CSV code points, not extended graphemes. CRLF or a
+        // comma followed by a combining mark must still cause the field to quote.
+        guard value.unicodeScalars.contains(where: {
+            $0.value == 44 || $0.value == 34 || $0.value == 13 || $0.value == 10
+        }) else {
             return value
         }
         return "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""

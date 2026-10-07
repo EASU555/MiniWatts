@@ -72,6 +72,9 @@ jobs:
       - name: Run project quality checks
         run: ./scripts/quality-checks.sh
 
+      - name: Test local charging-curve CSV exports
+        run: bash ./scripts/test-session-csv.sh
+
       - name: Test Live Activity recovery under delayed system responses
         run: bash ./scripts/test-live-activity-recovery.sh
 
@@ -89,9 +92,6 @@ jobs:
 
       - name: Test optional history readings and measured summaries
         run: bash ./scripts/test-history-integrity.sh
-
-      - name: Test local charging-curve CSV exports
-        run: bash ./scripts/test-session-csv.sh
 
       - name: Test sensor evidence and PiP sampling policy
         run: bash ./scripts/test-sensor-evidence.sh

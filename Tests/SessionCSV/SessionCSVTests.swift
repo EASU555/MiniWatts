@@ -139,12 +139,12 @@ nonisolated struct PowerSnapshot {
 
     static func checkEscapingAndSafety() throws {
         var session = fixture()
-        for name in ["=SUM(1,2)", "+1+2", "-1+2", "@SUM(A1)", " \t=cmd", "\tadapter", "\radapter", "\nadapter", "\r\nadapter"] {
+        for name in ["=SUM(1,2)", "+1+2", "-1+2", "@SUM(A1)", " \t=cmd", "\tadapter", "\radapter", "\nadapter", "\r\nadapter", "=\u{0301}formula", "\u{FEFF}=formula"] {
             session.adapterName = name
             let info = metadata(parse(try SessionCSVExporter.csv(for: session)))
             precondition(info["adapter_name"] == "'" + name, "Unsafe adapter text was not escaped")
         }
-        for name in ["USB-C", "充电器, \"25W\"", "Acme\n第二行"] {
+        for name in ["USB-C", "充电器, \"25W\"", "Acme\n第二行", "Acme\r\n第二行", "Acme,\u{0301}Power"] {
             session.adapterName = name
             let info = metadata(parse(try SessionCSVExporter.csv(for: session)))
             precondition(info["adapter_name"] == name, "Ordinary raw adapter text changed")
