@@ -139,7 +139,7 @@ nonisolated struct PowerSnapshot {
 
     static func checkEscapingAndSafety() throws {
         var session = fixture()
-        for name in ["=SUM(1,2)", "+1+2", "-1+2", "@SUM(A1)", " \t=cmd", "\tadapter", "\radapter", "\nadapter"] {
+        for name in ["=SUM(1,2)", "+1+2", "-1+2", "@SUM(A1)", " \t=cmd", "\tadapter", "\radapter", "\nadapter", "\r\nadapter"] {
             session.adapterName = name
             let info = metadata(parse(try SessionCSVExporter.csv(for: session)))
             precondition(info["adapter_name"] == "'" + name, "Unsafe adapter text was not escaped")

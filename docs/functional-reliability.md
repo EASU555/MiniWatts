@@ -1,4 +1,4 @@
-# Functional reliability iteration (B88)
+# Functional reliability iteration
 
 ## Scope and UI decision brief
 

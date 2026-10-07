@@ -136,7 +136,11 @@ nonisolated enum SessionCSVExporter {
     private static func spreadsheetText(_ value: String) -> String {
         let trimmed = value.drop { $0.isWhitespace || $0 == "\u{FEFF}" }
         let formulaPrefix = trimmed.first.map { "=+-@".contains($0) } ?? false
-        let controlPrefix = value.first.map { "\t\r\n".contains($0) } ?? false
+        // Swift groups CRLF as one Character. Compare Unicode scalars so a
+        // standalone CR/LF and a CRLF prefix all receive the same protection.
+        let controlPrefix = value.unicodeScalars.first.map {
+            $0.value == 9 || $0.value == 13 || $0.value == 10
+        } ?? false
         return formulaPrefix || controlPrefix ? "'" + value : value
     }
 
