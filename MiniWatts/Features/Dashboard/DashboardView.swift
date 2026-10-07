@@ -19,13 +19,13 @@ struct DashboardView: View {
             heroPanel
             if monitor.thermal.state.isThrottling { throttleBanner }
             batteryPanel
-            batteryDiagnosticsPanel
+            LiveActivityControlPanel()
+            FloatingMonitorControlPanel()
             breakdownPanel
             livePanel
             sessionPanel
             if !monitor.sensorsAvailable { sensorNote }
-            LiveActivityControlPanel()
-            FloatingMonitorControlPanel()
+            batteryDiagnosticsPanel
         }
         .sheet(isPresented: $showingSettings) { SettingsView() }
         .sheet(isPresented: $showingProblemReport) { ProblemReportView() }
@@ -45,9 +45,10 @@ struct DashboardView: View {
         HStack {
             Button { showingProblemReport = true } label: {
                 Label("Problem report", systemImage: "exclamationmark.bubble")
-                    .labelStyle(.titleAndIcon)
+                    .labelStyle(.iconOnly)
             }
-            Button { showingSettings = true } label: { Image(systemName: "gearshape") }
+            Button { showingSettings = true } label: { Label("Settings", systemImage: "gearshape") }
+                .labelStyle(.iconOnly)
                 .tint(.mwAccent)
         }
     }
@@ -81,6 +82,7 @@ struct DashboardView: View {
                          systemImage: monitor.thermal.state.symbol,
                          tint: thermalTint)
                 }
+                SampleFreshnessView(sampledAt: snapshot.date, hasSample: !monitor.live.isEmpty)
             }
         }
     }
@@ -177,7 +179,8 @@ struct DashboardView: View {
     private var batteryDiagnosticsPanel: some View {
         Panel("Battery diagnostics", systemImage: "stethoscope",
               trailing: snapshot.percent.map { Text(verbatim: "\($0)%") }) {
-            VStack(alignment: .leading, spacing: 8) {
+            DisclosureGroup("Battery source details") {
+              VStack(alignment: .leading, spacing: 8) {
                 DetailRow(label: "Selected source", value: monitor.batteryLevelSource)
                 DetailRow(label: "Last sampled",
                           value: monitor.batteryLevelSampledAt.map(Formatting.timestamp))
@@ -192,7 +195,10 @@ struct DashboardView: View {
                         .font(.subheadline.weight(.semibold))
                 }
                 .tint(.mwAccent)
+              }
+              .padding(.top, 8)
             }
+            .font(.subheadline)
         }
     }
 

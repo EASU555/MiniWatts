@@ -11,7 +11,7 @@ struct SettingsView: View {
             ZStack {
                 Backdrop(glow: .mwAccent, glowIntensity: 0.6)
                 ScrollView {
-                    VStack(spacing: 14) {
+                    LazyVStack(spacing: 14) {
                         diagnosticsPanel
                         recordingPanel(keepAwake: $monitor.keepScreenAwakeWhileCharging)
                         capacityPanel(capacity: $monitor.configuredBatteryWattHours)
@@ -36,10 +36,10 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 8) {
-                        Button("Done") { dismiss() }.tint(.mwAccent)
-                        AppVersionBadge()
-                    }
+                    AppVersionBadge()
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }.tint(.mwAccent)
                 }
             }
         }
@@ -50,17 +50,20 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Toggle(isOn: keepAwake) {
                     Text("Keep the screen on while charging")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.subheadline.weight(.medium))
                 }
                 .tint(.mwAccent)
                 Text("With this on, the screen stays awake while charging. The floating monitor can continue sensor sampling after MiniWatts enters the background; a Live Activity alone cannot.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("A charge session survives the app being backgrounded: it ends when you unplug, not when you switch away. Any stretch the app missed is left out of the totals rather than estimated, and the session says how much of itself was actually measured.")
+                DisclosureGroup("How charge recording works") {
+                  Text("A charge session survives the app being backgrounded: it ends when you unplug, not when you switch away. Any stretch the app missed is left out of the totals rather than estimated, and the session says how much of itself was actually measured.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
+                }
+                .font(.caption)
             }
         }
     }
@@ -73,14 +76,22 @@ struct SettingsView: View {
                         .mwReadout(size: 26)
                         .foregroundStyle(Color.mwAccent)
                     Spacer()
-                    Stepper("", value: capacity, in: 5...40, step: 0.1)
+                    Stepper("Battery energy", value: capacity, in: 5...40, step: 0.1)
                         .labelsHidden()
+                        .accessibilityValue(Text("\(capacity.wrappedValue.formatted(.number.precision(.fractionLength(1)))) Wh"))
                 }
+                Text("Used for discharge estimates, not battery percentage.")
+                    .font(.subheadline.weight(.medium))
+                    .fixedSize(horizontal: false, vertical: true)
                 Text("Used only for the %-rate estimate, which is the sole way to see discharge power: no discharge-current sensor is exposed to a sandboxed app. Look up your model's rating — an iPhone 17 Pro Max is about 19.7 Wh — and enter it here.")
                     .font(.caption)
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
                 if let designCapacity = monitor.snapshot.designCapacity, designCapacity > 0 {
+                    Text("This is your saved fallback. The current estimate uses the capacity reported by the device.")
+                        .font(.caption)
+                        .foregroundStyle(Color.mwMuted)
+                        .fixedSize(horizontal: false, vertical: true)
                     EmptyNote(text: "IOKit reported a design capacity of \(designCapacity) mAh on this system, so that value is being used instead.",
                               systemImage: "checkmark.circle")
                 }

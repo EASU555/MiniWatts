@@ -56,7 +56,7 @@ by several entries.
   `headline` lives here rather than on the snapshot: its last fallback is the %-rate
   estimate, which is derived across several snapshots and so is not a snapshot's to give.
 - `Core/LiveActivity/` — the shared ActivityKit attributes and the app-side controller.
-  The personal build starts it only from the Settings toggle, attempts one-second
+  The personal build starts it only from the dashboard toggle, attempts one-second
   updates and gives each update a 30-second `staleDate`. It re-adopts ActivityKit's
   system-owned activity if the local reference is lost and replaces an activity that
   remains stuck in `.pending`. `MiniWattsLiveActivity/` is the WidgetKit extension
@@ -76,7 +76,7 @@ by several entries.
   callback cannot leave Settings spinning until process restart. Observe AVKit's
   active state as well as its delegate callbacks. When PiP disappears unexpectedly,
   restore the hidden 0.1 pt carrier to visible size and recreate the VideoCall
-  source before the next start. Settings has a reset-and-reopen action for a
+  source before the next start. The dashboard has a reset-and-reopen action for a
   transition that remains wedged despite automatic reconciliation.
 - `Design/` — palette (`Color.mw(light:dark:)`, no asset catalog entries), `Panel`/
   `Metric`/`Pill`/`BarRow`, `PowerRing`, Swift Charts wrappers, `PhoneHeatMap`.
@@ -305,7 +305,24 @@ proxy, **not** proof of rendered FPS or a promise of 120 Hz. Verify with a Relea
 Instruments Core Animation + Time Profiler run on iOS 27 before claiming that goal.
 The `Backdrop`'s full-screen `plusLighter` glow remains a design choice.
 
-## Conventions
+## Monitoring controls UX
+
+The dashboard retains its dial and battery measurements first, followed by the
+Live Activity and floating-monitor controls before charts and diagnostics. Runtime
+states and primary actions stay visible; configuration, the SwiftUI-only preview,
+long help and raw recovery details disclose on demand. Do not remount the real
+AVKit carrier when a disclosure opens. While coordinated ActivityKit recovery
+owns AVKit, mode/start/reset controls must explain that pause instead of offering
+a no-op. The main PiP start attempt can be cancelled without waiting for its watchdog.
+
+`SampleFreshness` classifies sample receipt only, not sensor accuracy: no first
+sample, current (up to five seconds), delayed, or old (thirty seconds). Its periodic
+clock is isolated to a small status row; it must not trigger chart or video rendering.
+History totals are absent until a valid load finishes, and every history deletion
+requires confirmation. Report progress distinguishes mark/preview/export operations.
+See `docs/ux-monitoring.md` for the decision brief and device QA constraints.
+
+## UI conventions
 
 - English source copy. Sensor names stay raw (`Charger VQ0u`), with a human label
   above them when `SensorCatalog` recognises one.

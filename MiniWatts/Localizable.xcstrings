@@ -1,6 +1,546 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Enable Live Activity": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开启实时活动"
+          }
+        }
+      }
+    },
+    "Open iOS Settings": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开系统设置"
+          }
+        }
+      }
+    },
+    "Retry recovery": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重试恢复"
+          }
+        }
+      }
+    },
+    "If the Dynamic Island is missing, request a new activity. An active floating monitor will briefly stop and then resume.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "灵动岛未显示时，可重新请求实时活动。运行中的悬浮窗会短暂停止，然后恢复。"
+          }
+        }
+      }
+    },
+    "Display options": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示内容"
+          }
+        }
+      }
+    },
+    "Help and recovery details": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用说明与恢复详情"
+          }
+        }
+      }
+    },
+    "Advanced priority setting": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高级优先级设置"
+          }
+        }
+      }
+    },
+    "Background refresh needs the floating monitor. A Live Activity alone cannot keep sensor sampling active.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "后台刷新需要悬浮窗配合；仅开启实时活动无法持续采样。"
+          }
+        }
+      }
+    },
+    "Live Activity is off": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实时活动未开启"
+          }
+        }
+      }
+    },
+    "Waiting for iOS": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等待系统响应"
+          }
+        }
+      }
+    },
+    "Recovering Live Activity": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在恢复实时活动"
+          }
+        }
+      }
+    },
+    "Keep MiniWatts open. An active floating monitor will be restored automatically after recovery.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请保持 MiniWatts 打开。恢复完成后，会自动恢复原先运行中的悬浮窗。"
+          }
+        }
+      }
+    },
+    "Live Activity is active": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实时活动已启动"
+          }
+        }
+      }
+    },
+    "iOS controls island visibility. If it is missing, restart here even if the Lock Screen card is still visible.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "灵动岛是否显示由系统决定。即使锁屏卡片仍在，灵动岛消失时也可在这里重启。"
+          }
+        }
+      }
+    },
+    "Live Activity needs attention": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实时活动需要处理"
+          }
+        }
+      }
+    },
+    "Keep MiniWatts open and retry. If recovery fails again, export a problem report below.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请保持 MiniWatts 打开并重试。如仍无法恢复，请在下方导出错误报告。"
+          }
+        }
+      }
+    },
+    "Content and preview": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内容与预览"
+          }
+        }
+      }
+    },
+    "Leave MiniWatts after the floating window opens. Close it to stop background sampling.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "悬浮窗打开后再离开 MiniWatts；关闭悬浮窗会停止后台采样。"
+          }
+        }
+      }
+    },
+    "Hidden mode keeps the floating session running. Use Restore or Stop here when you need it.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隐藏模式仍保留悬浮窗会话。需要时，可在这里恢复显示或停止。"
+          }
+        }
+      }
+    },
+    "Cancel start": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消启动"
+          }
+        }
+      }
+    },
+    "Floating monitor temporarily paused": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "悬浮窗暂时暂停"
+          }
+        }
+      }
+    },
+    "Live Activity recovery is in progress. The previous floating-window state will be restored automatically.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在恢复实时活动，随后会自动恢复悬浮窗原先的状态。"
+          }
+        }
+      }
+    },
+    "Opening floating monitor": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在打开悬浮窗"
+          }
+        }
+      }
+    },
+    "Wait for the window to appear before leaving MiniWatts. You can cancel this attempt below.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请等悬浮窗出现后再离开 MiniWatts，也可点击下方取消启动。"
+          }
+        }
+      }
+    },
+    "Floating monitor is hidden": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "悬浮窗已隐藏"
+          }
+        }
+      }
+    },
+    "Floating monitor is running": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "悬浮窗运行中"
+          }
+        }
+      }
+    },
+    "Floating monitor is off": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "悬浮窗未开启"
+          }
+        }
+      }
+    },
+    "Floating monitor needs attention": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "悬浮窗需要处理"
+          }
+        }
+      }
+    },
+    "Stop the floating monitor before changing its mode.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先停止悬浮窗，再切换显示模式。"
+          }
+        }
+      }
+    },
+    "Battery source details": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电量来源详情"
+          }
+        }
+      }
+    },
+    "Waiting for first sample": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等待首次采样"
+          }
+        }
+      }
+    },
+    "Recent sample received": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已收到最新采样"
+          }
+        }
+      }
+    },
+    "Readings are delayed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读数更新延迟"
+          }
+        }
+      }
+    },
+    "Readings have not refreshed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读数已长时间未刷新"
+          }
+        }
+      }
+    },
+    "Last sample at %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最近采样：%@"
+          }
+        }
+      }
+    },
+    "How charge recording works": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "充电记录如何工作"
+          }
+        }
+      }
+    },
+    "%@ Wh": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ Wh"
+          }
+        }
+      }
+    },
+    "Used for discharge estimates, not battery percentage.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅用于估算放电功率，不参与电量百分比计算。"
+          }
+        }
+      }
+    },
+    "This is your saved fallback. The current estimate uses the capacity reported by the device.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这是保存的备用容量；当前估算使用设备报告的容量。"
+          }
+        }
+      }
+    },
+    "A session starts when you plug in and is saved when you unplug. Keep MiniWatts open or use the floating monitor to keep measuring; any missed time is excluded from the totals.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "插上充电器即开始记录，拔下后保存。保持 MiniWatts 打开，或使用悬浮窗继续测量；未测量的时段不计入总量。"
+          }
+        }
+      }
+    },
+    "Open charge details": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开充电详情"
+          }
+        }
+      }
+    },
+    "This deletes all saved sessions and resets any charge recording in progress. This cannot be undone.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这会删除所有已保存的记录，并重置正在进行的充电记录。此操作无法撤销。"
+          }
+        }
+      }
+    },
+    "Delete all saved sessions": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除所有已保存的记录"
+          }
+        }
+      }
+    },
+    "Input to cell: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "入电芯占比：%@"
+          }
+        }
+      }
+    },
+    "Delete session": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除记录"
+          }
+        }
+      }
+    },
+    "Delete this session?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除此记录？"
+          }
+        }
+      }
+    },
+    "This removes this saved charge from history. This cannot be undone.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这会从历史记录中删除此次充电记录。此操作无法撤销。"
+          }
+        }
+      }
+    },
+    "Marking problem time": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在标记问题发生时间"
+          }
+        }
+      }
+    },
+    "Preparing preview": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在准备预览"
+          }
+        }
+      }
+    },
+    "Preparing report for export": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在准备导出报告"
+          }
+        }
+      }
+    },
+    "%lld of 2,000 characters": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld / 2,000 字"
+          }
+        }
+      }
+    },
+    "Report ready to share.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "报告已准备好，可选择分享方式。"
+          }
+        }
+      }
+    },
+    "Preview ready below.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预览已准备好，见下方。"
+          }
+        }
+      }
+    },
+    "Could not mark problem time": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法标记问题发生时间"
+          }
+        }
+      }
+    },
     "Download speed" : {
       "localizations" : {
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下载速度" } }

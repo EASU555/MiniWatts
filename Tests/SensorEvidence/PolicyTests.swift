@@ -7,6 +7,24 @@ struct PolicyTests {
     }
 
     static func main() {
+        check(SampleFreshness.classify(hasSample: false, age: 0) == .waiting,
+              "A new snapshot must not claim a sample arrived")
+        check(SampleFreshness.classify(hasSample: false, age: 50) == .waiting,
+              "No first sample must stay distinct from old data")
+        check(SampleFreshness.classify(hasSample: true, age: 5) == .current,
+              "Normal short scheduling gaps must not claim stale data")
+        check(SampleFreshness.classify(hasSample: true, age: 5.01) == .delayed,
+              "A stalled tick must be visible before the stale deadline")
+        check(SampleFreshness.classify(hasSample: true, age: 29.99) == .delayed,
+              "Delay should remain distinct from a long pause")
+        check(SampleFreshness.classify(hasSample: true, age: 30) == .old,
+              "Old data must not be presented as current")
+        check(SampleFreshness.classify(hasSample: true, age: .nan) == .old,
+              "Invalid timestamps must not claim freshness")
+        check(SampleFreshness.classify(hasSample: true, age: -1) == .current,
+              "Small wall-clock corrections must not create false delays")
+        print("PASS: freshness distinguishes waiting, current, delayed and old samples")
+
         let gauges = BatteryGaugeSummary(values: [38.7, 38.7, 38.7, 45.9])!
         check(gauges.count == 4, "Repeated gas-gauge sensors were collapsed")
         check(abs(gauges.minimum - 38.7) < 0.01, "Wrong minimum")

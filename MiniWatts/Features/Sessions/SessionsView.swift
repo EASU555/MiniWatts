@@ -59,20 +59,23 @@ struct SessionsView: View {
             if let session = monitor.currentSession {
                 currentPanel(session)
             }
-            if monitor.isLoaded && monitor.sessions.isEmpty {
-                Panel("No finished charges yet", systemImage: "clock.arrow.circlepath") {
-                    EmptyNote(text: "A session starts when you plug in and is saved when you unplug. Energy is integrated from the live sensors, so keep MiniWatts in the foreground for the totals to cover the whole charge.",
-                              systemImage: "bolt.badge.clock")
-                }
-            } else {
-                summaryPanel
-                ForEach(monitor.sessions) { session in
-                    NavigationLink {
-                        SessionDetailView(session: session)
-                    } label: {
-                        SessionRow(session: session)
+            if monitor.isLoaded {
+                if monitor.sessions.isEmpty {
+                    Panel("No finished charges yet", systemImage: "clock.arrow.circlepath") {
+                        EmptyNote(text: "A session starts when you plug in and is saved when you unplug. Keep MiniWatts open or use the floating monitor to keep measuring; any missed time is excluded from the totals.",
+                                  systemImage: "bolt.badge.clock")
                     }
-                    .buttonStyle(.plain)
+                } else {
+                    summaryPanel
+                    ForEach(monitor.sessions) { session in
+                        NavigationLink {
+                            SessionDetailView(session: session)
+                        } label: {
+                            SessionRow(session: session)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Open charge details")
+                    }
                 }
             }
         }
@@ -81,11 +84,16 @@ struct SessionsView: View {
                             titleVisibility: .visible) {
             Button("Delete all", role: .destructive) { monitor.deleteAllSessions() }
             Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This deletes all saved sessions and resets any charge recording in progress. This cannot be undone.")
         }
     }
 
     private var toolbar: some View {
-        Button { confirmingDelete = true } label: { Image(systemName: "trash") }
+        Button { confirmingDelete = true } label: {
+            Label("Delete all saved sessions", systemImage: "trash")
+                .labelStyle(.iconOnly)
+        }
             .tint(.mwDanger)
             .disabled(monitor.sessions.isEmpty)
     }
@@ -147,6 +155,12 @@ struct SessionsView: View {
 struct SessionRow: View {
     let session: ChargeSession
 
+    private var energySource: LocalizedStringResource {
+        if session.totals.measuredInputWattHours != nil { return "From charger" }
+        if session.totals.measuredBatteryWattHours != nil { return "Into battery" }
+        return "Energy"
+    }
+
     var body: some View {
         Panel {
             VStack(spacing: 10) {
@@ -161,6 +175,9 @@ struct SessionRow: View {
                     }
                     Spacer(minLength: 8)
                     VStack(alignment: .trailing, spacing: 2) {
+                        Text(energySource)
+                            .font(.caption2)
+                            .foregroundStyle(Color.mwMuted)
                         Text(verbatim: (session.totals.measuredInputWattHours
                                         ?? session.totals.measuredBatteryWattHours)
                             .map { String(format: "%.2f Wh", $0) } ?? "—")
@@ -172,21 +189,33 @@ struct SessionRow: View {
                             .foregroundStyle(Color.mwMuted)
                     }
                 }
-                HStack(spacing: 10) {
-                    Sparkline(values: session.samples.map(\.inputWatts))
-                        .frame(height: 26)
-                    if let share = session.totals.inputToCellPercent {
-                        Pill(text: Text(verbatim: String(format: "%.0f%%", share)), systemImage: "arrow.triangle.swap", tint: .mwLoss)
+                Sparkline(values: session.samples.map(\.inputWatts))
+                    .frame(height: 26)
+                    .accessibilityHidden(true)
+                if session.totals.inputToCellPercent != nil || session.throttledFraction > 0.05 || session.isWireless {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) { statusPills }
+                            .fixedSize(horizontal: true, vertical: false)
+                        VStack(alignment: .leading, spacing: 6) { statusPills }
                     }
-                    if session.throttledFraction > 0.05 {
-                        Pill(text: Text("\(String(format: "%.0f%%", session.throttledFraction * 100)) hot"),
-                             systemImage: "thermometer.high", tint: .mwDanger)
-                    }
-                    if session.isWireless {
-                        Pill(text: Text("MagSafe"), systemImage: "wave.3.right", tint: .mwWireless)
-                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder private var statusPills: some View {
+        if let share = session.totals.inputToCellPercent {
+            Pill(text: Text("Input to cell: \(String(format: "%.0f%%", share))"),
+                 systemImage: "arrow.triangle.swap", tint: .mwLoss)
+        }
+        if session.throttledFraction > 0.05 {
+            Pill(text: Text("\(String(format: "%.0f%%", session.throttledFraction * 100)) hot"),
+                 systemImage: "thermometer.high", tint: .mwDanger)
+        }
+        if session.isWireless {
+            Pill(text: Text("MagSafe"), systemImage: "wave.3.right", tint: .mwWireless)
         }
     }
 }
@@ -195,6 +224,7 @@ struct SessionDetailView: View {
     let session: ChargeSession
     @Environment(PowerMonitor.self) private var monitor
     @Environment(\.dismiss) private var dismiss
+    @State private var confirmingDelete = false
 
     var body: some View {
         ZStack {
@@ -221,13 +251,24 @@ struct SessionDetailView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(role: .destructive) {
-                    monitor.deleteSession(session)
-                    dismiss()
+                    confirmingDelete = true
                 } label: {
-                    Image(systemName: "trash")
+                    Label("Delete session", systemImage: "trash")
+                        .labelStyle(.iconOnly)
                 }
                 .tint(.mwDanger)
             }
+        }
+        .confirmationDialog("Delete this session?",
+                            isPresented: $confirmingDelete,
+                            titleVisibility: .visible) {
+            Button("Delete session", role: .destructive) {
+                monitor.deleteSession(session)
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes this saved charge from history. This cannot be undone.")
         }
     }
 

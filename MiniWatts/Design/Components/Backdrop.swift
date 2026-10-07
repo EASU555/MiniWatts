@@ -4,6 +4,7 @@ import SwiftUI
 /// single soft glow behind the content. Drawn once, cheap, and it is what makes
 /// the screens read as instrument panels instead of settings pages.
 struct Backdrop: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var glow: Color = .mwAccent
     var glowIntensity: Double = 1
 
@@ -42,7 +43,7 @@ struct Backdrop: View {
                            startRadius: 0,
                            endRadius: 420)
                 .blendMode(.plusLighter)
-                .animation(.easeInOut(duration: 0.8), value: glow)
+                .animation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 1), value: glow)
         }
         .ignoresSafeArea()
     }

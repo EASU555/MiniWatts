@@ -198,7 +198,8 @@ final class TelemetryPictureInPictureController: NSObject {
         var shouldResume: Bool
         let hidden: Bool
     }
-    @ObservationIgnored private var activityRecoveryResume: ActivityRecoveryResume?
+    private var activityRecoveryResume: ActivityRecoveryResume?
+    private var isRestoringPresentation = false
     @ObservationIgnored private var hideAfterRecoveryStart = false
     @ObservationIgnored private var resumeAfterActivityRecoveryPending = false
     @ObservationIgnored private var backgroundPulseDisplayLink: CADisplayLink?
@@ -248,6 +249,9 @@ final class TelemetryPictureInPictureController: NSObject {
     var hasSelectedContent: Bool {
         contentMode == .hiddenCarrier || showPower || showTemperatures
     }
+    /// Presentation controls must not offer a start/mode change while the
+    /// coordinated ActivityKit repair owns AVKit's release and restore sequence.
+    var isRepairingLiveActivity: Bool { activityRecoveryResume != nil || isRestoringPresentation }
     var keepsSensorSamplingActive: Bool {
         BackgroundSamplingPolicy.keepsSampling(pipActive: isActive,
                                                pipStarting: isStarting,
@@ -363,6 +367,7 @@ final class TelemetryPictureInPictureController: NSObject {
 
     func stop() {
         recordState("action: stop requested")
+        isRestoringPresentation = false
         if activityRecoveryResume != nil {
             activityRecoveryResume?.shouldResume = false
         }
@@ -450,8 +455,9 @@ final class TelemetryPictureInPictureController: NSObject {
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(350))
             guard let self,
-                  self.deferredStartGeneration == generation,
-                  !self.keepsSensorSamplingActive else { return }
+                  self.deferredStartGeneration == generation else { return }
+            self.isRestoringPresentation = false
+            guard !self.keepsSensorSamplingActive else { return }
             self.start()
         }
     }
@@ -536,6 +542,7 @@ final class TelemetryPictureInPictureController: NSObject {
             startBackgroundPulseDriver()
         } else {
             if isStopping { completeStopAttempt() }
+            isRestoringPresentation = true
             scheduleDeferredStart()
         }
     }
