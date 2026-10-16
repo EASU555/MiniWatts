@@ -11,8 +11,38 @@ nonisolated enum LiveActivityMetric: String, Codable, CaseIterable, Identifiable
     case cpuUsage
     case downloadSpeed
     case uploadSpeed
+    case batteryChargingPower
+    case chargeGainPercent
+    case thermalPressure
+    case chargerTemperature
+    case wirelessCoilTemperature
 
     var id: Self { self }
+
+    var title: LocalizedStringResource {
+        switch self {
+        case .chargingPower: "Charging power"
+        case .socTemperature: "SoC temperature"
+        case .batteryTemperature: "Battery temperature"
+        case .hottestTemperature: "Hottest component"
+        case .cpuUsage: "CPU usage"
+        case .downloadSpeed: "Download speed"
+        case .uploadSpeed: "Upload speed"
+        case .batteryChargingPower: "Power into battery"
+        case .chargeGainPercent: "Charge gained (%)"
+        case .thermalPressure: "System thermal pressure"
+        case .chargerTemperature: "Charge IC temperature"
+        case .wirelessCoilTemperature: "Wireless coil temperature"
+        }
+    }
+
+    var isTemperature: Bool {
+        switch self {
+        case .socTemperature, .batteryTemperature, .hottestTemperature,
+             .chargerTemperature, .wirelessCoilTemperature: true
+        default: false
+        }
+    }
 }
 
 /// The minimal island is used when other activities compete for space. Keep its
@@ -26,6 +56,11 @@ nonisolated enum LiveActivityMinimalSelection: String, CaseIterable, Identifiabl
     case cpuUsage
     case downloadSpeed
     case uploadSpeed
+    case batteryChargingPower
+    case chargeGainPercent
+    case thermalPressure
+    case chargerTemperature
+    case wirelessCoilTemperature
 
     var id: Self { self }
 
@@ -39,7 +74,16 @@ nonisolated enum LiveActivityMinimalSelection: String, CaseIterable, Identifiabl
         case .cpuUsage: .cpuUsage
         case .downloadSpeed: .downloadSpeed
         case .uploadSpeed: .uploadSpeed
+        case .batteryChargingPower: .batteryChargingPower
+        case .chargeGainPercent: .chargeGainPercent
+        case .thermalPressure: .thermalPressure
+        case .chargerTemperature: .chargerTemperature
+        case .wirelessCoilTemperature: .wirelessCoilTemperature
         }
+    }
+
+    var title: LocalizedStringResource {
+        self == .followRightSide ? "Follow right side" : resolvedMetric(primary: .chargingPower).title
     }
 }
 
@@ -61,6 +105,11 @@ nonisolated enum LiveActivityLeadingItem: String, Codable, CaseIterable, Identif
     case cpuUsage
     case downloadSpeed
     case uploadSpeed
+    case batteryChargingPower
+    case chargeGainPercent
+    case thermalPressure
+    case chargerTemperature
+    case wirelessCoilTemperature
 
     var id: Self { self }
 
@@ -75,6 +124,11 @@ nonisolated enum LiveActivityLeadingItem: String, Codable, CaseIterable, Identif
         case .cpuUsage: .cpuUsage
         case .downloadSpeed: .downloadSpeed
         case .uploadSpeed: .uploadSpeed
+        case .batteryChargingPower: .batteryChargingPower
+        case .chargeGainPercent: .chargeGainPercent
+        case .thermalPressure: .thermalPressure
+        case .chargerTemperature: .chargerTemperature
+        case .wirelessCoilTemperature: .wirelessCoilTemperature
         }
     }
 
@@ -88,8 +142,64 @@ nonisolated enum LiveActivityLeadingItem: String, Codable, CaseIterable, Identif
         case .uploadIcon: .uploadSpeed
         case .statusIcon, .chargingPower, .socTemperature,
              .batteryTemperature, .hottestTemperature, .cpuUsage,
-             .downloadSpeed, .uploadSpeed: nil
+             .downloadSpeed, .uploadSpeed, .batteryChargingPower, .chargeGainPercent,
+             .thermalPressure, .chargerTemperature, .wirelessCoilTemperature: nil
         }
+    }
+
+    var title: LocalizedStringResource {
+        switch self {
+        case .statusIcon: "Status icon"
+        case .socIcon: "SoC icon"
+        case .batteryTemperatureIcon: "Battery temperature icon"
+        case .hottestTemperatureIcon: "Hottest temperature icon"
+        case .cpuIcon: "CPU icon"
+        case .downloadIcon: "Download icon"
+        case .uploadIcon: "Upload icon"
+        default: metric?.title ?? "Status icon"
+        }
+    }
+}
+
+/// System pressure, not a thermometer or a measured CPU clock/throttling flag.
+nonisolated enum IslandThermalPressure: Int, Codable, Hashable, Sendable {
+    case nominal, fair, serious, critical
+
+    var title: LocalizedStringResource {
+        switch self {
+        case .nominal: "Nominal"
+        case .fair: "Fair"
+        case .serious: "Serious"
+        case .critical: "Critical"
+        }
+    }
+}
+
+/// Optional additions keep previously persisted ActivityKit payloads decodable.
+/// Slopes are Celsius per minute over continuous, source-stable observations.
+/// No history arrays, raw dictionaries or inferred adapter watts cross this boundary.
+nonisolated struct LiveActivityTelemetry: Codable, Hashable, Sendable {
+    var sampledAt: Date?
+    var batteryChargingWatts: Double?
+    var partialInputWatts: Double?
+    var chargerTemperature: Double?
+    var wirelessCoilTemperature: Double?
+    var thermalPressure: IslandThermalPressure?
+    var chargeGainPercent: Int?
+    var chargeStartPercent: Int?
+    var chargeStartedAt: Date?
+    var temperatureRates: [String: Double]?
+    var showsTemperatureTrend: Bool?
+
+    func trendRate(for metric: LiveActivityMetric) -> Double? {
+        guard showsTemperatureTrend == true, metric.isTemperature,
+              let rate = temperatureRates?[metric.rawValue], rate.isFinite else { return nil }
+        return rate
+    }
+
+    func trendSymbol(for metric: LiveActivityMetric) -> String {
+        guard let rate = trendRate(for: metric) else { return "" }
+        return rate > 0.15 ? "↑" : rate < -0.15 ? "↓" : "→"
     }
 }
 
@@ -127,6 +237,7 @@ nonisolated struct MiniWattsActivityAttributes: ActivityAttributes {
         /// saved choice, their minimal view follows the compact right-side metric.
         let minimalMetric: LiveActivityMetric?
         let isWireless: Bool
+        var telemetry: LiveActivityTelemetry? = nil
     }
 
     let startedAt: Date

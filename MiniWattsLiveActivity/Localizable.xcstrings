@@ -1,6 +1,236 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Power into battery": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电池侧充入功率"
+          }
+        }
+      }
+    },
+    "Charge gained (%)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本次充入电量（%）"
+          }
+        }
+      }
+    },
+    "Charge gained": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本次充入"
+          }
+        }
+      }
+    },
+    "System thermal pressure": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统发热压力"
+          }
+        }
+      }
+    },
+    "Charge IC temperature": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "充电芯片温度"
+          }
+        }
+      }
+    },
+    "Wireless coil temperature": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无线充电线圈温度"
+          }
+        }
+      }
+    },
+    "Thermal": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发热"
+          }
+        }
+      }
+    },
+    "Charge IC": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "充电芯片"
+          }
+        }
+      }
+    },
+    "Coil": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "线圈"
+          }
+        }
+      }
+    },
+    "Nominal": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正常"
+          }
+        }
+      }
+    },
+    "Fair": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "轻度发热"
+          }
+        }
+      }
+    },
+    "Serious": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "严重发热"
+          }
+        }
+      }
+    },
+    "Critical": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "严重过热"
+          }
+        }
+      }
+    },
+    "Input reading incomplete": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "输入功率读数不完整"
+          }
+        }
+      }
+    },
+    "Power unavailable": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "功率暂无读数"
+          }
+        }
+      }
+    },
+    "Sample received": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "采样于"
+          }
+        }
+      }
+    },
+    "Temperature trend": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度变化趋势"
+          }
+        }
+      }
+    },
+    "Collecting trend": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "趋势采集中"
+          }
+        }
+      }
+    },
+    "Show temperature trends": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示温度变化趋势"
+          }
+        }
+      }
+    },
+    "Cell-side power, not adapter input": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电芯侧功率，并非充电器输入功率"
+          }
+        }
+      }
+    },
+    "Trends need at least one minute of continuous readings from the same source. Arrows show warming, cooling or stable; expand the island for °C/min. This is a sensor trend, not a temperature accuracy check.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同一来源连续采样至少一分钟后显示趋势。箭头表示升温、降温或平稳，展开灵动岛可查看每分钟的温度变化。趋势反映传感器读数变化，不代表温度已经校准。"
+          }
+        }
+      }
+    },
+    "Charge gained is the net increase in system battery percentage since this observed charge began, not Wh converted to percent. For example, 53% to 61% shows +8%. Consumption offsets the increase; below the starting level shows +0%. Unknown readings show a dash. Unplugging ends the session.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本次充入电量直接读取系统电量，显示本次观测到的充电期间电量净增加了多少，不用 Wh 换算。例如从 53% 到 61% 显示 +8%，即增加了 8 个百分点。期间耗电会抵消增量；低于起始电量时显示 +0%。缺少读数显示横线，拔线后结束本次记录。"
+          }
+        }
+      }
+    },
+    "Power into battery is separate from adapter input and is unavailable when unplugged or the charging rail cannot be read. Thermal pressure is iOS's assessment, not a temperature or a measured CPU clock. Extra component options appear only when a sensor is available; saved choices stay selectable if a reading temporarily disappears.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电池侧充入功率与充电器输入功率分开显示，拔线或无法读取充电电路时显示横线。系统发热压力是 iOS 的判断，不是温度，也不是实测 CPU 频率。检测到相应传感器后才显示新增部件选项，已保存的选择在暂时缺少读数时仍会保留。"
+          }
+        }
+      }
+    },
     "Outside the supported Celsius range.": {
       "localizations": {
         "zh-Hans": {

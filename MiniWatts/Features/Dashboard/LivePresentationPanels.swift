@@ -107,45 +107,38 @@ struct LiveActivityControlPanel: View {
         return VStack(alignment: .leading, spacing: 8) {
             PresentationPickerRow("Left side") {
                 Picker("Left side", selection: $monitor.liveActivityLeadingItem) {
-                    Text("Status icon").tag(LiveActivityLeadingItem.statusIcon)
-                    Text("SoC icon").tag(LiveActivityLeadingItem.socIcon)
-                    Text("Battery temperature icon").tag(LiveActivityLeadingItem.batteryTemperatureIcon)
-                    Text("Hottest temperature icon").tag(LiveActivityLeadingItem.hottestTemperatureIcon)
-                    Text("CPU icon").tag(LiveActivityLeadingItem.cpuIcon)
-                    Text("Download icon").tag(LiveActivityLeadingItem.downloadIcon)
-                    Text("Upload icon").tag(LiveActivityLeadingItem.uploadIcon)
-                    Text("Charging power").tag(LiveActivityLeadingItem.chargingPower)
-                    Text("SoC temperature").tag(LiveActivityLeadingItem.socTemperature)
-                    Text("Battery temperature").tag(LiveActivityLeadingItem.batteryTemperature)
-                    Text("Hottest component").tag(LiveActivityLeadingItem.hottestTemperature)
-                    Text("CPU usage").tag(LiveActivityLeadingItem.cpuUsage)
-                    Text("Download speed").tag(LiveActivityLeadingItem.downloadSpeed)
-                    Text("Upload speed").tag(LiveActivityLeadingItem.uploadSpeed)
+                    ForEach(LiveActivityLeadingItem.allCases.filter { $0.metric.map(isAvailable) ?? true }) { item in
+                        Text(item.title).tag(item)
+                    }
                 }
             }
             PresentationPickerRow("Right side") {
                 Picker("Right side", selection: $monitor.liveActivityMetric) {
-                    Text("Charging power").tag(LiveActivityMetric.chargingPower)
-                    Text("SoC temperature").tag(LiveActivityMetric.socTemperature)
-                    Text("Battery temperature").tag(LiveActivityMetric.batteryTemperature)
-                    Text("Hottest component").tag(LiveActivityMetric.hottestTemperature)
-                    Text("CPU usage").tag(LiveActivityMetric.cpuUsage)
-                    Text("Download speed").tag(LiveActivityMetric.downloadSpeed)
-                    Text("Upload speed").tag(LiveActivityMetric.uploadSpeed)
+                    ForEach(LiveActivityMetric.allCases.filter(isAvailable)) { metric in
+                        Text(metric.title).tag(metric)
+                    }
                 }
             }
             PresentationPickerRow("Multiple activities") {
                 Picker("Multiple activities", selection: $monitor.liveActivityMinimalSelection) {
-                    Text("Follow right side").tag(LiveActivityMinimalSelection.followRightSide)
-                    Text("Charging power").tag(LiveActivityMinimalSelection.chargingPower)
-                    Text("SoC temperature").tag(LiveActivityMinimalSelection.socTemperature)
-                    Text("Battery temperature").tag(LiveActivityMinimalSelection.batteryTemperature)
-                    Text("Hottest component").tag(LiveActivityMinimalSelection.hottestTemperature)
-                    Text("CPU usage").tag(LiveActivityMinimalSelection.cpuUsage)
-                    Text("Download speed").tag(LiveActivityMinimalSelection.downloadSpeed)
-                    Text("Upload speed").tag(LiveActivityMinimalSelection.uploadSpeed)
+                    ForEach(LiveActivityMinimalSelection.allCases.filter {
+                        $0 == .followRightSide || isAvailable($0.resolvedMetric(primary: monitor.liveActivityMetric))
+                    }) { selection in
+                        Text(selection.title).tag(selection)
+                    }
                 }
             }
+            Toggle("Show temperature trends", isOn: $monitor.liveActivityShowsTemperatureTrend)
+                .tint(.mwAccent)
+            Text("Trends need at least one minute of continuous readings from the same source. Arrows show warming, cooling or stable; expand the island for °C/min. This is a sensor trend, not a temperature accuracy check.")
+                .font(.caption).foregroundStyle(Color.mwMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Charge gained is the net increase in system battery percentage since this observed charge began, not Wh converted to percent. For example, 53% to 61% shows +8%. Consumption offsets the increase; below the starting level shows +0%. Unknown readings show a dash. Unplugging ends the session.")
+                .font(.caption).foregroundStyle(Color.mwMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Power into battery is separate from adapter input and is unavailable when unplugged or the charging rail cannot be read. Thermal pressure is iOS's assessment, not a temperature or a measured CPU clock. Extra component options appear only when a sensor is available; saved choices stay selectable if a reading temporarily disappears.")
+                .font(.caption).foregroundStyle(Color.mwMuted)
+                .fixedSize(horizontal: false, vertical: true)
             DisclosureGroup("Advanced priority setting") {
                 PresentationPickerRow("Relevance score (experimental)") {
                     Picker("Relevance score (experimental)", selection: $monitor.liveActivityRelevanceScore) {
@@ -158,6 +151,19 @@ struct LiveActivityControlPanel: View {
                     .font(.caption).foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    private func isAvailable(_ metric: LiveActivityMetric) -> Bool {
+        // Never silently replace a saved selection when a private sensor drops out.
+        if monitor.liveActivityMetric == metric || monitor.liveActivityLeadingItem.metric == metric
+            || monitor.liveActivityMinimalSelection.resolvedMetric(primary: monitor.liveActivityMetric) == metric {
+            return true
+        }
+        switch metric {
+        case .chargerTemperature: return monitor.snapshot.chargerTemperature != nil
+        case .wirelessCoilTemperature: return monitor.snapshot.temperature(in: .wirelessCoil) != nil
+        default: return true
         }
     }
 }

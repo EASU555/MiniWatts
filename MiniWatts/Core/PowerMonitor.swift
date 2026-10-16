@@ -150,6 +150,19 @@ final class PowerMonitor {
         ChargingLiveActivityController.areActivitiesEnabled
     }
 
+    var liveActivityShowsTemperatureTrend: Bool {
+        didSet {
+            guard liveActivityShowsTemperatureTrend != oldValue else { return }
+            UserDefaults.standard.set(liveActivityShowsTemperatureTrend, forKey: Self.liveActivityTrendKey)
+            liveActivityController.showsTemperatureTrend = liveActivityShowsTemperatureTrend
+            liveActivityController.reconcile(snapshot: snapshot,
+                                             leadingItem: liveActivityLeadingItem,
+                                             selectedMetric: liveActivityMetric,
+                                             minimalMetric: liveActivityMinimalSelection.resolvedMetric(primary: liveActivityMetric),
+                                             enabled: liveActivityEnabled, forceUpdate: true)
+        }
+    }
+
     /// Explicit recovery path for an ActivityKit presentation that disappeared
     /// while its retained Activity object still claims to be active.
     func restartLiveActivity() {
@@ -232,6 +245,8 @@ final class PowerMonitor {
     private let energy = EnergyAccumulator()
     private let store = SessionStore()
     private let liveActivityController = ChargingLiveActivityController()
+    @ObservationIgnored private var islandTelemetryTracker = IslandTelemetryTracker()
+    private static let liveActivityTrendKey = "liveActivityShowsTemperatureTrend"
 
     private var task: Task<Void, Never>?
     private var samplingGate = SensorSamplingGate()
@@ -281,7 +296,9 @@ final class PowerMonitor {
             .flatMap(LiveActivityMinimalSelection.init(rawValue:)) ?? .followRightSide
         let savedRelevanceScore = defaults.object(forKey: Self.liveActivityRelevanceScoreKey) as? Int
         liveActivityRelevanceScore = savedRelevanceScore == 0 ? 0 : 1
+        liveActivityShowsTemperatureTrend = defaults.object(forKey: Self.liveActivityTrendKey) as? Bool ?? true
         liveActivityController.setRelevanceScore(liveActivityRelevanceScore)
+        liveActivityController.showsTemperatureTrend = liveActivityShowsTemperatureTrend
         systemBatteryLevel.onSystemChange = { [weak self] in
             self?.refreshIfDue(minimumInterval: 0)
         }
@@ -485,6 +502,8 @@ final class PowerMonitor {
         appendLive(current)
         updateRateEstimate(current)
         updateSession(current)
+        liveActivityController.telemetry = islandTelemetryTracker.update(
+            snapshot: current, session: currentSession, thermalState: thermal.state.rawValue)
         liveActivityController.reconcile(snapshot: current,
                                          leadingItem: liveActivityLeadingItem,
                                          selectedMetric: liveActivityMetric,
@@ -690,6 +709,7 @@ final class PowerMonitor {
     // MARK: Rate estimate
 
     private func breakSampleContinuity() {
+        islandTelemetryTracker.breakContinuity()
         energy.breakContinuity()
         if currentSession != nil { sessionNeedsNewSegment = true }
         lastThermalObservation = nil
@@ -929,6 +949,8 @@ final class PowerMonitor {
             "Live Activity: \(liveActivityRecoveryStatus)",
             "Live Activity detail: \(liveActivityRecoveryDetail)",
             "Live Activity system state: \(liveActivityController.diagnosticSummary)",
+            "Island telemetry: \(liveActivityController.telemetry.map { String(describing: $0) } ?? "—")",
+            "Island temperature trends enabled: \(liveActivityShowsTemperatureTrend)",
             "External power: \(snapshot.externalConnectionObservation.map(String.init) ?? "unknown")",
             "Charging: \(snapshot.isCharging)",
             "Input watts: \(snapshot.inputWatts.map { String(format: "%.3f", $0) } ?? "—")",

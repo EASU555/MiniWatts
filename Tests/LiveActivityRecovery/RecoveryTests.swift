@@ -70,6 +70,50 @@ struct PowerSnapshot {
             MiniWattsActivityAttributes.ContentState.self, from: oldData)
         check(decoded.downloadBytesPerSecond == nil && decoded.uploadBytesPerSecond == nil,
               "Earlier Live Activity state no longer decodes")
+        check(decoded.telemetry == nil, "Earlier activity acquired invented telemetry")
+
+        // Presentation changes must update the existing activity, without an
+        // ActivityKit/PiP restart or a summary from a different sampling tick.
+        TestSystem.reset()
+        let additions = ChargingLiveActivityController()
+        var additionFrame = PowerSnapshot()
+        var telemetry = LiveActivityTelemetry()
+        telemetry.sampledAt = additionFrame.date
+        telemetry.chargeGainPercent = 8
+        telemetry.batteryChargingWatts = 10
+        telemetry.temperatureRates = [LiveActivityMetric.batteryTemperature.rawValue: 0.6]
+        additions.telemetry = telemetry
+        additions.reconcile(snapshot: additionFrame, leadingItem: .batteryChargingPower,
+                            selectedMetric: .chargeGainPercent, minimalMetric: .thermalPressure,
+                            enabled: true, forceUpdate: true)
+        try? await Task.sleep(for: .milliseconds(150))
+        check(Activity<MiniWattsActivityAttributes>.activities.first?.content.state.telemetry?.chargeGainPercent == 8,
+              "The actual controller dropped current charge-gain telemetry")
+        additions.showsTemperatureTrend = false
+        additions.reconcile(snapshot: additionFrame, leadingItem: .batteryChargingPower,
+                            selectedMetric: .batteryTemperature, minimalMetric: .chargeGainPercent,
+                            enabled: true, forceUpdate: true)
+        try? await Task.sleep(for: .milliseconds(150))
+        check(TestSystem.requests == 1, "Changing metric options restarted the activity")
+        check(Activity<MiniWattsActivityAttributes>.activities.first?.content.state.telemetry?.showsTemperatureTrend == false,
+              "Trend switch did not reach the existing activity immediately")
+        additionFrame.date = additionFrame.date.addingTimeInterval(1)
+        additions.reconcile(snapshot: additionFrame, leadingItem: .batteryChargingPower,
+                            selectedMetric: .batteryTemperature, minimalMetric: .chargeGainPercent,
+                            enabled: true, forceUpdate: true)
+        try? await Task.sleep(for: .milliseconds(150))
+        check(Activity<MiniWattsActivityAttributes>.activities.first?.content.state.telemetry == nil,
+              "The controller attached a summary from a different sampling tick")
+        additionFrame.date = Date.now.addingTimeInterval(-60)
+        additions.reconcile(snapshot: additionFrame, leadingItem: .statusIcon,
+                            selectedMetric: .batteryTemperature, minimalMetric: .batteryTemperature,
+                            enabled: true, forceUpdate: true)
+        try? await Task.sleep(for: .milliseconds(150))
+        check(Activity<MiniWattsActivityAttributes>.activities.first?.content.staleDate == additionFrame.date.addingTimeInterval(30),
+              "Changing display options made a one-minute-old sensor sample fresh")
+        additions.endIfNeeded()
+        try? await Task.sleep(for: .milliseconds(100))
+        print("PASS: new telemetry, immediate options, unchanged lifecycle and sample-identity guard")
 
         // A failed connection observation must not turn a positive charging
         // battery rail into an apparent discharge-power readout on the island.

@@ -374,6 +374,15 @@ The `Backdrop`'s full-screen `plusLighter` glow remains a design choice.
 
 ## Monitoring controls UX
 
+The island additions are documented in `docs/island-telemetry.md`. Cell-side
+charging watts, system thermal pressure and observed charge gain (%) are separate
+selectable metrics on all three island selectors. Gain is direct system percentage
+points from the open session baseline, not Wh/capacity. Optional temperature arrows
+require a source-stable minute; gaps/pause reset slopes but not the session baseline.
+`IslandTelemetryTracker` runs on existing samples only. Keep its shared ActivityKit
+payload optional and sample-identity checked; do not change AVKit recovery to apply
+a display preference. Raw incomplete-input evidence remains unscaled.
+
 The dashboard retains its dial and battery measurements first, followed by the
 Live Activity and floating-monitor controls before charts and diagnostics. Runtime
 states and primary actions stay visible; configuration, the SwiftUI-only preview,

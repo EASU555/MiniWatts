@@ -70,6 +70,8 @@ final class ChargingLiveActivityController {
     private var pendingStateActivityID: String?
     private var enabled = false
     private var relevanceScore: Double = 1
+    var telemetry: LiveActivityTelemetry?
+    var showsTemperatureTrend = true
     private var needsForegroundRecovery = false
     private var automaticRecoveryCount = 0
     private var retiredActivityIDs: Set<String> = []
@@ -143,7 +145,7 @@ final class ChargingLiveActivityController {
         }
         self.enabled = true
 
-        let state = Self.contentState(from: snapshot,
+        let state = contentState(from: snapshot,
                                       leadingItem: leadingItem,
                                       selectedMetric: selectedMetric,
                                       minimalMetric: minimalMetric)
@@ -222,7 +224,7 @@ final class ChargingLiveActivityController {
         enabled = true
         automaticRecoveryCount = 0
         if repairsPresentation { pendingPresentationRepair = true }
-        let state = Self.contentState(from: snapshot,
+        let state = contentState(from: snapshot,
                                       leadingItem: leadingItem,
                                       selectedMetric: selectedMetric,
                                       minimalMetric: minimalMetric)
@@ -882,12 +884,13 @@ final class ChargingLiveActivityController {
                          at date: Date) -> ActivityContent<MiniWattsActivityAttributes.ContentState> {
         ActivityContent(
             state: state,
-            staleDate: date.addingTimeInterval(Self.staleInterval),
+            // Changing a display option must not make an old sensor sample fresh.
+            staleDate: min(date, state.sampledAt ?? date).addingTimeInterval(Self.staleInterval),
             relevanceScore: relevanceScore
         )
     }
 
-    private static func contentState(
+    private func contentState(
         from snapshot: PowerSnapshot,
         leadingItem: LiveActivityLeadingItem,
         selectedMetric: LiveActivityMetric,
@@ -899,6 +902,10 @@ final class ChargingLiveActivityController {
         case false: power = (snapshot.batteryWatts.map(abs), true)
         case nil: power = (nil, false)
         }
+        // A preference change may re-present the current snapshot immediately;
+        // never attach a summary from a different sensor sample to it.
+        var summary = telemetry?.sampledAt == snapshot.date ? telemetry : nil
+        summary?.showsTemperatureTrend = showsTemperatureTrend
         return MiniWattsActivityAttributes.ContentState(
             chargeWatts: power.watts,
             powerIsBatterySide: power.isBatterySide,
@@ -915,7 +922,8 @@ final class ChargingLiveActivityController {
             leadingItem: leadingItem,
             selectedMetric: selectedMetric,
             minimalMetric: minimalMetric,
-            isWireless: snapshot.isWirelessInput
+            isWireless: snapshot.isWirelessInput,
+            telemetry: summary
         )
     }
 }

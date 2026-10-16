@@ -16,12 +16,14 @@ struct MiniWattsChargingLiveActivity: Widget {
                         Image(systemName: context.state.isWireless
                               ? "bolt.horizontal.circle.fill" : "bolt.circle.fill")
                             .foregroundStyle(.yellow)
-                        if context.state.externalConnected != false {
+                        if context.state.externalConnected == true {
                             Text("Charging")
                                 .font(.caption.weight(.semibold))
-                        } else {
+                        } else if context.state.externalConnected == false {
                             Text("On battery")
                                 .font(.caption.weight(.semibold))
+                        } else {
+                            Text("Power unavailable").font(.caption.weight(.semibold))
                         }
                     }
                 }
@@ -39,12 +41,15 @@ struct MiniWattsChargingLiveActivity: Widget {
                 }
 
                 DynamicIslandExpandedRegion(.center) {
-                    PrimaryMetricView(state: context.state, isStale: context.isStale)
+                    PrimaryMetricView(state: context.state, isStale: context.isStale, showsFootnote: false)
                         .padding(.top, 4)
                 }
 
                 DynamicIslandExpandedRegion(.bottom) {
-                    ExpandedMetricStrip(state: context.state)
+                    VStack(spacing: 4) {
+                        ExpandedMetricStrip(state: context.state)
+                        TelemetryDetails(state: context.state, isStale: context.isStale)
+                    }
                         .padding(.top, 4)
                 }
             } compactLeading: {
@@ -52,7 +57,7 @@ struct MiniWattsChargingLiveActivity: Widget {
             } compactTrailing: {
                 CompactMetricValue(state: context.state)
                     .foregroundStyle(context.isStale
-                                     ? Color.secondary : color(for: context.state.selectedMetric))
+                                     ? Color.secondary : color(for: context.state.selectedMetric, state: context.state))
                     .accessibilityLabel(label(for: context.state.selectedMetric))
                     .accessibilityValue(Text(verbatim: formattedValue(
                         for: context.state.selectedMetric,
@@ -64,6 +69,16 @@ struct MiniWattsChargingLiveActivity: Widget {
                     Image(systemName: "pause.fill")
                         .foregroundStyle(.secondary)
                         .accessibilityLabel("Reading paused")
+                } else if metric == .thermalPressure,
+                          let pressure = context.state.telemetry?.thermalPressure {
+                    ViewThatFits(in: .horizontal) {
+                        Text(pressure.title).fixedSize()
+                        Image(systemName: pressureSymbol(pressure))
+                    }
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(pressureColor(pressure))
+                    .accessibilityLabel("System thermal pressure")
+                    .accessibilityValue(Text(pressure.title))
                 } else if let values = minimalValueVariants(for: metric, state: context.state) {
                     ViewThatFits(in: .horizontal) {
                         Text(verbatim: values.preferredWithUnit)
@@ -76,7 +91,7 @@ struct MiniWattsChargingLiveActivity: Widget {
                             .fixedSize(horizontal: true, vertical: false)
                     }
                         .font(.caption2.monospacedDigit().weight(.heavy))
-                        .foregroundStyle(color(for: metric))
+                        .foregroundStyle(color(for: metric, state: context.state))
                         .accessibilityLabel(label(for: metric))
                         .accessibilityValue(Text(verbatim: formattedValue(for: metric,
                                                                           state: context.state)))
@@ -88,7 +103,7 @@ struct MiniWattsChargingLiveActivity: Widget {
                         .accessibilityValue(Text("No reading"))
                 }
             }
-            .keylineTint(color(for: context.state.minimalMetric ?? context.state.selectedMetric))
+            .keylineTint(color(for: context.state.minimalMetric ?? context.state.selectedMetric, state: context.state))
         }
     }
 }
@@ -97,7 +112,7 @@ private struct ChargeLockScreenView: View {
     let context: ActivityViewContext<MiniWattsActivityAttributes>
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 8) {
             HStack {
                 HStack(spacing: 8) {
                     Image(systemName: context.state.isWireless
@@ -128,6 +143,7 @@ private struct ChargeLockScreenView: View {
                 ExpandedMetricStrip(state: context.state)
                     .frame(maxWidth: .infinity)
             }
+            TelemetryDetails(state: context.state, isStale: context.isStale)
         }
         .padding()
         .foregroundStyle(.white)
@@ -138,6 +154,7 @@ private struct ChargeLockScreenView: View {
 private struct PrimaryMetricView: View {
     let state: MiniWattsActivityAttributes.ContentState
     let isStale: Bool
+    var showsFootnote = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -145,19 +162,25 @@ private struct PrimaryMetricView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(verbatim: networkRate(for: state.selectedMetric, state: state)?.number
-                    ?? numericValue(for: state.selectedMetric, state: state).map(oneDecimal)
-                    ?? "—")
-                    .font(.title2.monospacedDigit().weight(.bold))
-                Text(verbatim: networkRate(for: state.selectedMetric, state: state)?.unit
-                    ?? unit(for: state.selectedMetric))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                if state.selectedMetric == .thermalPressure {
+                    if let pressure = state.telemetry?.thermalPressure {
+                        Text(pressure.title).font(.title2.weight(.bold))
+                    } else { Text(verbatim: "—").font(.title2.weight(.bold)) }
+                } else {
+                    Text(verbatim: primaryNumber(for: state.selectedMetric, state: state))
+                        .font(.title2.monospacedDigit().weight(.bold))
+                    Text(verbatim: networkRate(for: state.selectedMetric, state: state)?.unit
+                        ?? unit(for: state.selectedMetric))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
-            .foregroundStyle(isStale ? Color.secondary : color(for: state.selectedMetric))
+            .foregroundStyle(isStale ? Color.secondary : color(for: state.selectedMetric, state: state))
 
-            if state.selectedMetric == .chargingPower {
-                if state.externalConnected == false {
+            if showsFootnote && state.selectedMetric == .chargingPower {
+                if state.chargeWatts == nil {
+                    Text("Power unavailable").font(.caption2).foregroundStyle(.secondary)
+                } else if state.externalConnected == false {
                     Text("Battery draw")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -170,18 +193,25 @@ private struct PrimaryMetricView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-            } else if state.selectedMetric == .hottestTemperature,
+            } else if showsFootnote && state.selectedMetric == .batteryChargingPower {
+                Text("Cell-side power, not adapter input")
+                    .font(.caption2).foregroundStyle(.secondary)
+            } else if showsFootnote && state.selectedMetric == .chargeGainPercent,
+                      let start = state.telemetry?.chargeStartPercent, let current = state.batteryPercent {
+                Text(verbatim: "\(start)% → \(current)%")
+                    .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+            } else if showsFootnote && state.selectedMetric == .hottestTemperature,
                       let name = state.hottestSensorName {
                 Text(name)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-            } else if state.selectedMetric == .cpuUsage {
+            } else if showsFootnote && state.selectedMetric == .cpuUsage {
                 Text("Whole-device average")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-            } else if state.selectedMetric == .downloadSpeed
-                        || state.selectedMetric == .uploadSpeed {
+            } else if showsFootnote && (state.selectedMetric == .downloadSpeed
+                        || state.selectedMetric == .uploadSpeed) {
                 Text("Whole-device traffic")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -191,6 +221,80 @@ private struct PrimaryMetricView: View {
         .accessibilityLabel(label(for: state.selectedMetric))
         .accessibilityValue(Text(verbatim: formattedValue(for: state.selectedMetric, state: state)))
         .accessibilityAddTraits(.updatesFrequently)
+    }
+}
+
+/// Two small rows of provenance and context, not another grid of live counters.
+/// The sample timestamp is app receipt time; it is not proof of sensor accuracy.
+private struct TelemetryDetails: View {
+    let state: MiniWattsActivityAttributes.ContentState
+    let isStale: Bool
+
+    private var trendMetric: LiveActivityMetric? {
+        if state.selectedMetric.isTemperature { return state.selectedMetric }
+        if let left = state.leadingItem?.metric, left.isTemperature { return left }
+        if let minimal = state.minimalMetric, minimal.isTemperature { return minimal }
+        return nil
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                if isStale {
+                    Label("Reading paused", systemImage: "pause.circle")
+                } else if state.telemetry?.partialInputWatts != nil {
+                    Label("Input reading incomplete", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                } else if state.chargeWatts == nil {
+                    Label("Power unavailable", systemImage: "questionmark.circle")
+                } else if state.externalConnected == false {
+                    Label("Battery draw", systemImage: "battery.75percent")
+                } else if state.powerIsBatterySide {
+                    Label("Into battery", systemImage: "battery.75percent")
+                } else {
+                    Label("From charger", systemImage: "powerplug.fill")
+                }
+                Spacer(minLength: 4)
+                if let date = state.sampledAt {
+                    Text("Sample received")
+                    Text(date, style: .time).monospacedDigit()
+                }
+            }
+            HStack(spacing: 8) {
+                if let gain = state.telemetry?.chargeGainPercent {
+                    Label {
+                        HStack(spacing: 2) {
+                            Text("Charge gained")
+                            Text(verbatim: "+\(gain)%")
+                        }
+                    } icon: { Image(systemName: "battery.badge.plus") }
+                    .accessibilityLabel("Charge gained (%)")
+                    .accessibilityValue(Text(verbatim: "+\(gain)%"))
+                }
+                Spacer(minLength: 0)
+                if let metric = trendMetric, let telemetry = state.telemetry,
+                   let rate = telemetry.trendRate(for: metric) {
+                    Text(verbatim: telemetry.trendSymbol(for: metric)
+                         + oneDecimal(abs(rate)) + "°C/min")
+                        .accessibilityLabel(label(for: metric))
+                        .accessibilityValue(Text(verbatim: oneDecimal(rate) + "°C/min"))
+                } else if let metric = trendMetric, numericValue(for: metric, state: state) != nil,
+                          state.telemetry?.showsTemperatureTrend == true {
+                    Text("Collecting trend")
+                }
+                Spacer(minLength: 0)
+                if let pressure = state.telemetry?.thermalPressure {
+                    Label { Text(pressure.title) } icon: { Image(systemName: pressureSymbol(pressure)) }
+                        .foregroundStyle(isStale ? Color.secondary : pressureColor(pressure))
+                        .accessibilityLabel("System thermal pressure")
+                        .accessibilityValue(Text(pressure.title))
+                }
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
     }
 }
 
@@ -215,7 +319,7 @@ private struct SmallMetric: View {
         VStack(spacing: 4) {
             Image(systemName: symbol(for: metric))
                 .font(.caption2)
-                .foregroundStyle(color(for: metric))
+                .foregroundStyle(color(for: metric, state: state))
             Text(shortLabel(for: metric))
                 .font(.system(.caption2, design: .rounded, weight: .medium))
                 .foregroundStyle(.secondary)
@@ -256,12 +360,12 @@ private struct CompactLeadingContent: View {
                 .accessibilityLabel("Reading paused")
         } else if let metric = (state.leadingItem ?? .statusIcon).iconMetric {
             Image(systemName: symbol(for: metric))
-                .foregroundStyle(color(for: metric))
+                .foregroundStyle(color(for: metric, state: state))
                 .accessibilityLabel(label(for: metric))
         } else if let metric = (state.leadingItem ?? .statusIcon).metric {
             Text(verbatim: shortValue(for: metric, state: state))
                 .font(.caption2.monospacedDigit().weight(.bold))
-                .foregroundStyle(color(for: metric))
+                .foregroundStyle(color(for: metric, state: state))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .accessibilityLabel(label(for: metric))
@@ -288,6 +392,11 @@ private func numericValue(
     case .cpuUsage: state.cpuUsagePercent
     case .downloadSpeed: state.downloadBytesPerSecond
     case .uploadSpeed: state.uploadBytesPerSecond
+    case .batteryChargingPower: state.telemetry?.batteryChargingWatts
+    case .chargeGainPercent: state.telemetry?.chargeGainPercent.map(Double.init)
+    case .thermalPressure: nil
+    case .chargerTemperature: state.telemetry?.chargerTemperature
+    case .wirelessCoilTemperature: state.telemetry?.wirelessCoilTemperature
     }
 }
 
@@ -300,6 +409,11 @@ private func label(for metric: LiveActivityMetric) -> LocalizedStringKey {
     case .cpuUsage: "CPU usage"
     case .downloadSpeed: "Download speed"
     case .uploadSpeed: "Upload speed"
+    case .batteryChargingPower: "Power into battery"
+    case .chargeGainPercent: "Charge gained (%)"
+    case .thermalPressure: "System thermal pressure"
+    case .chargerTemperature: "Charge IC temperature"
+    case .wirelessCoilTemperature: "Wireless coil temperature"
     }
 }
 
@@ -312,6 +426,11 @@ private func shortLabel(for metric: LiveActivityMetric) -> LocalizedStringKey {
     case .cpuUsage: "CPU"
     case .downloadSpeed: "Download"
     case .uploadSpeed: "Upload"
+    case .batteryChargingPower: "Into battery"
+    case .chargeGainPercent: "Charge gained"
+    case .thermalPressure: "Thermal"
+    case .chargerTemperature: "Charge IC"
+    case .wirelessCoilTemperature: "Coil"
     }
 }
 
@@ -324,11 +443,20 @@ private func symbol(for metric: LiveActivityMetric) -> String {
     case .cpuUsage: "cpu"
     case .downloadSpeed: "arrow.down"
     case .uploadSpeed: "arrow.up"
+    case .batteryChargingPower: "battery.75percent"
+    case .chargeGainPercent: "battery.badge.plus"
+    case .thermalPressure: "thermometer.medium"
+    case .chargerTemperature: "powerplug.fill"
+    case .wirelessCoilTemperature: "wave.3.right.circle"
     }
 }
 
-private func color(for metric: LiveActivityMetric) -> Color {
-    switch metric {
+private func color(for metric: LiveActivityMetric,
+                   state: MiniWattsActivityAttributes.ContentState) -> Color {
+    if metric == .thermalPressure {
+        return state.telemetry?.thermalPressure.map(pressureColor) ?? .secondary
+    }
+    return switch metric {
     case .chargingPower: .yellow
     case .socTemperature: .orange
     case .batteryTemperature: .green
@@ -336,15 +464,20 @@ private func color(for metric: LiveActivityMetric) -> Color {
     case .cpuUsage: .cyan
     case .downloadSpeed: .cyan
     case .uploadSpeed: .mint
+    case .batteryChargingPower, .chargeGainPercent: .green
+    case .thermalPressure, .chargerTemperature: .orange
+    case .wirelessCoilTemperature: .yellow
     }
 }
 
 private func unit(for metric: LiveActivityMetric) -> String {
     switch metric {
-    case .chargingPower: "W"
-    case .cpuUsage: "%"
+    case .chargingPower, .batteryChargingPower: "W"
+    case .cpuUsage, .chargeGainPercent: "%"
+    case .thermalPressure: ""
     case .downloadSpeed, .uploadSpeed: "KB/s"
-    case .socTemperature, .batteryTemperature, .hottestTemperature: "°"
+    case .socTemperature, .batteryTemperature, .hottestTemperature,
+         .chargerTemperature, .wirelessCoilTemperature: "°"
     }
 }
 
@@ -357,8 +490,38 @@ private func shortValue(
     state: MiniWattsActivityAttributes.ContentState
 ) -> String {
     if let rate = networkRate(for: metric, state: state) { return rate.compact }
+    if metric == .thermalPressure {
+        return state.telemetry?.thermalPressure.map { String(localized: $0.title) } ?? "—"
+    }
     guard let value = numericValue(for: metric, state: state) else { return "—" }
-    return oneDecimal(value) + unit(for: metric)
+    let number = metric == .chargeGainPercent ? "+\(Int(value))" : oneDecimal(value)
+    let warning = metric == .chargingPower && state.telemetry?.partialInputWatts != nil ? "!" : ""
+    return number + unit(for: metric) + (state.telemetry?.trendSymbol(for: metric) ?? "") + warning
+}
+
+private func primaryNumber(for metric: LiveActivityMetric,
+                           state: MiniWattsActivityAttributes.ContentState) -> String {
+    if let rate = networkRate(for: metric, state: state) { return rate.number }
+    guard let value = numericValue(for: metric, state: state) else { return "—" }
+    return metric == .chargeGainPercent ? "+\(Int(value))" : oneDecimal(value)
+}
+
+private func pressureSymbol(_ pressure: IslandThermalPressure) -> String {
+    switch pressure {
+    case .nominal: "checkmark.circle"
+    case .fair: "thermometer.medium"
+    case .serious: "thermometer.high"
+    case .critical: "exclamationmark.triangle.fill"
+    }
+}
+
+private func pressureColor(_ pressure: IslandThermalPressure) -> Color {
+    switch pressure {
+    case .nominal: .green
+    case .fair: .yellow
+    case .serious: .orange
+    case .critical: .red
+    }
 }
 
 private struct NetworkRatePresentation {
@@ -424,19 +587,20 @@ private func minimalValueVariants(
     }
     if metric == .downloadSpeed || metric == .uploadSpeed { return nil }
     guard let value = numericValue(for: metric, state: state), value.isFinite else { return nil }
-    if metric == .chargingPower {
+    if metric == .chargingPower || metric == .batteryChargingPower {
         guard value >= 0, value < 1_000 else { return nil }
-    } else if metric == .cpuUsage {
+    } else if metric == .cpuUsage || metric == .chargeGainPercent {
         guard (0...100).contains(value) else { return nil }
     } else {
         guard value >= -40, value <= 150 else { return nil }
     }
-    let precise = oneDecimal(value)
-    let rounded = "\(Int(value.rounded()))"
+    let precise = metric == .chargeGainPercent ? "+\(Int(value))" : oneDecimal(value)
+    let rounded = metric == .chargeGainPercent ? precise : "\(Int(value.rounded()))"
     let suffix = unit(for: metric)
     let preferred = abs(value) < 100 ? precise : rounded
-    return MinimalValueVariants(preferredWithUnit: preferred + suffix,
-                                precise: precise,
+    let trend = state.telemetry?.trendSymbol(for: metric) ?? ""
+    return MinimalValueVariants(preferredWithUnit: preferred + suffix + trend,
+                                precise: rounded + suffix + trend,
                                 roundedWithUnit: rounded + suffix,
                                 rounded: rounded)
 }
@@ -447,6 +611,10 @@ private func formattedValue(
 ) -> String {
     if let rate = networkRate(for: metric, state: state) {
         return "\(rate.number) \(rate.unit)"
+    }
+    if metric == .thermalPressure {
+        return state.telemetry?.thermalPressure.map { String(localized: $0.title) }
+            ?? String(localized: "No reading")
     }
     guard numericValue(for: metric, state: state) != nil else {
         return String(localized: "No reading")
