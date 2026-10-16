@@ -1,6 +1,306 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Temperature curves": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度曲线"
+          }
+        }
+      }
+    },
+    "Loading temperature history": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在加载温度记录"
+          }
+        }
+      }
+    },
+    "Last recorded": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最近记录"
+          }
+        }
+      }
+    },
+    "Stores one observed frame about every five seconds and retains the latest 24 hours on this iPhone. Foreground sampling or the existing floating monitor is required; suspended time stays blank. The newest uncheckpointed frames may be lost after a force quit.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "约每 5 秒记录一次已有采样，在本机保留最近 24 小时的温度记录。需要 App 在前台采样，或已有悬浮监视器维持采样；暂停期间保持空白。强制退出后，最近尚未保存的记录可能丢失。"
+          }
+        }
+      }
+    },
+    "Drag on the chart to inspect an actual time and temperature. Gaps mark missing readings, sampling pauses or source changes; no line connects them. Long-range plots reduce drawing density while keeping peaks and valleys. Statistics use the original recorded readings.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在曲线上拖动，可查看实际记录的时间和温度。缺少读数、暂停采样或来源切换处会断线，不会补画。查看较长时间范围时会减少绘制点数，同时保留高低峰；统计仍使用原始记录。"
+          }
+        }
+      }
+    },
+    "The latest trend uses the same one-minute warm-up and algorithm as the island. A temperature trend does not validate the sensor's absolute accuracy. Hottest and SoC readings can change source; battery uses the same representative reading as the rest of MiniWatts.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最新趋势与灵动岛使用同一套算法，需要连续采样至少一分钟。趋势不能证明传感器的绝对温度准确。最高温度和 SoC 读数的来源可能改变；电池曲线与 App 其他位置使用相同的代表温度。"
+          }
+        }
+      }
+    },
+    "Clear temperature history": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除温度记录"
+          }
+        }
+      }
+    },
+    "Clear temperature history?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除温度记录？"
+          }
+        }
+      }
+    },
+    "This removes saved temperature curves and their safety copy. Charging history is not affected. New temperature points will continue to be recorded.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这会清除已保存的温度曲线及其安全副本，不影响充电历史。之后仍会继续记录新的温度采样。"
+          }
+        }
+      }
+    },
+    "Component": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部件"
+          }
+        }
+      }
+    },
+    "Curve time range": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "曲线时间范围"
+          }
+        }
+      }
+    },
+    "Compare component curves": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "叠加比较各部件曲线"
+          }
+        }
+      }
+    },
+    "No sample at this time": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此时间没有采样记录"
+          }
+        }
+      }
+    },
+    "Latest trend": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最新趋势"
+          }
+        }
+      }
+    },
+    "Lowest": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最低温度"
+          }
+        }
+      }
+    },
+    "Highest": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最高温度"
+          }
+        }
+      }
+    },
+    "End-to-start change": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "首尾温差"
+          }
+        }
+      }
+    },
+    "Retry temperature history": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重试温度记录"
+          }
+        }
+      }
+    },
+    "Drag to inspect a recorded time. Blank areas have no continuous temperature record.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在图表上拖动可查看记录。空白区域没有连续的温度采样。"
+          }
+        }
+      }
+    },
+    "Recording temperatures": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在记录温度"
+          }
+        }
+      }
+    },
+    "Temperature recording paused": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度记录已暂停"
+          }
+        }
+      }
+    },
+    "10 min": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "10 分钟"
+          }
+        }
+      }
+    },
+    "1 hour": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 小时"
+          }
+        }
+      }
+    },
+    "6 hours": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "6 小时"
+          }
+        }
+      }
+    },
+    "24 hours": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "24 小时"
+          }
+        }
+      }
+    },
+    "No temperature points for this component and time range yet. Recording begins with this version; older curves cannot be reconstructed.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这个部件和时间范围内还没有温度采样。记录从本版本开始，无法补回升级前的温度曲线。"
+          }
+        }
+      }
+    },
+    "Recording and curve details": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "记录与曲线说明"
+          }
+        }
+      }
+    },
+    "Temperature history was recovered from its safety copy. The newest unsaved frames may be missing.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已从安全副本恢复温度记录，最近尚未保存的采样可能缺失。"
+          }
+        }
+      }
+    },
+    "Saved temperature history could not be read and was not erased. New readings remain in memory until loading succeeds.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取已保存的温度记录，原文件未被删除。读取成功前，新采样仅保留在内存中。"
+          }
+        }
+      }
+    },
+    "Temperature history or its safety copy could not be saved. Current curves are still in memory; retry saving before closing MiniWatts.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度记录或其安全副本保存失败，当前曲线仍在内存中，请在关闭 MiniWatts 前重试保存。"
+          }
+        }
+      }
+    },
     "Power into battery": {
       "localizations": {
         "zh-Hans": {

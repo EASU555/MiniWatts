@@ -75,6 +75,9 @@ jobs:
       - name: Test island temperature trends and system charge percentage gains
         run: bash ./scripts/test-island-telemetry.sh
 
+      - name: Test persistent temperature curves and chart reduction
+        run: bash ./scripts/test-temperature-history.sh
+
       - name: Test upstream sensor interpretation on personal models
         run: bash ./scripts/test-sensor-interpretation.sh
 

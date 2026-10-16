@@ -21,6 +21,7 @@ struct ThermalView: View {
         PageScaffold("Thermal", glow: glowColor) {
             statePanel
             cpuPanel
+            TemperatureCurvePanel(history: monitor.temperatureHistory)
             if snapshot.temperatures.isEmpty {
                 Panel("Sensors", systemImage: "sensor") {
                     EmptyNote(text: "No temperature sensors were found. The simulator has none; on a device they appear as soon as the app has read the HID service list.",
@@ -28,7 +29,6 @@ struct ThermalView: View {
                 }
             } else {
                 mapPanel
-                trendPanel
                 ForEach(snapshot.temperaturesByZone) { group in
                     zonePanel(group)
                 }
@@ -212,12 +212,6 @@ struct ThermalView: View {
                     .foregroundStyle(Color.mwMuted)
                     .fixedSize(horizontal: false, vertical: true)
             }
-        }
-    }
-
-    private var trendPanel: some View {
-        Panel("Hottest sensor, last 3 minutes", systemImage: "chart.line.uptrend.xyaxis") {
-            LiveTemperatureChart(samples: monitor.live)
         }
     }
 

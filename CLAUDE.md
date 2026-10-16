@@ -374,6 +374,15 @@ The `Backdrop`'s full-screen `plusLighter` glow remains a design choice.
 
 ## Monitoring controls UX
 
+`docs/temperature-curves.md` describes the independent local 24-hour thermal
+history. `TemperatureHistoryController` records existing probe frames about every
+five seconds, whether charging or not, and checkpoints on a utility queue every
+30 seconds/on pause. Never overwrite a failed load or join chart lines across
+missing readings, pause or source changes, including between stored frames. Chart
+preparation is off-main, visibility-gated and peak/valley-preserving; summaries and
+selection use original observations, not reduced marks. This feature must not
+change ActivityKit/PiP recovery or create a separate probe/background timer.
+
 The island additions are documented in `docs/island-telemetry.md`. Cell-side
 charging watts, system thermal pressure and observed charge gain (%) are separate
 selectable metrics on all three island selectors. Gain is direct system percentage

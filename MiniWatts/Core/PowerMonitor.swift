@@ -188,6 +188,7 @@ final class PowerMonitor {
     }
 
     let thermal = ThermalMonitor()
+    let temperatureHistory = TemperatureHistoryController()
 
     /// Direct fan-out from the sensor tick. Unlike a SwiftUI `onChange`, this
     /// continues while Picture in Picture keeps the process running off screen.
@@ -320,6 +321,7 @@ final class PowerMonitor {
         collectDiagnostics()
         appendDiagnosticEvent("monitor initialized model=\(Self.machineIdentifier) iOS=\(UIDevice.current.systemVersion)")
         Task { await loadStoredSessions() }
+        Task { await temperatureHistory.load() }
     }
 
     /// Reads the session file off the main thread and merges it in.
@@ -402,6 +404,7 @@ final class PowerMonitor {
     /// resumed session reports honest totals and `integratedSeconds` records how much of
     /// the wall clock was actually watched.
     func pause() {
+        temperatureHistory.pause()
         task?.cancel()
         task = nil
         // A blocking probe cannot be cancelled midway. Discard its result if it
@@ -504,6 +507,7 @@ final class PowerMonitor {
         updateSession(current)
         liveActivityController.telemetry = islandTelemetryTracker.update(
             snapshot: current, session: currentSession, thermalState: thermal.state.rawValue)
+        temperatureHistory.record(current, rates: liveActivityController.telemetry?.temperatureRates ?? [:])
         liveActivityController.reconcile(snapshot: current,
                                          leadingItem: liveActivityLeadingItem,
                                          selectedMetric: liveActivityMetric,
@@ -951,6 +955,7 @@ final class PowerMonitor {
             "Live Activity system state: \(liveActivityController.diagnosticSummary)",
             "Island telemetry: \(liveActivityController.telemetry.map { String(describing: $0) } ?? "—")",
             "Island temperature trends enabled: \(liveActivityShowsTemperatureTrend)",
+            "Temperature history: \(temperatureHistory.records.count) frames, \(temperatureHistory.storageState), \(temperatureHistory.storageDetail)",
             "External power: \(snapshot.externalConnectionObservation.map(String.init) ?? "unknown")",
             "Charging: \(snapshot.isCharging)",
             "Input watts: \(snapshot.inputWatts.map { String(format: "%.3f", $0) } ?? "—")",
