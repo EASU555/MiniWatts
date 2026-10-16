@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 test_build=$(mktemp -d)
 trap 'rm -rf "$test_build"' EXIT
 swiftc -swift-version 6 -parse-as-library \
+  MiniWatts/Core/Model/Formatting.swift \
   MiniWatts/Core/Sensors/HIDSensors.swift \
   MiniWatts/Core/Sensors/SensorCatalog.swift \
   MiniWatts/Core/Model/BatteryGaugeSummary.swift \
