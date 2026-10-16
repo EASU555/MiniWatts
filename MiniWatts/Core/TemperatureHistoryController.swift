@@ -3,6 +3,7 @@ import Observation
 
 /// Independently observable so normal one-second dashboard redraws do not also
 /// rebuild a day-long chart. The history view subscribes to a five-second revision.
+@MainActor
 @Observable
 final class TemperatureHistoryController {
     enum StorageState { case loading, ready, recovered, loadFailed, saveFailed, backupFailed }

@@ -11,7 +11,7 @@ struct TemperatureCurvePanel: View {
     @State private var visible = false
     @State private var confirmingClear = false
 
-    private struct Request: Hashable {
+    nonisolated private struct Request: Hashable, Sendable {
         let revision: Int
         let component: TemperatureComponent
         let range: TemperatureCurveRange
