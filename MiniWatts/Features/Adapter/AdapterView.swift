@@ -59,7 +59,13 @@ struct AdapterView: View {
                            tint: utilisation > 0.75 ? .mwBattery : .mwLoss)
                 }
 
-                if snapshot.inputWatts == nil, snapshot.adapterIsWireless {
+                Text("The negotiated rating is a ceiling, not the charger's live display or a wall-meter measurement.")
+                    .font(.caption2)
+                    .foregroundStyle(Color.mwMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if snapshot.partialInputWatts != nil {
+                    InputPowerWarning(snapshot: snapshot)
+                } else if snapshot.inputWatts == nil, snapshot.adapterIsWireless {
                     EmptyNote(text: "Wireless charging has no input-current sensor, so there is nothing to compare against the rating. The voltage and current below are the profile the pad negotiated — a ceiling that stays put while the actual draw moves.",
                               systemImage: "wave.3.right")
                 } else if let reason = headroomReason {
@@ -84,7 +90,7 @@ struct AdapterView: View {
     private var headroomReason: LocalizedStringResource? {
         guard let utilisation = snapshot.adapterUtilisation, utilisation < 0.75 else { return nil }
         if monitor.thermal.state.isThrottling {
-            return "Well under the adapter's rating while the system is thermally throttling — the ceiling right now is heat, not the charger."
+            return "System thermal pressure may limit charging, but these readings do not identify the exact limiting factor."
         }
         if snapshot.isChargingOnHold {
             return "Charging is on hold, so almost nothing is being drawn. Optimized Battery Charging or a charge limit looks exactly like this."

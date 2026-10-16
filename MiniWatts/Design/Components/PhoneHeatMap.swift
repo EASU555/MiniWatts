@@ -8,7 +8,7 @@ import SwiftUI
 /// sensor names, never coordinates — so this is a legend for the numbers below
 /// it, not a claim about millimetres.
 struct PhoneHeatMap: View {
-    /// Hottest reading per zone.
+    /// Representative battery temperature, hottest live reading for other zones.
     let readings: [(zone: ThermalZone, celsius: Double)]
     var height: CGFloat = 250
 

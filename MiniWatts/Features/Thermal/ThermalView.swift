@@ -5,7 +5,7 @@ struct ThermalView: View {
 
     private var snapshot: PowerSnapshot { monitor.snapshot }
 
-    /// Hottest *live* reading per zone, which is what the map draws.
+    /// Representative per zone: battery median/registry, live maximum elsewhere.
     ///
     /// It used to take `readings.first`, which included `PMU tcal` — a calibration
     /// constant pinned at 51.8 °C. That made the SoC blob permanently red and put a
@@ -13,7 +13,7 @@ struct ThermalView: View {
     /// exclude it, said 44°. The same screen contradicted itself.
     private var zoneReadings: [(zone: ThermalZone, celsius: Double)] {
         snapshot.temperaturesByZone.compactMap { group in
-            group.hottest.map { (group.zone, $0) }
+            group.representative.map { (group.zone, $0) }
         }
     }
 
@@ -33,6 +33,7 @@ struct ThermalView: View {
                     zonePanel(group)
                 }
             }
+            if !snapshot.temperatureExclusions.isEmpty { exclusionsPanel }
         }
     }
 
@@ -63,7 +64,7 @@ struct ThermalView: View {
                 }
                 severityMeter
                 if snapshot.externalConnected, monitor.thermal.state.isThrottling {
-                    Text("Charge power below the adapter's rating right now is expected: the limit is the system's, not the charger's.")
+                    Text("System thermal pressure may affect charging, but it does not identify the charger's exact limit or validate individual temperature sensors.")
                         .font(.caption2)
                         .foregroundStyle(Color.mwDanger)
                         .fixedSize(horizontal: false, vertical: true)
@@ -199,7 +200,7 @@ struct ThermalView: View {
                                 .monospacedDigit()
                         }
                         .font(.caption)
-                        Text("The battery number is the hottest battery-labelled sensor, not an average. A wide range needs device-specific validation; iOS thermal state is a separate system verdict.")
+                        Text("Battery uses a median of live battery sensors unless the registry provides a temperature. The hottest raw sensor is retained separately. Neither the median nor iOS thermal state validates a sensor's accuracy.")
                             .font(.caption2)
                     }
                     .foregroundStyle(Color.mwMuted)
@@ -225,7 +226,7 @@ struct ThermalView: View {
     /// which is a different provenance and worth saying so.
     private var batteryTemperatureSource: Text? {
         if snapshot.registryTemperature != nil { return Text(verbatim: "IOPMPowerSource") }
-        return snapshot.hottestSensor(in: .battery).map { Text(verbatim: $0.name) }
+        return snapshot.batteryTemperatureReadings.isEmpty ? nil : Text("Live battery sensor median")
     }
 
     // MARK: Zones
@@ -239,8 +240,14 @@ struct ThermalView: View {
 
     private func zonePanel(_ group: ZoneTemperatures) -> some View {
         Panel(group.zone.title, systemImage: group.zone.symbol,
-              trailing: group.hottest.map { Text(verbatim: String(format: "%.1f °C", $0)) }) {
+              trailing: group.representative.map { Text(verbatim: String(format: "%.1f °C", $0)) }) {
             VStack(spacing: 10) {
+                if group.zone == .battery {
+                    Text("Representative temperature: registry when available, otherwise the live-sensor median. All eligible sensor readings remain listed below.")
+                        .font(.caption2)
+                        .foregroundStyle(Color.mwMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 ForEach(group.readings) { reading in
                     let labels = sensorLabels(reading.name)
                     BarRow(title: labels.title,
@@ -250,6 +257,30 @@ struct ThermalView: View {
                            subtitle: labels.subtitle)
                 }
             }
+        }
+    }
+
+    private var exclusionsPanel: some View {
+        Panel("Temperature interpretation", systemImage: "exclamationmark.triangle") {
+            DisclosureGroup("Readings excluded from summaries") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("These provisional filters are not a temperature calibration. Excluded values remain in the report; a lower summary does not prove the device is cool.")
+                        .font(.caption)
+                    ForEach(snapshot.temperatureExclusions) { exclusion in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(verbatim: "[\(exclusion.reading.index)] \(exclusion.reading.name) = \(exclusion.reading.formatted)")
+                                .font(.caption.monospaced())
+                            Text(exclusion.reason.explanation)
+                                .font(.caption2)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+                .foregroundStyle(Color.mwMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 8)
+            }
+            .font(.subheadline)
         }
     }
 }

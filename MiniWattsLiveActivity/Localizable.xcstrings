@@ -1,6 +1,66 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Outside the supported Celsius range.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "超出支持的摄氏温度范围。"
+          }
+        }
+      }
+    },
+    "Exactly zero; this may be an inactive sensor.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读数恰好为零，可能是未启用的传感器。"
+          }
+        }
+      }
+    },
+    "PMU tdev below -10 °C; sensor interpretation needs verification.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PMU tdev 低于 −10 °C，需要核实该传感器的含义。"
+          }
+        }
+      }
+    },
+    "High charge-IC die reading without a matching warm junction.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "充电芯片核心读数偏高，但同一路结温未提供相应的升温证据。"
+          }
+        }
+      }
+    },
+    "at phone port": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手机接口处"
+          }
+        }
+      }
+    },
+    "at charging coil": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "充电线圈处"
+          }
+        }
+      }
+    },
     "Download" : {
       "localizations" : {
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下载" } }

@@ -15,6 +15,7 @@ nonisolated enum HIDSensors {
         let name: String
         let kind: Kind
         let value: Double
+        var index: Int = 0
     }
     static let plausibleCelsius = -20.0...120.0
 }

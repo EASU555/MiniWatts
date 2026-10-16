@@ -18,12 +18,32 @@ nonisolated struct ZoneTemperatures: Identifiable, Hashable {
     let zone: ThermalZone
     /// Every reading in the zone, hottest first, calibration constants last.
     let readings: [HIDSensors.Reading]
-    /// The hottest *live* reading, which is what the zone is represented by
-    /// wherever one number has to stand for it. Nil when the zone has nothing but
-    /// calibration constants in it.
-    let hottest: Double?
+    /// Battery uses its representative median (or the registry when available);
+    /// other zones use their live maximum. Raw hot outliers are not discarded.
+    let representative: Double?
 
     var id: ThermalZone { zone }
+}
+
+/// Interpretation heuristics are visible, not a silent deletion of sensor data.
+/// Adapted from upstream v1.5.1; they are not validated calibration on every model.
+nonisolated struct TemperatureExclusion: Identifiable, Hashable {
+    enum Reason: String, Hashable {
+        case outsideRange, zero, coldDie, unsupportedHotChargeDie
+
+        var explanation: LocalizedStringResource {
+            switch self {
+            case .outsideRange: "Outside the supported Celsius range."
+            case .zero: "Exactly zero; this may be an inactive sensor."
+            case .coldDie: "PMU tdev below -10 °C; sensor interpretation needs verification."
+            case .unsupportedHotChargeDie: "High charge-IC die reading without a matching warm junction."
+            }
+        }
+    }
+
+    let reading: HIDSensors.Reading
+    let reason: Reason
+    var id: String { "\(reading.index)#\(reading.name)" }
 }
 
 /// One reading of everything the app can learn about power, merged from five sources:
@@ -65,6 +85,9 @@ nonisolated struct PowerSnapshot {
     /// Distribution of same-named battery gas-gauge sensors, if more than one
     /// exists. A large spread is evidence to inspect, not an automatic outlier.
     let batteryGaugeSummary: BatteryGaugeSummary?
+    let temperatureExclusions: [TemperatureExclusion]
+    let batteryTemperatureReadings: [HIDSensors.Reading]
+    private let batteryMedianTemperature: Double?
 
     let usbInputVoltage: Double?
     let usbInputCurrent: Double?
@@ -80,6 +103,9 @@ nonisolated struct PowerSnapshot {
     /// voltage and current, but those are the negotiated ceiling and do not move
     /// with the draw, so there is no honest input figure to put on the dial.
     let inputWatts: Double?
+    /// Sensed product when contradictory cell power proves it cannot be all input.
+    /// Evidence only: never multiply it to guess a complete high-power reading.
+    let partialInputWatts: Double?
     /// Power crossing into (+) or out of (−) the battery, in watts.
     let batteryWatts: Double?
 
@@ -117,14 +143,30 @@ nonisolated struct PowerSnapshot {
         // over the service list used to do.
         var byName: [String: HIDSensors.Reading] = [:]
         var temperatures: [HIDSensors.Reading] = []
+        var exclusions: [TemperatureExclusion] = []
+        // Build same-rail junction evidence once instead of rescanning all sensors
+        // for every die. A corroborating duplicate must not depend on service order.
+        var junctionByRail: [String: Double] = [:]
+        for reading in sensors where reading.kind == .temperature {
+            if let rail = Self.chargeRail(reading.name, suffix: "j"),
+               HIDSensors.plausibleCelsius.contains(reading.value) {
+                junctionByRail[rail] = max(junctionByRail[rail] ?? reading.value, reading.value)
+            }
+        }
+        let connected = Self.connectionObservation(registry: registry, powerSource: powerSource)
         for reading in sensors {
             if byName[reading.name] == nil { byName[reading.name] = reading }
-            if reading.kind == .temperature,
-               HIDSensors.plausibleCelsius.contains(reading.value) {
+            guard reading.kind == .temperature else { continue }
+            if let reason = Self.temperatureExclusion(
+                reading, junctionByRail: junctionByRail, connected: connected
+            ) {
+                exclusions.append(TemperatureExclusion(reading: reading, reason: reason))
+            } else {
                 temperatures.append(reading)
             }
         }
         self.temperatures = temperatures
+        temperatureExclusions = exclusions
         batteryGaugeSummary = BatteryGaugeSummary(values: temperatures
             .filter { $0.name.localizedCaseInsensitiveCompare("gas gauge battery") == .orderedSame }
             .map(\.value))
@@ -156,15 +198,16 @@ nonisolated struct PowerSnapshot {
         batteryRailVoltage = cellVoltage
         batteryRailCurrent = cellCurrent
 
+        let sensedInputWatts: Double?
         if let voltage = usbVoltage, let current = usbCurrent, voltage > 0.5 {
             // Input rails describe draw magnitude. Some PMU revisions expose the
             // current with the opposite sign, which used to turn charging power
             // negative even though the underlying measurement was valid.
-            inputWatts = voltage * abs(current)
+            sensedInputWatts = voltage * abs(current)
         } else if let voltage = coilVoltage, let current = coilCurrent, voltage > 0.5 {
-            inputWatts = voltage * abs(current)
+            sensedInputWatts = voltage * abs(current)
         } else {
-            inputWatts = nil
+            sensedInputWatts = nil
         }
 
         let registryVoltage = Self.int("Voltage", in: registry).map { Double($0) / 1000 }
@@ -175,6 +218,17 @@ nonisolated struct PowerSnapshot {
             batteryWatts = current * voltage
         } else {
             batteryWatts = nil
+        }
+        // Separate, asynchronously published rails can disagree a little during a
+        // load step. Upstream's margins identify a large contradiction, not a scale.
+        if let input = sensedInputWatts, input.isFinite,
+           let cell = batteryWatts, cell.isFinite,
+           cell > input * 1.2, cell - input > 1.5 {
+            inputWatts = nil
+            partialInputWatts = input
+        } else {
+            inputWatts = sensedInputWatts
+            partialInputWatts = nil
         }
 
         // One pass over the temperature sensors: `SensorCatalog.zone(for:)` lowercases
@@ -195,6 +249,13 @@ nonisolated struct PowerSnapshot {
         }
         zoneHottest = hottestByZone
         hottestSensor = hottestOverall
+        let batteryReadings = (grouped[.battery] ?? []).filter(Self.isLiveTemperature)
+        batteryTemperatureReadings = batteryReadings
+        let median = Self.median(batteryReadings.map(\.value))
+        batteryMedianTemperature = median
+        let registryTemperature = Self.int("Temperature", in: registry)
+            .map { Double($0) / 100 }
+            .flatMap { HIDSensors.plausibleCelsius.contains($0) ? $0 : nil }
         temperaturesByZone = grouped
             .map { zone, readings in
                 ZoneTemperatures(
@@ -208,7 +269,8 @@ nonisolated struct PowerSnapshot {
                         if leftLive != rightLive { return leftLive }
                         return left.value > right.value
                     },
-                    hottest: hottestByZone[zone]?.value
+                    representative: zone == .battery
+                        ? (registryTemperature ?? median) : hottestByZone[zone]?.value
                 )
             }
             .sorted { $0.zone.order < $1.zone.order }
@@ -224,6 +286,10 @@ nonisolated struct PowerSnapshot {
     /// Nil means neither source reported a recognizable connection state. Keep
     /// that separate from a positively observed unplug throughout sampling.
     var externalConnectionObservation: Bool? {
+        Self.connectionObservation(registry: registry, powerSource: powerSource)
+    }
+
+    private static func connectionObservation(registry: [String: Any], powerSource: [String: Any]?) -> Bool? {
         if let connected = Self.optionalBool("ExternalConnected", in: registry) { return connected }
         if let state = powerSource?["Power Source State"] as? String {
             switch state {
@@ -323,7 +389,7 @@ nonisolated struct PowerSnapshot {
         !reading.name.localizedCaseInsensitiveContains("tcal")
     }
 
-    var batteryTemperature: Double? { registryTemperature ?? temperature(in: .battery) }
+    var batteryTemperature: Double? { registryTemperature ?? batteryMedianTemperature }
     var chargerTemperature: Double? { temperature(in: .charger) }
     var socTemperature: Double? { temperature(in: .soc) }
 
@@ -403,13 +469,13 @@ nonisolated struct PowerSnapshot {
     /// was drawing 3.9 W.
     var adapterCeilingWatts: Double? {
         guard let voltage = adapterVoltageMillivolts, let current = adapterCurrentMilliamps,
-              voltage > 0, current > 0 else { return nil }
+              Self.validProfile(voltage: voltage, current: current) else { return nil }
         return Double(voltage) * Double(current) / 1_000_000
     }
 
     /// The adapter's nameplate rating: what it says it can deliver in total.
     var adapterRatedWatts: Double? {
-        if let watts = int("Watts", in: adapter) { return Double(watts) }
+        if let watts = int("Watts", in: adapter), watts > 0, watts != 0xFFFF { return Double(watts) }
         if let profile = negotiatedProfile { return profile.watts }
         return adapterCeilingWatts
     }
@@ -428,7 +494,8 @@ nonisolated struct PowerSnapshot {
         guard let menu = adapter?["UsbHvcMenu"] as? [[String: Any]] else { return [] }
         return menu.compactMap { entry in
             guard let voltage = int("MaxVoltage", in: entry),
-                  let current = int("MaxCurrent", in: entry) else { return nil }
+                  let current = int("MaxCurrent", in: entry),
+                  Self.validProfile(voltage: voltage, current: current) else { return nil }
             return PDProfile(index: int("Index", in: entry) ?? 0,
                              voltageMillivolts: voltage,
                              currentMilliamps: current)
@@ -442,7 +509,8 @@ nonisolated struct PowerSnapshot {
            let profile = adapterProfiles.first(where: { $0.index == active }) {
             return profile
         }
-        if let voltage = adapterVoltageMillivolts, let current = adapterCurrentMilliamps, voltage > 0 {
+        if let voltage = adapterVoltageMillivolts, let current = adapterCurrentMilliamps,
+           Self.validProfile(voltage: voltage, current: current) {
             return PDProfile(index: -1, voltageMillivolts: voltage, currentMilliamps: current)
         }
         return nil
@@ -455,6 +523,48 @@ nonisolated struct PowerSnapshot {
     }
 
     // MARK: - Helpers
+
+    private static func validProfile(voltage: Int, current: Int) -> Bool {
+        voltage > 0 && current > 0 && voltage != 0xFFFF && current != 0xFFFF
+    }
+
+    private static func median(_ values: [Double]) -> Double? {
+        let sorted = values.filter(\.isFinite).sorted()
+        guard !sorted.isEmpty else { return nil }
+        let middle = sorted.count / 2
+        return sorted.count.isMultiple(of: 2)
+            ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle]
+    }
+
+    private static func chargeRail(_ name: String, suffix: Character) -> String? {
+        let name = name.lowercased()
+        guard name.contains("charger"), let prefix = name.range(of: "tq") else { return nil }
+        let tail = name[prefix.upperBound...]
+        let digits = tail.prefix(while: \.isNumber)
+        let rest = tail.dropFirst(digits.count)
+        guard !digits.isEmpty, rest.first == suffix,
+              !(rest.dropFirst().first?.isLetter ?? false) else { return nil }
+        return String(digits)
+    }
+
+    private static func temperatureExclusion(
+        _ reading: HIDSensors.Reading,
+        junctionByRail: [String: Double],
+        connected: Bool?
+    ) -> TemperatureExclusion.Reason? {
+        guard HIDSensors.plausibleCelsius.contains(reading.value) else { return .outsideRange }
+        if reading.value == 0 { return .zero }
+        let name = reading.name.lowercased()
+        if name.contains("tdev"), reading.value < -10 { return .coldDie }
+        if let rail = chargeRail(name, suffix: "d"), reading.value > 85 {
+            // Unknown connection alone must not invent an unplug. Raw evidence
+            // stays available whether or not this provisional rule excludes it.
+            if connected == false || (junctionByRail[rail] ?? -.infinity) < 60 {
+                return .unsupportedHotChargeDie
+            }
+        }
+        return nil
+    }
 
     /// IOKit reports some signed 32-bit values as wrapped unsigned numbers
     /// (a −658 mA discharge arrives as 18446744073709550958).

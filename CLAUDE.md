@@ -242,16 +242,17 @@ against a pack energy the user sets in Settings.
   not only at `hottestSensor`. `temperaturesByZone` used to sort a zone's readings by
   value and hand out `.first`, which made `tcal` the SoC zone's representative: the heat
   map showed a permanently red 52° SoC pin while the "Hottest" readout an inch below it,
-  which did exclude `tcal`, said 44°. `ZoneTemperatures.hottest` is the live-only
-  maximum; `readings` keeps everything, with constants sorted last.
+  which did exclude `tcal`, said 44°. `ZoneTemperatures.representative` is the live-only
+  maximum except for battery (registry or median); `readings` keeps eligible sources,
+  with constants sorted last. Excluded sources remain in `sensors` and warnings.
 - Four separate sensors are all named `gas gauge battery`. `HIDSensors.Reading.id`
   therefore includes the service index — name alone gave `ForEach` duplicate ids.
 - An iPhone 18 Pro Max (`iPhone19,7`, iOS 27) report showed three gas-gauge readings
-  at 38.7 °C and a fourth at 45.9 °C in one snapshot. The battery-area number is
-  still the hottest battery-labelled sensor, not a validated pack average. The
-  Thermal page now exposes the spread and median, and the problem report keeps
-  each indexed raw reading. Do not silently discard the hotter value without
-  paired device evidence.
+  at 38.7 °C and a fourth at 45.9 °C in one snapshot. Following the approved selective
+  v1.5.1 adaptation, the battery representative is now the eligible battery-zone
+  median (registry precedence retained). This is not a validated pack average.
+  The hotter raw source remains visible in the zone list and hottest ranking;
+  the Thermal page exposes spread/median and the report retains each raw index.
 - That same report contained two `Charger VQ0u` and two `IQ0u` readings near
   14.5 V and 1.05–1.08 A at the report time, giving roughly 15 W. It does not
   cover the reported 45 W external-meter phase, so it cannot validate a new
@@ -266,6 +267,23 @@ against a pack energy the user sets in Settings.
 - Enumerating **all** HID services needs `IOHIDEventSystemClientSetMatching(client, NULL)`.
   An empty matching dictionary matches nothing, which made the debug button look dead.
 - `PMU tdie14`–`tdie17` appear in the service list but return NaN; they are skipped.
+
+The selective v1.5.1 scope and validation are in
+`docs/upstream-v1.5.1-adaptation.md`. `partialInputWatts` retains the unscaled input
+product when cell watts exceed it by both 20% and 1.5 W. `inputWatts` is nil then,
+so input integration, ratios and utilisation stop; compact readings explicitly
+fall back to the battery. This detects contradictions, not all missing paths, and
+never reconstructs complete 45 W input. Preserve the personal sign convention and
+unknown-connection semantics. PD placeholder dimensions must not return via the
+negotiated-profile/ceiling fallback after being removed from the menu.
+
+`temperatureExclusions` is indexed raw evidence with typed reasons. The upstream
+zero/tdev/charge-die heuristics are provisional, not calibrated on each model.
+Same-rail junction evidence is indexed once per snapshot (duplicate warm junctions
+are not lost by order). A connection that is unknown alone never counts as unplugged.
+Thermal disclosure and report explain excluded values; never erase them or use
+system thermal pressure to validate a temperature. App/heat map/widget/Activity/PiP
+all consume the same representative battery temperature.
 
 ## Distribution
 

@@ -16,6 +16,12 @@ background-refresh recovery. These modifications are not endorsed or supported b
 the upstream MiniWatts author. The repository commit history identifies the files and
 individual changes in detail.
 
+This personal version selectively adapts sensor interpretation from upstream
+ResistanceTo/MiniWatts v1.5.1, commit 3a27d400b1e180172e78dc46ebe3ae3974254e1a:
+battery representative medians, incomplete-input checks, temperature evidence
+filters and invalid PD-profile rejection. Original attribution and Apache 2.0
+licensing are retained. See docs/upstream-v1.5.1-adaptation.md for local changes.
+
 
 ================================================================================
 ios-charging-monitor (ChargeSpeed) — MIT License

@@ -59,6 +59,12 @@ import Foundation
                                                thermalState: 0)
         let expectedNoRails: String = "t=0.000 charge=false inputW=— batteryW=— shown=— shownSide=battery VQ0u=[—] IQ0u=[—] QQ0u=[—] WQ0u=[—] gaugeC=[—] thermal=0"
         check(noRails.formatted == expectedNoRails, "Missing electrical values changed")
+        let partialInput = ElectricalEvidenceTrace(date: at(0), isCharging: true,
+                                                   inputWatts: nil, batteryWatts: 39.6,
+                                                   shownWatts: 39.6, shownIsBatterySide: true,
+                                                   thermalState: 0, partialInputWatts: 21.8)
+        check(partialInput.formatted.hasSuffix("partialInputW=21.80"),
+              "A partial input product was lost from persisted electrical evidence")
         print("PASS: one-pass electrical capture preserves duplicate indices, signs and unknown rails")
 
         var history: [SampleTimingTrace] = []

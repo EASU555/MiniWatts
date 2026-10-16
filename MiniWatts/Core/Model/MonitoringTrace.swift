@@ -82,6 +82,7 @@ nonisolated struct ElectricalEvidenceTrace: Sendable {
     let shownWatts: Double?
     let shownIsBatterySide: Bool
     let thermalState: Int
+    let partialInputWatts: Double?
     private(set) var voltage: [IndexedValue] = []
     private(set) var current: [IndexedValue] = []
     private(set) var unidentifiedQ: [IndexedValue] = []
@@ -89,7 +90,8 @@ nonisolated struct ElectricalEvidenceTrace: Sendable {
     private(set) var batteryGauge: [IndexedValue] = []
 
     init(date: Date, isCharging: Bool, inputWatts: Double?, batteryWatts: Double?,
-         shownWatts: Double?, shownIsBatterySide: Bool, thermalState: Int) {
+         shownWatts: Double?, shownIsBatterySide: Bool, thermalState: Int,
+         partialInputWatts: Double? = nil) {
         self.date = date
         self.isCharging = isCharging
         self.inputWatts = inputWatts
@@ -97,6 +99,7 @@ nonisolated struct ElectricalEvidenceTrace: Sendable {
         self.shownWatts = shownWatts
         self.shownIsBatterySide = shownIsBatterySide
         self.thermalState = thermalState
+        self.partialInputWatts = partialInputWatts
     }
 
     /// Call once for each sensor in enumeration order. Keep duplicate services,
@@ -122,7 +125,7 @@ nonisolated struct ElectricalEvidenceTrace: Sendable {
         let input: String = inputWatts.map { String(format: "%.2f", $0) } ?? "—"
         let battery: String = batteryWatts.map { String(format: "%.2f", $0) } ?? "—"
         let shown: String = shownWatts.map { String(format: "%.2f", $0) } ?? "—"
-        let fields: [String] = [
+        var fields: [String] = [
             "t=\(MonitoringTrace.epoch(date))",
             "charge=\(isCharging)",
             "inputW=\(input)",
@@ -136,6 +139,9 @@ nonisolated struct ElectricalEvidenceTrace: Sendable {
             "gaugeC=[\(Self.values(batteryGauge))]",
             "thermal=\(thermalState)"
         ]
+        if let partialInputWatts {
+            fields.append("partialInputW=\(String(format: "%.2f", partialInputWatts))")
+        }
         return fields.joined(separator: " ")
     }
 }

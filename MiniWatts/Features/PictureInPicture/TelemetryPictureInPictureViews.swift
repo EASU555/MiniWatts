@@ -370,7 +370,7 @@ struct TelemetryVideoFrameView: View {
         guard data?.externalConnectionObservation != nil else { return "No reading" }
         guard data?.externalConnected == true else { return "Not charging" }
         if data?.powerIsBatterySide == true { return "Into battery" }
-        return data?.isWireless == true ? "From wireless charger" : "From charger"
+        return data?.isWireless == true ? "At charging coil" : "At phone port"
     }
 
     private func formatted(_ value: Double?) -> String {

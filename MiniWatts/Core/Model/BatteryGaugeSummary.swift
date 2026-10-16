@@ -1,8 +1,8 @@
 import Foundation
 
 /// Describes repeated gas-gauge readings without deciding that any one of them
-/// is wrong. The displayed battery-area temperature remains the hottest sensor;
-/// the median and range are evidence for checking a new device model.
+/// is wrong. The displayed battery representative uses a median; the range and
+/// maximum remain evidence for checking a new device model, not deleted outliers.
 nonisolated struct BatteryGaugeSummary: Equatable, Sendable {
     let count: Int
     let minimum: Double

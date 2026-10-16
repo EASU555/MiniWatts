@@ -1,6 +1,266 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Outside the supported Celsius range.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "超出支持的摄氏温度范围。"
+          }
+        }
+      }
+    },
+    "Exactly zero; this may be an inactive sensor.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读数恰好为零，可能是未启用的传感器。"
+          }
+        }
+      }
+    },
+    "PMU tdev below -10 °C; sensor interpretation needs verification.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PMU tdev 低于 −10 °C，需要核实该传感器的含义。"
+          }
+        }
+      }
+    },
+    "High charge-IC die reading without a matching warm junction.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "充电芯片核心读数偏高，但同一路结温未提供相应的升温证据。"
+          }
+        }
+      }
+    },
+    "Incomplete input reading": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "输入功率读数不完整"
+          }
+        }
+      }
+    },
+    "The input sensors account for less power than reaches the cell. The main reading uses battery-side power; complete input power is unavailable, not estimated or doubled.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "输入传感器测得的功率低于进入电芯的功率。主读数将使用电池侧功率；完整输入功率暂不可得，不会通过估算或翻倍补齐。"
+          }
+        }
+      }
+    },
+    "Partial input sensor product": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "输入传感器的部分功率"
+          }
+        }
+      }
+    },
+    "At phone port / coil": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手机接口／线圈处"
+          }
+        }
+      }
+    },
+    "The negotiated rating is a ceiling, not the charger's live display or a wall-meter measurement.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "协商功率是供电上限，不是充电器的实时显示值，也不是插座功率计读数。"
+          }
+        }
+      }
+    },
+    "System thermal pressure may limit charging, but these readings do not identify the exact limiting factor.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统发热压力可能限制充电，但这些读数无法确定具体的限制原因。"
+          }
+        }
+      }
+    },
+    "at phone port": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手机接口处"
+          }
+        }
+      }
+    },
+    "at charging coil": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "充电线圈处"
+          }
+        }
+      }
+    },
+    "At phone port": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手机接口处"
+          }
+        }
+      }
+    },
+    "At charging coil": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "充电线圈处"
+          }
+        }
+      }
+    },
+    "System thermal pressure may affect charging, but it does not identify the charger's exact limit or validate individual temperature sensors.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统发热压力可能影响充电，但不能确定充电器的具体限流原因，也不能验证某个温度传感器是否准确。"
+          }
+        }
+      }
+    },
+    "Battery uses a median of live battery sensors unless the registry provides a temperature. The hottest raw sensor is retained separately. Neither the median nor iOS thermal state validates a sensor's accuracy.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电池代表温度使用实时电池传感器的中位数；若注册表提供温度，则优先使用注册表。最高原始温度会单独保留。中位数和 iOS 发热状态都不能证明传感器准确。"
+          }
+        }
+      }
+    },
+    "Live battery sensor median": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实时电池传感器中位数"
+          }
+        }
+      }
+    },
+    "Representative temperature: registry when available, otherwise the live-sensor median. All eligible sensor readings remain listed below.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "代表温度优先使用注册表读数，否则使用实时传感器中位数。所有参与计算的传感器读数仍逐项列在下方。"
+          }
+        }
+      }
+    },
+    "Temperature interpretation": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度读数说明"
+          }
+        }
+      }
+    },
+    "Readings excluded from summaries": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未参与汇总的读数"
+          }
+        }
+      }
+    },
+    "These provisional filters are not a temperature calibration. Excluded values remain in the report; a lower summary does not prove the device is cool.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这些暂定筛选规则不是温度校准。被排除的原始值仍保留在报告中；汇总温度降低不代表设备一定处于低温。"
+          }
+        }
+      }
+    },
+    "No elevated system thermal pressure.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统未报告发热压力升高。"
+          }
+        }
+      }
+    },
+    "Warming up. iOS may trim performance or charge current.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统发热压力有所升高，iOS 可能调整性能或充电电流。"
+          }
+        }
+      }
+    },
+    "High system thermal pressure. iOS may limit charge current and clocks.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统发热压力较高，iOS 可能限制充电电流和运行频率。"
+          }
+        }
+      }
+    },
+    "Critical thermal pressure. iOS may suspend charging until the phone cools.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统发热压力严重，iOS 可能暂停充电，直到手机降温。"
+          }
+        }
+      }
+    },
+    "Unrecognised system thermal state.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法识别的系统发热状态。"
+          }
+        }
+      }
+    },
     "Finish this charging session before exporting its CSV.": {
       "localizations": {
         "zh-Hans": {

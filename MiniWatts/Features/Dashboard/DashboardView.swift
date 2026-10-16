@@ -209,7 +209,7 @@ struct DashboardView: View {
               trailing: snapshot.adapterUtilisation.map { Text("\(Int($0 * 100))% of adapter") }) {
             VStack(spacing: 12) {
                 HStack(alignment: .top, spacing: 10) {
-                    Metric(caption: "From charger",
+                    Metric(caption: "At phone port / coil",
                            value: snapshot.inputWatts.map(Formatting.watts) ?? "—",
                            unit: "W", tint: .mwAccent, size: 22)
                     Metric(caption: "Into cell",
@@ -231,7 +231,9 @@ struct DashboardView: View {
                    let battery = snapshot.batteryWatts, battery > 0, battery <= input {
                     PowerFlowBar(input: input, toBattery: battery)
                 }
-                if wirelessInputUnmeasurable {
+                if snapshot.partialInputWatts != nil {
+                    InputPowerWarning(snapshot: snapshot)
+                } else if wirelessInputUnmeasurable {
                     EmptyNote(text: "Charging wirelessly. The charge IC exposes the coil's voltage but no current to pair with it, so the power coming in cannot be measured — only what reaches the cell. The figure the charger reports about itself is a ceiling, not a reading, and does not move.",
                               systemImage: "wave.3.right")
                 }

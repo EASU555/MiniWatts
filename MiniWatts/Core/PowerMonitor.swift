@@ -755,8 +755,8 @@ final class PowerMonitor {
                 // reached the catalog and the dial's caption fell back to English on
                 // every wired charge. `Text` and `LocalizedStringResource` literals
                 // want to be at their own return site.
-                if snapshot.isWirelessInput { return (watts, "from MagSafe") }
-                return (watts, "from charger")
+                if snapshot.isWirelessInput { return (watts, "at charging coil") }
+                return (watts, "at phone port")
             }
             // Wireless charging has no input-current sensor — the PMU exposes the
             // coil voltage and nothing to multiply it by — so rather than reading
@@ -878,7 +878,8 @@ final class PowerMonitor {
                                             batteryWatts: sample.batteryWatts,
                                             shownWatts: selected.watts,
                                             shownIsBatterySide: selected.isBatterySide,
-                                            thermalState: thermal.state.rawValue)
+                                            thermalState: thermal.state.rawValue,
+                                            partialInputWatts: sample.partialInputWatts)
         for reading in sample.sensors {
             trace.capture(name: reading.name, index: reading.index, value: reading.value)
         }
@@ -935,7 +936,7 @@ final class PowerMonitor {
             "USB selected: V=\(snapshot.usbInputVoltage.map { String(format: "%.3f", $0) } ?? "—") "
                 + "I=\(snapshot.usbInputCurrent.map { String(format: "%.3f", $0) } ?? "—")",
             "Battery watts: \(snapshot.batteryWatts.map { String(format: "%.3f", $0) } ?? "—")",
-            "Battery gauge: \(gaugeDescription) (display remains hottest battery-labelled sensor)",
+            "Battery gauge: \(gaugeDescription) (display uses registry temperature or live battery-zone median; raw maximum retained)",
             "Thermal state: \(thermal.state.rawValue)",
             "Sampling task: \(task == nil ? "not scheduled" : "scheduled (not proof of execution)")",
             "",
@@ -956,8 +957,17 @@ final class PowerMonitor {
         lines.append(contentsOf: recentActivityUpdates.suffix(45).map { $0.formatted })
         lines.append("")
         lines.append("# Live sensors")
-        lines.append(contentsOf: snapshot.sensors.sorted { $0.name < $1.name }
-            .map { "\($0.name) = \($0.formatted)" })
+        lines.append(contentsOf: snapshot.sensors.sorted { ($0.name, $0.index) < ($1.name, $1.index) }
+            .map { "[\($0.index)] \($0.name) = \($0.formatted)" })
+        lines.append("")
+        lines.append("# Interpretation (heuristics, not calibration)")
+        if let partial = snapshot.partialInputWatts {
+            lines.append("Partial input product: \(String(format: "%.3f", partial)) W; excluded from integration and input-derived values; complete input unknown")
+        }
+        for exclusion in snapshot.temperatureExclusions {
+            let raw = exclusion.reading
+            lines.append("[\(raw.index)] \(raw.name) = \(raw.formatted); exclusion=\(exclusion.reason.rawValue)")
+        }
         // Deliberate allowlist above: raw power-source dictionaries can contain
         // device/accessory identifiers and must not be copied into user reports.
         return lines.joined(separator: "\n")

@@ -3,9 +3,8 @@ import Observation
 
 /// Watches the system's own thermal verdict.
 ///
-/// This is public API, and it is what makes the temperature numbers mean
-/// something: when fast charging drops from 20 W to 10 W a few minutes in, the
-/// reason is usually that iOS moved past `.nominal` and started limiting current.
+/// Public API giving system thermal pressure, not any component's temperature
+/// or a direct measurement of the charging controller's exact limiter.
 @Observable
 final class ThermalMonitor {
     private(set) var state: ProcessInfo.ThermalState = ProcessInfo.processInfo.thermalState
@@ -46,11 +45,11 @@ extension ProcessInfo.ThermalState {
     /// What the state means for charging specifically.
     var chargingEffect: LocalizedStringResource {
         switch self {
-        case .nominal: return "No thermal limit on charge current."
-        case .fair: return "Warming up. Charge current may be trimmed."
-        case .serious: return "Throttling: iOS is limiting charge current and clocks."
-        case .critical: return "Overheated: charging is suspended until the phone cools."
-        @unknown default: return "Unrecognised thermal state."
+        case .nominal: return "No elevated system thermal pressure."
+        case .fair: return "Warming up. iOS may trim performance or charge current."
+        case .serious: return "High system thermal pressure. iOS may limit charge current and clocks."
+        case .critical: return "Critical thermal pressure. iOS may suspend charging until the phone cools."
+        @unknown default: return "Unrecognised system thermal state."
         }
     }
 

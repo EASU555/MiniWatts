@@ -22,12 +22,19 @@ iOS actually displayed a PiP window or Dynamic Island content.
 
 ## Battery temperature
 
-The current number remains the hottest battery-labelled HID sensor. The Thermal
-page shows the gas-gauge range and median when repeated sensors differ by at
-least 3 °C. This is a source warning, not an automatic correction. The iOS
+The current number uses the eligible live battery-zone median (or a registry
+temperature when one is available), following the selective v1.5.1 adaptation.
+The Thermal page shows the gas-gauge range and median when repeated sensors differ
+by at least 3 °C; the hottest raw gauge is still listed and ranked separately.
+The aggregation and provisional exclusions are not a sensor calibration. The iOS
 thermal state is an independent OS verdict, not a conversion of those degrees.
 Mark and export a report while the split is present; each raw sensor retains its
 service-list index so same-named readings stay distinguishable.
+Review the excluded-reading disclosure and report reasons, particularly if a high
+charge-die reading disappears from the summary. A lower summary is not evidence
+that a device has cooled. During a high-power mismatch, a partial input product
+is evidence only; compare the labelled battery-side fallback with the external
+meter without treating those as measurements of the same electrical boundary.
 
 ## PiP and Live Activity coexistence
 
