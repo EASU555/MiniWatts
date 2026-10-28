@@ -37,6 +37,7 @@ nonisolated final class HIDSensors {
         let name: String
         let kind: Kind
         let value: Double
+        var key: String = ""
         /// Position in the service list. Names repeat — an iPhone 17 reports four
         /// separate sensors all called "gas gauge battery" — so the index is what
         /// makes a row identifiable.
@@ -76,6 +77,7 @@ nonisolated final class HIDSensors {
     private struct Service {
         let ref: CFTypeRef
         let name: String
+        let key: String
         let usagePage: Int
         let usage: Int
         let eventType: Int64
@@ -139,6 +141,7 @@ nonisolated final class HIDSensors {
             return Reading(name: service.name,
                            kind: Kind(rawValue: service.usage) ?? .other,
                            value: value,
+                           key: service.key,
                            index: index)
         }
     }
@@ -157,6 +160,12 @@ nonisolated final class HIDSensors {
         return all.sorted { ($0.usagePage, $0.usage, $0.name) < ($1.usagePage, $1.usage, $1.name) }
     }
 
+    static func smcKey(_ location: UInt32) -> String {
+        let bytes = withUnsafeBytes(of: location.bigEndian) { Array($0) }
+        guard location != 0, bytes.allSatisfy({ (0x20...0x7e).contains($0) }) else { return "" }
+        return String(decoding: bytes, as: UTF8.self)
+    }
+
     private func discover(matching: [String: Any]?, eventType: Int64) -> [Service] {
         setMatching(client, matching as CFDictionary?)
         let refs = copyServices(client)?.takeRetainedValue() as? [CFTypeRef] ?? []
@@ -165,8 +174,10 @@ nonisolated final class HIDSensors {
                 (copyProperty(ref, key as CFString)?.takeRetainedValue() as? NSNumber)?.intValue ?? 0
             }
             let name = copyProperty(ref, "Product" as CFString)?.takeRetainedValue() as? String ?? "?"
+            let location = (copyProperty(ref, "LocationID" as CFString)?.takeRetainedValue() as? NSNumber)?.uint32Value ?? 0
             return Service(ref: ref,
                            name: name,
+                           key: Self.smcKey(location),
                            usagePage: number("PrimaryUsagePage"),
                            usage: number("PrimaryUsage"),
                            eventType: eventType)

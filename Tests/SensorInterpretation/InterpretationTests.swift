@@ -31,6 +31,21 @@ import Foundation
     }
 
     static func main() throws {
+        check(HIDSensors.smcKey(0x54473042) == "TG0B", "SMC key decoding changed")
+        check(HIDSensors.smcKey(1).isEmpty, "Invalid location became an SMC key")
+        var level = LevelRateTracker()
+        for second in 0...300 {
+            level.observe(date: Date(timeIntervalSince1970: Double(second)), percent: 50 + second / 60,
+                          watts: 5, charging: true, pack: 21.75)
+        }
+        check(level.result?.isLow == true, "Level/cell comparison did not detect the synthetic shortfall")
+        level.observe(date: Date(timeIntervalSince1970: 400), percent: 56, watts: 10, charging: true, pack: 21.75)
+        check(level.result == nil, "A sampling gap retained the old level comparison")
+        let highProfile = PowerSnapshot(registry: ["ExternalConnected": true],
+                                        adapterDetails: ["Voltage": 15_000, "Current": 3_000])
+        check(highProfile.mayReadHalfInput(model: "iPhone19,7"), "18 Pro high-power caution was absent")
+        check(!highProfile.mayReadHalfInput(model: "iPhone18,2"), "Caution leaked to another model")
+        print("PASS: SMC identity and bounded, continuity-aware level comparison")
         let values = [38.7, 38.7, 38.7, 45.9]
         var gauges = values.enumerated().map { temperature("gas gauge battery", $0.element, $0.offset) }
         gauges.append(temperature("PMU tcal", 51.8, 10))

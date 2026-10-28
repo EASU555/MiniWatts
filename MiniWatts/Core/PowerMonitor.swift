@@ -35,6 +35,8 @@ final class PowerMonitor {
     /// Watts estimated from how fast the percentage moves. The only way to see
     /// discharge power: no discharge-current sensor is exposed to a sandboxed app.
     private(set) var rateEstimateWatts: Double?
+    private(set) var levelRateCheck: LevelRateCheck?
+    @ObservationIgnored private var levelRateTracker = LevelRateTracker()
     private(set) var cpuSampledAt: Date?
     private(set) var cpuIntervalSeconds: TimeInterval?
     private var latestNetworkInterfaceNames: [String] = []
@@ -212,10 +214,21 @@ final class PowerMonitor {
     }
 
     var configuredBatteryWattHours: Double {
-        didSet { UserDefaults.standard.set(configuredBatteryWattHours, forKey: Self.wattHoursKey) }
+        didSet {
+            UserDefaults.standard.set(configuredBatteryWattHours, forKey: Self.wattHoursKey)
+            if configuredBatteryWattHours != oldValue { levelRateTracker.reset(); levelRateCheck = nil }
+        }
     }
 
     var deviceModelIdentifier: String { Self.machineIdentifier }
+    var mayReadHalfInput: Bool { snapshot.mayReadHalfInput(model: Self.machineIdentifier) }
+    var modelBatteryRating: Double? {
+        switch Self.machineIdentifier {
+        case "iPhone19,3", "iPhone19,7": 21.75
+        case "iPhone18,2": 19.7
+        default: nil
+        }
+    }
 
     /// For screen/lifecycle policy only: a failed source read must not release
     /// the screen while the last confirmed observation still had a charger.
@@ -713,6 +726,8 @@ final class PowerMonitor {
     // MARK: Rate estimate
 
     private func breakSampleContinuity() {
+        levelRateTracker.reset()
+        levelRateCheck = nil
         islandTelemetryTracker.breakContinuity()
         energy.breakContinuity()
         if currentSession != nil { sessionNeedsNewSegment = true }
@@ -725,6 +740,12 @@ final class PowerMonitor {
     /// Tracks 1 % transitions and converts the slope into watts. Two transitions
     /// are needed because the first sample lands mid-percent.
     private func updateRateEstimate(_ snapshot: PowerSnapshot) {
+        levelRateTracker.observe(date: snapshot.date, percent: snapshot.percent,
+                                 watts: snapshot.batteryWatts,
+                                 charging: snapshot.externalConnectionObservation == true && snapshot.isCharging,
+                                 pack: batteryWattHours)
+        let check = levelRateTracker.result
+        if check != levelRateCheck { levelRateCheck = check }
         guard snapshot.externalConnectionObservation != nil,
               let percent = snapshot.percent else {
             percentLog.removeAll()
@@ -963,6 +984,8 @@ final class PowerMonitor {
             "USB selected: V=\(snapshot.usbInputVoltage.map { String(format: "%.3f", $0) } ?? "—") "
                 + "I=\(snapshot.usbInputCurrent.map { String(format: "%.3f", $0) } ?? "—")",
             "Battery watts: \(snapshot.batteryWatts.map { String(format: "%.3f", $0) } ?? "—")",
+            "High-power half-reading caution: \(mayReadHalfInput)",
+            "Level/cell check (unvalidated): \(levelRateCheck.map { "ratio=\($0.ratio), levelW=\($0.levelWatts), cellW=\($0.cellWatts), rise=\($0.percentRise)%, span=\($0.seconds)s, pack=\($0.packWattHours)Wh" } ?? "unavailable")",
             "Battery gauge: \(gaugeDescription) (display uses registry temperature or live battery-zone median; raw maximum retained)",
             "Thermal state: \(thermal.state.rawValue)",
             "Sampling task: \(task == nil ? "not scheduled" : "scheduled (not proof of execution)")",
@@ -985,7 +1008,7 @@ final class PowerMonitor {
         lines.append("")
         lines.append("# Live sensors")
         lines.append(contentsOf: snapshot.sensors.sorted { ($0.name, $0.index) < ($1.name, $1.index) }
-            .map { "[\($0.index)] \($0.name) = \($0.formatted)" })
+            .map { "[\($0.index)] \($0.name) key=\($0.key.isEmpty ? "—" : $0.key) = \($0.formatted)" })
         lines.append("")
         lines.append("# Interpretation (heuristics, not calibration)")
         if let partial = snapshot.partialInputWatts {

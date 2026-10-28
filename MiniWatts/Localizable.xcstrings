@@ -1,6 +1,96 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "High-power reading may be incomplete": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高功率充电读数可能不完整"
+          }
+        }
+      }
+    },
+    "On iPhone 18 Pro, both input and battery sensors can read low during high-power wired charging. The complete power is unknown and is not automatically doubled.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone 18 Pro 系列在高功率有线充电时，输入和电池侧传感器都可能偏低。完整功率未知，程序不会自动翻倍。"
+          }
+        }
+      }
+    },
+    "Level comparison suggests the cell reading may be low.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电量核对提示电池侧读数可能偏低。"
+          }
+        }
+      }
+    },
+    "Level comparison is consistent with the cell reading.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电量核对与电池侧读数大致一致。"
+          }
+        }
+      }
+    },
+    "Level comparison is inconclusive.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电量核对结果暂不明确。"
+          }
+        }
+      }
+    },
+    "Level estimate / cell reading": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电量估算 / 电池侧读数"
+          }
+        }
+      }
+    },
+    "This comparison is experimental, takes several minutes and depends on the configured battery energy. It is not a real-time power measurement.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此核对为实验功能，需要数分钟，并受设置中的电池能量影响；它不是实时功率测量。"
+          }
+        }
+      }
+    },
+    "Model reference battery energy": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该机型电池能量参考值"
+          }
+        }
+      }
+    },
+    "Use": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用"
+          }
+        }
+      }
+    },
     "Temperature curves": {
       "localizations": {
         "zh-Hans": {

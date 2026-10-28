@@ -237,6 +237,7 @@ struct DashboardView: View {
                     EmptyNote(text: "Charging wirelessly. The charge IC exposes the coil's voltage but no current to pair with it, so the power coming in cannot be measured — only what reaches the cell. The figure the charger reports about itself is a ceiling, not a reading, and does not move.",
                               systemImage: "wave.3.right")
                 }
+                HighPowerCaution()
             }
         }
     }

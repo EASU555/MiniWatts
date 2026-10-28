@@ -248,7 +248,7 @@ struct ThermalView: View {
                            detail: String(format: "%.1f °C", reading.value),
                            fraction: (reading.value - 20) / 30,
                            tint: .mwTemperature(reading.value),
-                           subtitle: labels.subtitle)
+                           subtitle: reading.key.isEmpty ? labels.subtitle : Text(verbatim: "\(reading.key) · \(reading.name)"))
                 }
             }
         }

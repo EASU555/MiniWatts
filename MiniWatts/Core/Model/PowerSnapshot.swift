@@ -452,6 +452,12 @@ nonisolated struct PowerSnapshot {
     var adapterSerial: String? { adapter?["SerialString"] as? String }
     var adapterIsWireless: Bool { bool("IsWireless", in: adapter) || isWirelessInput }
 
+    /// This is a model/profile caution, not proof that the current sample is half.
+    func mayReadHalfInput(model: String) -> Bool {
+        model.hasPrefix("iPhone19,") && externalConnectionObservation == true
+            && !adapterIsWireless && (negotiatedProfile?.watts ?? 0) > 30
+    }
+
     /// Millivolts the adapter reports. Wired chargers use `Voltage`; the wireless
     /// ones seen so far use `AdapterVoltage`.
     var adapterVoltageMillivolts: Int? {

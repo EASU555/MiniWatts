@@ -94,9 +94,13 @@ nonisolated struct TemperatureHistoryRecorder {
     }
 
     private mutating func trim(at date: Date) {
+        // Remove expired frames in one-minute batches instead of shifting a
+        // near-24-hour array every five seconds. The chart filters its exact range.
         let cutoff = date.addingTimeInterval(-Self.retention)
-        if let count = records.firstIndex(where: { $0.date >= cutoff }), count > 0 { records.removeFirst(count) }
-        else if records.last.map({ $0.date < cutoff }) == true { records.removeAll(keepingCapacity: true) }
+        if records.first.map({ $0.date < cutoff.addingTimeInterval(-60) }) == true {
+            if let count = records.firstIndex(where: { $0.date >= cutoff }), count > 0 { records.removeFirst(count) }
+            else if records.last.map({ $0.date < cutoff }) == true { records.removeAll(keepingCapacity: true) }
+        }
         if records.count > Self.limit { records.removeFirst(records.count - Self.limit) }
     }
 }

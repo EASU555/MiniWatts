@@ -52,7 +52,7 @@ struct AdapterView: View {
                         .foregroundStyle(Color.mwMuted)
                 }
 
-                if let utilisation = snapshot.adapterUtilisation {
+                if !monitor.mayReadHalfInput, let utilisation = snapshot.adapterUtilisation {
                     BarRow(title: Text("Adapter utilisation"),
                            detail: "\(Int(utilisation * 100))%",
                            fraction: utilisation,
@@ -68,12 +68,13 @@ struct AdapterView: View {
                 } else if snapshot.inputWatts == nil, snapshot.adapterIsWireless {
                     EmptyNote(text: "Wireless charging has no input-current sensor, so there is nothing to compare against the rating. The voltage and current below are the profile the pad negotiated — a ceiling that stays put while the actual draw moves.",
                               systemImage: "wave.3.right")
-                } else if let reason = headroomReason {
+                } else if !monitor.mayReadHalfInput, let reason = headroomReason {
                     Text(reason)
                         .font(.caption)
                         .foregroundStyle(Color.mwMuted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                HighPowerCaution()
                 if snapshot.inputWatts != nil {
                     Text("Live input power uses the phone's Charger VQ0u and IQ0u sensors, not the charger's display. Their meaning on a new device model must be checked against raw readings before correcting the number.")
                         .font(.caption2)

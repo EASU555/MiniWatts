@@ -80,6 +80,15 @@ struct SettingsView: View {
                         .labelsHidden()
                         .accessibilityValue(Text("\(capacity.wrappedValue.formatted(.number.precision(.fractionLength(1)))) Wh"))
                 }
+                if let rating = monitor.modelBatteryRating {
+                    HStack {
+                        Text("Model reference battery energy")
+                        Spacer()
+                        Text(verbatim: String(format: "%.2f Wh", rating)).monospacedDigit()
+                        Button("Use") { capacity.wrappedValue = rating }
+                    }
+                    .font(.caption)
+                }
                 Text("Used for discharge estimates, not battery percentage.")
                     .font(.subheadline.weight(.medium))
                     .fixedSize(horizontal: false, vertical: true)
