@@ -40,6 +40,11 @@ struct HighPowerCaution: View {
                     Text("On iPhone 18 Pro, both input and battery sensors can read low during high-power wired charging. The complete power is unknown and is not automatically doubled.")
                 }
                 if let check = monitor.levelRateCheck {
+                    HStack {
+                        Text("Comparison ended")
+                        Spacer()
+                        Text(check.endedAt, format: .dateTime.hour().minute().second())
+                    }.font(.caption2)
                     if check.isLow { Text("Level comparison suggests the cell reading may be low.") }
                     else if check.agrees { Text("Level comparison is consistent with the cell reading.") }
                     else { Text("Level comparison is inconclusive.") }

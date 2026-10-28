@@ -8,6 +8,7 @@ nonisolated struct LevelRateCheck: Sendable, Equatable {
     let percentRise: Int
     let seconds: TimeInterval
     let packWattHours: Double
+    let endedAt: Date
     var ratio: Double { levelWatts / cellWatts }
     var isLow: Bool { ratio >= 1.6 }
     var agrees: Bool { (0.7...1.3).contains(ratio) }
@@ -57,6 +58,7 @@ nonisolated struct LevelRateTracker {
         let cell = measuredEnergy * 3600 / watched
         guard cell >= 1 else { return }
         result = LevelRateCheck(levelWatts: Double(rise) / 100 * pack * 3600 / span,
-                                cellWatts: cell, percentRise: rise, seconds: span, packWattHours: pack)
+                                cellWatts: cell, percentRise: rise, seconds: span, packWattHours: pack,
+                                endedAt: last.date)
     }
 }

@@ -1,6 +1,26 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Comparison ended": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "核对区间结束于"
+          }
+        }
+      }
+    },
+    "Used for discharge estimates and level comparison, not battery percentage.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用于放电估算和电量交叉核对，不用于计算电池电量百分比。"
+          }
+        }
+      }
+    },
     "High-power reading may be incomplete": {
       "localizations": {
         "zh-Hans": {

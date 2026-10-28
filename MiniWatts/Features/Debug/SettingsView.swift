@@ -72,13 +72,13 @@ struct SettingsView: View {
         Panel("Battery energy", systemImage: "battery.100.bolt") {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text(String(format: "%.1f Wh", capacity.wrappedValue))
+                    Text(String(format: "%.2f Wh", capacity.wrappedValue))
                         .mwReadout(size: 26)
                         .foregroundStyle(Color.mwAccent)
                     Spacer()
                     Stepper("Battery energy", value: capacity, in: 5...40, step: 0.1)
                         .labelsHidden()
-                        .accessibilityValue(Text("\(capacity.wrappedValue.formatted(.number.precision(.fractionLength(1)))) Wh"))
+                        .accessibilityValue(Text("\(capacity.wrappedValue.formatted(.number.precision(.fractionLength(2)))) Wh"))
                 }
                 if let rating = monitor.modelBatteryRating {
                     HStack {
@@ -89,7 +89,7 @@ struct SettingsView: View {
                     }
                     .font(.caption)
                 }
-                Text("Used for discharge estimates, not battery percentage.")
+                Text("Used for discharge estimates and level comparison, not battery percentage.")
                     .font(.subheadline.weight(.medium))
                     .fixedSize(horizontal: false, vertical: true)
                 Text("Used only for the %-rate estimate, which is the sole way to see discharge power: no discharge-current sensor is exposed to a sandboxed app. Look up your model's rating — an iPhone 17 Pro Max is about 19.7 Wh — and enter it here.")
