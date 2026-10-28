@@ -150,27 +150,30 @@ struct AppVersionBadge: View {
 /// Shared page chrome: the instrument backdrop behind a scrolling column of panels.
 struct PageScaffold<Content: View>: View {
     let title: LocalizedStringResource
-    var glow: Color = .mwAccent
+    var glow: () -> Color
     var toolbar: AnyView?
     var onScrollingChanged: ((Bool) -> Void)?
+    var isolateContent: Bool
     @ViewBuilder var content: () -> Content
 
     init(_ title: LocalizedStringResource,
-         glow: Color = .mwAccent,
+         glow: @autoclosure @escaping () -> Color = .mwAccent,
          toolbar: AnyView? = nil,
          onScrollingChanged: ((Bool) -> Void)? = nil,
+         isolateContent: Bool = false,
          @ViewBuilder content: @escaping () -> Content) {
         self.title = title
         self.glow = glow
         self.toolbar = toolbar
         self.onScrollingChanged = onScrollingChanged
+        self.isolateContent = isolateContent
         self.content = content
     }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                Backdrop(glow: glow)
+                PageBackdrop(glow: glow)
                 scrollView
             }
             .navigationTitle(title)
@@ -202,7 +205,8 @@ struct PageScaffold<Content: View>: View {
             // History can hold sixty session panels. Keep layout lazy so only
             // visible rows are measured during the one-second sensor tick.
             LazyVStack(spacing: 14) {
-                content()
+                if isolateContent { PageObservedContent(content: content) }
+                else { content() }
             }
             .padding(.horizontal, 16)
             .padding(.top, 4)
@@ -211,6 +215,18 @@ struct PageScaffold<Content: View>: View {
             .containerRelativeFrame(.horizontal)
         }
     }
+}
+
+/// Read changing telemetry inside the visible content and backdrop, rather than
+/// making the outer navigation shell observe every one-second snapshot.
+private struct PageObservedContent<Content: View>: View {
+    let content: () -> Content
+    var body: some View { content() }
+}
+
+private struct PageBackdrop: View {
+    let glow: () -> Color
+    var body: some View { Backdrop(glow: glow()) }
 }
 
 /// Used wherever a probe legitimately has nothing to report.

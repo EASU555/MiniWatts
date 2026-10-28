@@ -15,7 +15,7 @@ struct DashboardView: View {
                      onScrollingChanged: { scrolling in
                          if scrolling { scrollProbe.start() }
                          else { scrollProbe.stop() }
-                     }) {
+                     }, isolateContent: true) {
             heroPanel
             if monitor.thermal.state.isThrottling { throttleBanner }
             batteryPanel
