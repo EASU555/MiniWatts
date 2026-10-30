@@ -72,6 +72,21 @@ struct PowerSnapshot {
               "Earlier Live Activity state no longer decodes")
         check(decoded.telemetry == nil, "Earlier activity acquired invented telemetry")
 
+        // Staleness after suspension is recoverable without disrupting PiP.
+        TestSystem.reset()
+        let staleRecovery = ChargingLiveActivityController()
+        tick(staleRecovery)
+        try? await Task.sleep(for: .milliseconds(100))
+        let staleActivity = Activity<MiniWattsActivityAttributes>.activities.first!
+        staleActivity.setTestState(.stale)
+        staleRecovery.recoverAfterEnteringForeground(snapshot: PowerSnapshot(), leadingItem: .statusIcon,
+                                                    selectedMetric: .chargingPower, minimalMetric: .chargingPower)
+        try? await Task.sleep(for: .milliseconds(150))
+        check(TestSystem.requests == 1 && TestSystem.endings.isEmpty && TestSystem.updates.contains(staleActivity.id),
+              "Stale activity should receive an update without replacement")
+        staleRecovery.endIfNeeded()
+        try? await Task.sleep(for: .milliseconds(100))
+
         // Presentation changes must update the existing activity, without an
         // ActivityKit/PiP restart or a summary from a different sampling tick.
         TestSystem.reset()

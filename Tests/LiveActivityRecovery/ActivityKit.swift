@@ -72,6 +72,11 @@ public final class Activity<A: ActivityAttributes>: @unchecked Sendable {
     public var activityState: ActivityState { lock.withLock { state } }
     public var content: ActivityContent<A.ContentState> { lock.withLock { payload } }
 
+    public func setTestState(_ newState: ActivityState) {
+        lock.withLock { state = newState }
+        continuation.yield(newState)
+    }
+
     private init(content: ActivityContent<A.ContentState>, state: ActivityState) {
         self.payload = content
         self.state = state

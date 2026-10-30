@@ -195,6 +195,7 @@ final class PowerMonitor {
     /// Direct fan-out from the sensor tick. Unlike a SwiftUI `onChange`, this
     /// continues while Picture in Picture keeps the process running off screen.
     @ObservationIgnored var onTick: ((PowerSnapshot) -> Void)?
+    @ObservationIgnored var samplingGapContext: (() -> String)?
     @ObservationIgnored var prepareLiveActivityPresentationForRestart: (@MainActor () async -> Bool)? {
         didSet { liveActivityController.preparePresentationForRestart = prepareLiveActivityPresentationForRestart }
     }
@@ -884,6 +885,9 @@ final class PowerMonitor {
         if let gap, gap > 2.5 {
             appendDiagnosticEvent("sampling gap=\(String(format: "%.2f", gap))s "
                 + "probeMs=\(String(format: "%.0f", raw.elapsedMilliseconds))")
+            if gap > 30, let context = samplingGapContext?() {
+                ProblemReportRecorder.shared.record("coexistence", "sampling resumed after \(String(format: "%.1f", gap))s; \(context)")
+            }
         }
         if let cpuInterval = raw.cpuIntervalSeconds, cpuInterval > 5 {
             appendDiagnosticEvent("CPU window reset after \(String(format: "%.2f", cpuInterval))s gap")

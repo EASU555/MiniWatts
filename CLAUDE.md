@@ -67,7 +67,9 @@ by several entries.
   twelve-second release deadline. Explicit restarts temporarily release PiP first,
   wait for a replacement to become active, then restore the window and its hidden
   state. `RootView` supplies those AVKit hooks; automatic foreground reconciliation
-  does not interrupt PiP. ActivityKit acceptance is not proof of island visibility.
+  does not interrupt PiP. A stale activity is updated in place unless an update
+  actually timed out; that timeout still uses the existing recovery path.
+  ActivityKit acceptance is not proof of island visibility.
 - `Features/PictureInPicture/` — converts the current snapshot to a 640×360 SwiftUI
   instrument frame, then enqueues it on `AVSampleBufferDisplayLayer` for a user-started
   `AVPictureInPictureController`. Power and temperatures are independently selectable;
@@ -77,7 +79,11 @@ by several entries.
   active state as well as its delegate callbacks. When PiP disappears unexpectedly,
   restore the hidden 0.1 pt carrier to visible size and recreate the VideoCall
   source before the next start. The dashboard has a reset-and-reopen action for a
-  transition that remains wedged despite automatic reconciliation.
+  transition that remains wedged despite automatic reconciliation. If a coordinated
+  activity restart cannot restore PiP off-screen, preserve the resume/hidden intent
+  and retry once upon a foreground return; an explicit stop cancels that intent.
+  Sampling-gap reports include the observed PiP and app state on resumption, which
+  does not prove why the process stopped receiving execution time.
 - `Design/` — palette (`Color.mw(light:dark:)`, no asset catalog entries), `Panel`/
   `Metric`/`Pill`/`BarRow`, `PowerRing`, Swift Charts wrappers, `PhoneHeatMap`.
 - `Features/` — one folder per tab, plus Settings. `DebugView` (Raw data) is

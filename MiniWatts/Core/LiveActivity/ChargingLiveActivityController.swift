@@ -348,13 +348,14 @@ final class ChargingLiveActivityController {
         let needsReplacement: Bool
         if let activity {
             switch activity.activityState {
-            case .active:
-                needsReplacement = needsForegroundRecovery || Date.now.timeIntervalSince(lastSuccessfulUpdateAt)
-                    >= Self.staleInterval
+            case .active, .stale:
+                // A long sampling gap makes the presentation stale, but does not
+                // itself mean ActivityKit is broken. Reuse it with the next sample.
+                needsReplacement = needsForegroundRecovery
             case .pending:
                 needsReplacement = needsForegroundRecovery || Date.now.timeIntervalSince(lastRequestAt)
                     >= Self.operationTimeoutSeconds
-            case .stale, .ended, .dismissed:
+            case .ended, .dismissed:
                 needsReplacement = true
             @unknown default:
                 needsReplacement = true

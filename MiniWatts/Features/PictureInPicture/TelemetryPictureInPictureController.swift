@@ -173,7 +173,7 @@ final class TelemetryPictureInPictureController: NSObject {
             + "stopping=\(isStopping) possible=\(isPossible) hidden=\(isVisuallyHidden) "
             + "systemActive=\(pictureInPictureController?.isPictureInPictureActive.description ?? "none") "
             + "systemSuspended=\(pictureInPictureController?.isPictureInPictureSuspended.description ?? "none") "
-            + "activityRepair=\(activityRecoveryResume != nil) "
+            + "activityRepair=\(activityRecoveryResume != nil) resumePending=\(resumeAfterActivityRecoveryPending) "
             + "power=\(showPower) temperatures=\(showTemperatures) "
             + "layout=\(layout.rawValue) component=\(temperatureSelection.rawValue) "
             + "lastFrameSample=\(latestData?.date.timeIntervalSince1970.description ?? "none") "
@@ -416,12 +416,22 @@ final class TelemetryPictureInPictureController: NSObject {
             } else {
                 failStartAttempt(startAttempt, message: "Picture in Picture could not start.")
             }
+            retryActivityRecoveryInForeground()
             return
         }
 
         if isActive, pictureInPictureController?.isPictureInPictureActive != true {
             recoverUnexpectedStop()
         }
+        retryActivityRecoveryInForeground()
+    }
+
+    private func retryActivityRecoveryInForeground() {
+        guard resumeAfterActivityRecoveryPending, activityRecoveryResume == nil,
+              !isActive, !isStarting, !isStopping else { return }
+        recordState("activity recovery: retrying PiP after foreground return")
+        isRestoringPresentation = true
+        scheduleDeferredStart()
     }
 
     /// In-place escape hatch for an AVKit transition that stopped sending
@@ -464,6 +474,11 @@ final class TelemetryPictureInPictureController: NSObject {
                   self.deferredStartGeneration == generation else { return }
             self.isRestoringPresentation = false
             guard !self.keepsSensorSamplingActive else { return }
+            if self.resumeAfterActivityRecoveryPending,
+               UIApplication.shared.applicationState != .active {
+                self.recordState("activity recovery: PiP restart deferred until foreground")
+                return
+            }
             self.start()
         }
     }
@@ -627,6 +642,8 @@ final class TelemetryPictureInPictureController: NSObject {
             try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try session.setActive(true)
         } catch {
+            let failure = error as NSError
+            recordState("audio retry error domain=\(failure.domain) code=\(failure.code) appState=\(UIApplication.shared.applicationState)")
             failStartAttempt(attempt, message: "Picture in Picture audio mode could not start.")
             return
         }

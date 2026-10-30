@@ -31,6 +31,9 @@ struct RootView: View {
                 .allowsHitTesting(false)
         }
         .task {
+            monitor.samplingGapContext = { [weak pictureInPicture] in
+                "appState=\(UIApplication.shared.applicationState) pip=[\(pictureInPicture?.diagnosticSummary ?? "none")]"
+            }
             monitor.prepareLiveActivityPresentationForRestart = { [weak pictureInPicture] in
                 await pictureInPicture?.prepareForLiveActivityRecovery() ?? true
             }
