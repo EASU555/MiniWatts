@@ -216,7 +216,13 @@ jobs:
             xcrun simctl install "$device" "$app"
             xcrun simctl launch "$device" org.zhaohe.MiniWatts -AppleLanguages '(zh-Hans)' -AppleLocale zh_CN
             sleep 8
-            xcrun simctl io "$device" screenshot "build/layout-previews/$label.png"
+            if [ "$label" = duo ]; then
+              xcrun simctl io "$device" screenshot --display=1 build/layout-previews/duo-outer.png
+              xcrun simctl io "$device" screenshot --display=3 build/layout-previews/duo-inner.png || \
+                echo "Duo inner display is not active in this simulator pose"
+            else
+              xcrun simctl io "$device" screenshot "build/layout-previews/$label.png"
+            fi
             xcrun simctl shutdown "$device"
           done
       - name: Upload simulator previews
