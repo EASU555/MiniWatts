@@ -1,6 +1,31 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Dynamic Island color levels": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "灵动岛颜色分级" } }
+      }
+    },
+    "Temperature colors follow iOS system thermal state: green for nominal or fair, yellow for serious, red for critical. These are not temperature limits; a hot component can still appear green if iOS reports normal.": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "温度颜色依据 iOS 系统发热状态：正常或轻微为绿色，严重为黄色，危急为红色。这不是部件温度阈值；即使部件温度较高，系统状态正常时仍可能显示绿色。" } }
+      }
+    },
+    "Power: green below 15 W, yellow from 15 to below 30 W, red from 30 W. Both adapter and battery-side readings use the same bands.": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "功率：小于 15 W 为绿色，15 W 至不足 30 W 为黄色，30 W 及以上为红色。充电器功率和电芯功率使用相同分级。" } }
+      }
+    },
+    "Upload and download: green below 1 MB/s, yellow from 1 to below 10 MB/s, red from 10 MB/s. Power and network colors show magnitude, not a fault or safety warning.": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "上传和下载：小于 1 MB/s 为绿色，1 至不足 10 MB/s 为黄色，10 MB/s 及以上为红色。功率和网速的颜色仅表示数值大小，并不表示故障或危险。" } }
+      }
+    },
+    "Unavailable or paused data is gray. Colors update with the sampled reading and may stop updating in the background.": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无读数或数据暂停时显示灰色。颜色随采样更新，后台采样可能暂停。" } }
+      }
+    },
     "Comparison ended": {
       "localizations": {
         "zh-Hans": {

@@ -37,6 +37,38 @@ import Foundation
     }
 
     static func main() throws {
+        check(IslandColorLevel.thermal(.nominal) == .green && IslandColorLevel.thermal(.fair) == .green,
+              "Normal and slightly elevated iOS states should be green")
+        check(IslandColorLevel.thermal(.serious) == .yellow && IslandColorLevel.thermal(.critical) == .red,
+              "Serious and critical iOS states need different colors")
+        check(IslandColorLevel.classify(metric: .batteryTemperature, value: 50, thermalPressure: .nominal) == .green,
+              "Temperature color must follow the system state, not an invented Celsius threshold")
+        check(IslandColorLevel.classify(metric: .socTemperature, value: 30, thermalPressure: .critical) == .red,
+              "Temperature color did not reflect critical system state")
+        check(IslandColorLevel.classify(metric: .batteryTemperature, value: nil, thermalPressure: .nominal) == .unavailable &&
+              IslandColorLevel.classify(metric: .batteryTemperature, value: 35, thermalPressure: nil) == .unavailable,
+              "Missing temperature or system state appeared healthy")
+        for metric in [LiveActivityMetric.chargingPower, .batteryChargingPower] {
+            for (value, level) in [(0.0, IslandColorLevel.green), (14.999, .green), (15, .yellow),
+                                   (29.999, .yellow), (30, .red)] {
+                check(IslandColorLevel.classify(metric: metric, value: value, thermalPressure: nil) == level,
+                      "Unexpected power color boundary")
+            }
+        }
+        for metric in [LiveActivityMetric.downloadSpeed, .uploadSpeed] {
+            for (value, level) in [(0.0, IslandColorLevel.green), (999_999, .green), (1_000_000, .yellow),
+                                   (9_999_999, .yellow), (10_000_000, .red)] {
+                check(IslandColorLevel.classify(metric: metric, value: value, thermalPressure: nil) == level,
+                      "Unexpected network color boundary")
+            }
+            check(IslandColorLevel.classify(metric: metric, value: .nan, thermalPressure: nil) == .unavailable &&
+                  IslandColorLevel.classify(metric: metric, value: -1, thermalPressure: nil) == .unavailable,
+                  "Invalid traffic should not acquire a color")
+        }
+        check(IslandColorLevel.classify(metric: .cpuUsage, value: 80, thermalPressure: .critical) == nil,
+              "Unrelated metrics must keep their existing appearance")
+        print("PASS: island color bands, system thermal semantics, missing values and boundaries")
+
         var warming = TemperatureTrendWindow()
         for second in 0..<60 {
             check(warming.add(date: date(Double(second)), value: 30 + Double(second) / 100,

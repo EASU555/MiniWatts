@@ -175,6 +175,42 @@ nonisolated enum IslandThermalPressure: Int, Codable, Hashable, Sendable {
     }
 }
 
+/// Three visual bands for the island. System thermal pressure is not a
+/// temperature threshold; numeric power/rate bands only describe magnitude.
+nonisolated enum IslandColorLevel: Equatable, Sendable {
+    case green, yellow, red, unavailable
+
+    static func thermal(_ pressure: IslandThermalPressure?) -> Self {
+        switch pressure {
+        case .nominal, .fair: .green
+        case .serious: .yellow
+        case .critical: .red
+        case nil: .unavailable
+        }
+    }
+
+    /// Nil means this metric retains its existing appearance. Missing or invalid
+    /// values never get a healthy-looking color.
+    static func classify(metric: LiveActivityMetric, value: Double?,
+                         thermalPressure: IslandThermalPressure?) -> Self? {
+        if metric == .thermalPressure { return thermal(thermalPressure) }
+        if metric.isTemperature {
+            guard let value, value.isFinite else { return .unavailable }
+            return thermal(thermalPressure)
+        }
+        switch metric {
+        case .chargingPower, .batteryChargingPower:
+            guard let value, value.isFinite, value >= 0 else { return .unavailable }
+            return value < 15 ? .green : value < 30 ? .yellow : .red
+        case .downloadSpeed, .uploadSpeed:
+            guard let value, value.isFinite, value >= 0 else { return .unavailable }
+            return value < 1_000_000 ? .green : value < 10_000_000 ? .yellow : .red
+        default:
+            return nil
+        }
+    }
+}
+
 /// Optional additions keep previously persisted ActivityKit payloads decodable.
 /// Slopes are Celsius per minute over continuous, source-stable observations.
 /// No history arrays, raw dictionaries or inferred adapter watts cross this boundary.

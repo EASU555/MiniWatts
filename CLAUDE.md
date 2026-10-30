@@ -70,6 +70,9 @@ by several entries.
   does not interrupt PiP. A stale activity is updated in place unless an update
   actually timed out; that timeout still uses the existing recovery path.
   ActivityKit acceptance is not proof of island visibility.
+  Island temperature colors use iOS system thermal state (nominal/fair green,
+  serious yellow, critical red), not sensor-specific Celsius limits. Power and
+  network colors are magnitude bands, not health alarms; nil or stale data is gray.
 - `Features/PictureInPicture/` — converts the current snapshot to a 640×360 SwiftUI
   instrument frame, then enqueues it on `AVSampleBufferDisplayLayer` for a user-started
   `AVPictureInPictureController`. Power and temperatures are independently selectable;

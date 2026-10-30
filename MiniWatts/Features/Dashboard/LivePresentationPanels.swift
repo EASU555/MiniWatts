@@ -128,6 +128,17 @@ struct LiveActivityControlPanel: View {
                     }
                 }
             }
+            DisclosureGroup("Dynamic Island color levels") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Temperature colors follow iOS system thermal state: green for nominal or fair, yellow for serious, red for critical. These are not temperature limits; a hot component can still appear green if iOS reports normal.")
+                    Text("Power: green below 15 W, yellow from 15 to below 30 W, red from 30 W. Both adapter and battery-side readings use the same bands.")
+                    Text("Upload and download: green below 1 MB/s, yellow from 1 to below 10 MB/s, red from 10 MB/s. Power and network colors show magnitude, not a fault or safety warning.")
+                    Text("Unavailable or paused data is gray. Colors update with the sampled reading and may stop updating in the background.")
+                }
+                .font(.caption).foregroundStyle(Color.mwMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
+            }
             Toggle("Show temperature trends", isOn: $monitor.liveActivityShowsTemperatureTrend)
                 .tint(.mwAccent)
             Text("Trends need at least one minute of continuous readings from the same source. Arrows show warming, cooling or stable; expand the island for °C/min. This is a sensor trend, not a temperature accuracy check.")

@@ -47,7 +47,7 @@ struct MiniWattsChargingLiveActivity: Widget {
 
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 4) {
-                        ExpandedMetricStrip(state: context.state)
+                        ExpandedMetricStrip(state: context.state, isStale: context.isStale)
                         TelemetryDetails(state: context.state, isStale: context.isStale)
                     }
                         .padding(.top, 4)
@@ -103,7 +103,7 @@ struct MiniWattsChargingLiveActivity: Widget {
                         .accessibilityValue(Text("No reading"))
                 }
             }
-            .keylineTint(color(for: context.state.minimalMetric ?? context.state.selectedMetric, state: context.state))
+            .keylineTint(context.isStale ? .secondary : color(for: context.state.minimalMetric ?? context.state.selectedMetric, state: context.state))
         }
     }
 }
@@ -140,7 +140,7 @@ private struct ChargeLockScreenView: View {
             HStack(alignment: .center, spacing: 16) {
                 PrimaryMetricView(state: context.state, isStale: context.isStale)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                ExpandedMetricStrip(state: context.state)
+                ExpandedMetricStrip(state: context.state, isStale: context.isStale)
                     .frame(maxWidth: .infinity)
             }
             TelemetryDetails(state: context.state, isStale: context.isStale)
@@ -300,13 +300,14 @@ private struct TelemetryDetails: View {
 
 private struct ExpandedMetricStrip: View {
     let state: MiniWattsActivityAttributes.ContentState
+    let isStale: Bool
 
     var body: some View {
         HStack(spacing: 8) {
-            SmallMetric(metric: .chargingPower, state: state)
-            SmallMetric(metric: .socTemperature, state: state)
-            SmallMetric(metric: .batteryTemperature, state: state)
-            SmallMetric(metric: .hottestTemperature, state: state)
+            SmallMetric(metric: .chargingPower, state: state, isStale: isStale)
+            SmallMetric(metric: .socTemperature, state: state, isStale: isStale)
+            SmallMetric(metric: .batteryTemperature, state: state, isStale: isStale)
+            SmallMetric(metric: .hottestTemperature, state: state, isStale: isStale)
         }
     }
 }
@@ -314,12 +315,13 @@ private struct ExpandedMetricStrip: View {
 private struct SmallMetric: View {
     let metric: LiveActivityMetric
     let state: MiniWattsActivityAttributes.ContentState
+    let isStale: Bool
 
     var body: some View {
         VStack(spacing: 4) {
             Image(systemName: symbol(for: metric))
                 .font(.caption2)
-                .foregroundStyle(color(for: metric, state: state))
+                .foregroundStyle(isStale ? Color.secondary : color(for: metric, state: state))
             Text(shortLabel(for: metric))
                 .font(.system(.caption2, design: .rounded, weight: .medium))
                 .foregroundStyle(.secondary)
@@ -328,6 +330,7 @@ private struct SmallMetric: View {
             Text(verbatim: shortValue(for: metric, state: state))
                 .font(.system(.caption, design: .rounded, weight: .bold))
                 .monospacedDigit()
+                .foregroundStyle(isStale ? Color.secondary : color(for: metric, state: state))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
         }
@@ -453,20 +456,14 @@ private func symbol(for metric: LiveActivityMetric) -> String {
 
 private func color(for metric: LiveActivityMetric,
                    state: MiniWattsActivityAttributes.ContentState) -> Color {
-    if metric == .thermalPressure {
-        return state.telemetry?.thermalPressure.map(pressureColor) ?? .secondary
+    if let level = IslandColorLevel.classify(metric: metric, value: numericValue(for: metric, state: state),
+                                              thermalPressure: state.telemetry?.thermalPressure) {
+        return level.color
     }
     return switch metric {
-    case .chargingPower: .yellow
-    case .socTemperature: .orange
-    case .batteryTemperature: .green
-    case .hottestTemperature: .red
     case .cpuUsage: .cyan
-    case .downloadSpeed: .cyan
-    case .uploadSpeed: .mint
-    case .batteryChargingPower, .chargeGainPercent: .green
-    case .thermalPressure, .chargerTemperature: .orange
-    case .wirelessCoilTemperature: .yellow
+    case .chargeGainPercent: .green
+    default: .secondary
     }
 }
 
@@ -516,11 +513,17 @@ private func pressureSymbol(_ pressure: IslandThermalPressure) -> String {
 }
 
 private func pressureColor(_ pressure: IslandThermalPressure) -> Color {
-    switch pressure {
-    case .nominal: .green
-    case .fair: .yellow
-    case .serious: .orange
-    case .critical: .red
+    IslandColorLevel.thermal(pressure).color
+}
+
+private extension IslandColorLevel {
+    var color: Color {
+        switch self {
+        case .green: .green
+        case .yellow: .yellow
+        case .red: .red
+        case .unavailable: .secondary
+        }
     }
 }
 
