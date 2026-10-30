@@ -27,6 +27,10 @@ import struct
 from pathlib import Path
 
 icon_dir = Path("MiniWatts/Assets.xcassets/AppIcon.appiconset")
+# A same-named Icon Composer document takes precedence over this asset catalog.
+# Reject it so the packaged Home Screen icon cannot silently revert to an old design.
+if Path("MiniWatts/AppIcon.icon").exists():
+    raise SystemExit("AppIcon.icon overrides the AppIcon asset catalog")
 icon_manifest = json.loads((icon_dir / "Contents.json").read_text(encoding="utf-8"))
 primary = next((entry for entry in icon_manifest["images"]
                 if entry.get("idiom") == "universal" and not entry.get("appearances")), None)
