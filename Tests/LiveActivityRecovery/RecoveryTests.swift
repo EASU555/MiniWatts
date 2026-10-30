@@ -149,7 +149,13 @@ struct PowerSnapshot {
                               selectedMetric: .batteryTemperatureRate, minimalMetric: .sampleAge,
                               enabled: true, forceUpdate: true)
         preferences.restartAfterDisplayPreferenceChange()
-        try? await Task.sleep(for: .seconds(2))
+        // ActivityKit hand-off and PiP restoration are asynchronous. Wait for
+        // the observed end state instead of assuming a loaded CI runner will
+        // finish both in a fixed two-second wall-clock interval.
+        for _ in 0..<80 {
+            if TestSystem.requests >= 2 && restorations >= 1 { break }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
         let selected = Activity<MiniWattsActivityAttributes>.activities.first?.content.state
         check(TestSystem.requests == 2 && TestSystem.endings.count == 1,
               "Rapid preference changes were not combined into one restart")
@@ -173,17 +179,28 @@ struct PowerSnapshot {
 
         TestSystem.reset()
         let deferredPreference = ChargingLiveActivityController()
+        var recordedDeferredRecovery = false
+        deferredPreference.onDiagnostic = { message in
+            if message.contains("Recovery deferred until foreground") { recordedDeferredRecovery = true }
+        }
         tick(deferredPreference)
         try? await Task.sleep(for: .milliseconds(100))
         deferredPreference.restartAfterDisplayPreferenceChange()
         UIApplication.shared.applicationState = .background
-        try? await Task.sleep(for: .seconds(1))
+        for _ in 0..<80 {
+            if recordedDeferredRecovery { break }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        check(recordedDeferredRecovery, "Background preference change did not record deferred recovery")
         check(TestSystem.requests == 1 && TestSystem.endings.isEmpty,
               "A background preference restart destroyed the visible activity")
         UIApplication.shared.applicationState = .active
         deferredPreference.recoverAfterEnteringForeground(snapshot: PowerSnapshot(), leadingItem: .statusIcon,
                                                           selectedMetric: .chargingPower, minimalMetric: .chargingPower)
-        try? await Task.sleep(for: .seconds(2))
+        for _ in 0..<80 {
+            if TestSystem.requests >= 2 { break }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
         check(TestSystem.requests == 2, "Deferred preference restart did not resume in the foreground")
         deferredPreference.endIfNeeded()
         try? await Task.sleep(for: .milliseconds(300))
