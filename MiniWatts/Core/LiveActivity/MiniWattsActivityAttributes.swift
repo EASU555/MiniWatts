@@ -16,6 +16,9 @@ nonisolated enum LiveActivityMetric: String, Codable, CaseIterable, Identifiable
     case thermalPressure
     case chargerTemperature
     case wirelessCoilTemperature
+    case sampleAge, connectionDuration, batteryTemperaturePeak
+    case batteryTemperatureRate, socTemperatureRate, hottestTemperatureRate
+    case chargerTemperatureRate, wirelessCoilTemperatureRate
 
     var id: Self { self }
 
@@ -33,6 +36,14 @@ nonisolated enum LiveActivityMetric: String, Codable, CaseIterable, Identifiable
         case .thermalPressure: "System thermal pressure"
         case .chargerTemperature: "Charge IC temperature"
         case .wirelessCoilTemperature: "Wireless coil temperature"
+        case .sampleAge: "Time since last sample"
+        case .connectionDuration: "Connected duration"
+        case .batteryTemperaturePeak: "Battery peak this run"
+        case .batteryTemperatureRate: "Battery temperature change rate"
+        case .socTemperatureRate: "SoC temperature change rate"
+        case .hottestTemperatureRate: "Hottest temperature change rate"
+        case .chargerTemperatureRate: "Charge IC temperature change rate"
+        case .wirelessCoilTemperatureRate: "Wireless coil temperature change rate"
         }
     }
 
@@ -41,6 +52,18 @@ nonisolated enum LiveActivityMetric: String, Codable, CaseIterable, Identifiable
         case .socTemperature, .batteryTemperature, .hottestTemperature,
              .chargerTemperature, .wirelessCoilTemperature: true
         default: false
+        }
+    }
+
+    /// The trend's source remains separate from the arrow display preference.
+    var temperatureRateSource: LiveActivityMetric? {
+        switch self {
+        case .batteryTemperatureRate: .batteryTemperature
+        case .socTemperatureRate: .socTemperature
+        case .hottestTemperatureRate: .hottestTemperature
+        case .chargerTemperatureRate: .chargerTemperature
+        case .wirelessCoilTemperatureRate: .wirelessCoilTemperature
+        default: nil
         }
     }
 }
@@ -61,6 +84,9 @@ nonisolated enum LiveActivityMinimalSelection: String, CaseIterable, Identifiabl
     case thermalPressure
     case chargerTemperature
     case wirelessCoilTemperature
+    case sampleAge, connectionDuration, batteryTemperaturePeak
+    case batteryTemperatureRate, socTemperatureRate, hottestTemperatureRate
+    case chargerTemperatureRate, wirelessCoilTemperatureRate
 
     var id: Self { self }
 
@@ -79,6 +105,14 @@ nonisolated enum LiveActivityMinimalSelection: String, CaseIterable, Identifiabl
         case .thermalPressure: .thermalPressure
         case .chargerTemperature: .chargerTemperature
         case .wirelessCoilTemperature: .wirelessCoilTemperature
+        case .sampleAge: .sampleAge
+        case .connectionDuration: .connectionDuration
+        case .batteryTemperaturePeak: .batteryTemperaturePeak
+        case .batteryTemperatureRate: .batteryTemperatureRate
+        case .socTemperatureRate: .socTemperatureRate
+        case .hottestTemperatureRate: .hottestTemperatureRate
+        case .chargerTemperatureRate: .chargerTemperatureRate
+        case .wirelessCoilTemperatureRate: .wirelessCoilTemperatureRate
         }
     }
 
@@ -110,6 +144,9 @@ nonisolated enum LiveActivityLeadingItem: String, Codable, CaseIterable, Identif
     case thermalPressure
     case chargerTemperature
     case wirelessCoilTemperature
+    case sampleAge, connectionDuration, batteryTemperaturePeak
+    case batteryTemperatureRate, socTemperatureRate, hottestTemperatureRate
+    case chargerTemperatureRate, wirelessCoilTemperatureRate
 
     var id: Self { self }
 
@@ -129,6 +166,14 @@ nonisolated enum LiveActivityLeadingItem: String, Codable, CaseIterable, Identif
         case .thermalPressure: .thermalPressure
         case .chargerTemperature: .chargerTemperature
         case .wirelessCoilTemperature: .wirelessCoilTemperature
+        case .sampleAge: .sampleAge
+        case .connectionDuration: .connectionDuration
+        case .batteryTemperaturePeak: .batteryTemperaturePeak
+        case .batteryTemperatureRate: .batteryTemperatureRate
+        case .socTemperatureRate: .socTemperatureRate
+        case .hottestTemperatureRate: .hottestTemperatureRate
+        case .chargerTemperatureRate: .chargerTemperatureRate
+        case .wirelessCoilTemperatureRate: .wirelessCoilTemperatureRate
         }
     }
 
@@ -143,7 +188,10 @@ nonisolated enum LiveActivityLeadingItem: String, Codable, CaseIterable, Identif
         case .statusIcon, .chargingPower, .socTemperature,
              .batteryTemperature, .hottestTemperature, .cpuUsage,
              .downloadSpeed, .uploadSpeed, .batteryChargingPower, .chargeGainPercent,
-             .thermalPressure, .chargerTemperature, .wirelessCoilTemperature: nil
+             .thermalPressure, .chargerTemperature, .wirelessCoilTemperature,
+             .sampleAge, .connectionDuration, .batteryTemperaturePeak,
+             .batteryTemperatureRate, .socTemperatureRate, .hottestTemperatureRate,
+             .chargerTemperatureRate, .wirelessCoilTemperatureRate: nil
         }
     }
 
@@ -194,7 +242,7 @@ nonisolated enum IslandColorLevel: Equatable, Sendable {
     static func classify(metric: LiveActivityMetric, value: Double?,
                          thermalPressure: IslandThermalPressure?) -> Self? {
         if metric == .thermalPressure { return thermal(thermalPressure) }
-        if metric.isTemperature {
+        if metric.isTemperature || metric == .batteryTemperaturePeak || metric.temperatureRateSource != nil {
             guard let value, value.isFinite else { return .unavailable }
             return thermal(thermalPressure)
         }
@@ -226,6 +274,14 @@ nonisolated struct LiveActivityTelemetry: Codable, Hashable, Sendable {
     var chargeStartedAt: Date?
     var temperatureRates: [String: Double]?
     var showsTemperatureTrend: Bool?
+    /// Highest battery reading observed during this app process; gaps are unknown.
+    var batteryTemperaturePeak: Double?
+
+    func numericRate(for metric: LiveActivityMetric) -> Double? {
+        guard let source = metric.temperatureRateSource,
+              let rate = temperatureRates?[source.rawValue], rate.isFinite, abs(rate) <= 1_000 else { return nil }
+        return rate
+    }
 
     func trendRate(for metric: LiveActivityMetric) -> Double? {
         guard showsTemperatureTrend == true, metric.isTemperature,
@@ -274,6 +330,20 @@ nonisolated struct MiniWattsActivityAttributes: ActivityAttributes {
         let minimalMetric: LiveActivityMetric?
         let isWireless: Bool
         var telemetry: LiveActivityTelemetry? = nil
+
+        /// Origins for system-rendered elapsed timers. A missing or unknown
+        /// charger must not be presented as an ongoing connected session.
+        func timerOrigin(for metric: LiveActivityMetric) -> Date? {
+            guard let sample = sampledAt, sample.timeIntervalSince1970.isFinite else { return nil }
+            switch metric {
+            case .sampleAge: return sample
+            case .connectionDuration:
+                guard externalConnected == true, let start = telemetry?.chargeStartedAt,
+                      start.timeIntervalSince1970.isFinite, start <= sample else { return nil }
+                return start
+            default: return nil
+            }
+        }
     }
 
     let startedAt: Date

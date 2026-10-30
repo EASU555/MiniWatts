@@ -140,6 +140,25 @@ import Foundation
         check(summary.thermalPressure == .serious, "System pressure was not carried independently")
         print("PASS: direct system percentage points, current endpoints, session continuity and thermal pressure")
 
+        // The run peak works on battery too and does not invent a gap's maximum.
+        var peakTracker = IslandTelemetryTracker()
+        var peakSummary = peakTracker.update(snapshot: snapshot(at: 0, connected: false, battery: 35),
+                                             session: nil, thermalState: 0)
+        near(peakSummary.batteryTemperaturePeak, 35, "Unplugged monitoring did not start a run peak")
+        peakSummary = peakTracker.update(snapshot: snapshot(at: 1, connected: false, battery: 41),
+                                         session: nil, thermalState: 0)
+        peakTracker.breakContinuity()
+        peakSummary = peakTracker.update(snapshot: snapshot(at: 100, connected: false, battery: 32),
+                                         session: nil, thermalState: 0)
+        near(peakSummary.batteryTemperaturePeak, 41, "A sampling gap erased the observed run peak")
+        peakSummary = peakTracker.update(snapshot: PowerSnapshot(date: date(101)), session: nil, thermalState: 0)
+        near(peakSummary.batteryTemperaturePeak, 41, "A missing reading changed the observed peak")
+        var newRun = IslandTelemetryTracker()
+        let newPeak = newRun.update(snapshot: snapshot(at: 102, connected: false, battery: 30),
+                                    session: nil, thermalState: 0)
+        near(newPeak.batteryTemperaturePeak, 30, "A new app run retained the old run's peak")
+        print("PASS: run battery peak works unplugged, survives gaps and resets on a new run")
+
         let partial = tracker.update(snapshot: snapshot(at: 101, input: 10), session: session, thermalState: 1)
         near(partial.partialInputWatts, 10, "Incomplete-input evidence was dropped or scaled")
         near(partial.batteryChargingWatts, 20, "Incomplete input erased independently measured cell power")
@@ -176,6 +195,14 @@ import Foundation
         summary.showsTemperatureTrend = false
         check(summary.trendSymbol(for: .batteryTemperature).isEmpty,
               "Disabling the trend did not remove its presentation")
+        near(summary.numericRate(for: .batteryTemperatureRate), 0.05,
+             "Turning off arrows also disabled the independently selected numeric rate")
+        check(summary.numericRate(for: .socTemperatureRate) == nil,
+              "Missing SoC trend was copied from a different sensor")
+        summary.temperatureRates = [LiveActivityMetric.batteryTemperature.rawValue: .infinity]
+        check(summary.numericRate(for: .batteryTemperatureRate) == nil,
+              "A non-finite trend was displayed")
+        summary.temperatureRates = [LiveActivityMetric.batteryTemperature.rawValue: 0.05]
         for metric in LiveActivityMetric.allCases {
             check(LiveActivityLeadingItem(rawValue: metric.rawValue)?.metric == metric,
                   "A selectable metric is missing from the left side")
@@ -190,11 +217,37 @@ import Foundation
             sampledAt: date(67), leadingItem: .chargeGainPercent,
             selectedMetric: .batteryChargingPower, minimalMetric: .thermalPressure,
             isWireless: false, telemetry: summary)
+        check(payload.timerOrigin(for: .sampleAge) == date(67),
+              "Sample-age timer did not use the actual sample date")
+        check(payload.timerOrigin(for: .connectionDuration) == date(0),
+              "Connection timer did not use the observed session start")
+        var missingStart = payload
+        missingStart.telemetry?.chargeStartedAt = date(68)
+        check(missingStart.timerOrigin(for: .connectionDuration) == nil,
+              "A session beginning after the sample was accepted")
+        missingStart.telemetry?.chargeStartedAt = nil
+        check(missingStart.timerOrigin(for: .connectionDuration) == nil,
+              "Missing session start became a connection timer")
+        let unplugged = MiniWattsActivityAttributes.ContentState(
+            chargeWatts: nil, powerIsBatterySide: false, externalConnected: false,
+            batteryPercent: nil, cpuUsagePercent: nil, downloadBytesPerSecond: nil,
+            uploadBytesPerSecond: nil, socTemperature: nil, batteryTemperature: nil,
+            hottestTemperature: nil, hottestSensorName: nil, sampledAt: date(67),
+            leadingItem: nil, selectedMetric: .connectionDuration, minimalMetric: nil,
+            isWireless: false, telemetry: summary)
+        check(unplugged.timerOrigin(for: .connectionDuration) == nil,
+              "An unplugged device retained a running connection timer")
         let data = try JSONEncoder().encode(payload)
         check(data.count < 3_000, "Content-state additions approach ActivityKit's 4 KB limit")
         let roundTrip = try JSONDecoder().decode(MiniWattsActivityAttributes.ContentState.self, from: data)
         check(roundTrip == payload,
               "The new payload did not round-trip")
+        var oldTelemetry = try JSONSerialization.jsonObject(with: JSONEncoder().encode(summary)) as! [String: Any]
+        oldTelemetry.removeValue(forKey: "batteryTemperaturePeak")
+        let decodedTelemetry = try JSONDecoder().decode(LiveActivityTelemetry.self,
+                                                        from: JSONSerialization.data(withJSONObject: oldTelemetry))
+        check(decodedTelemetry.batteryTemperaturePeak == nil,
+              "An older telemetry payload no longer decodes")
         payload.telemetry = nil
         var legacy = try JSONSerialization.jsonObject(with: JSONEncoder().encode(payload)) as! [String: Any]
         legacy.removeValue(forKey: "telemetry")

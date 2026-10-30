@@ -1,6 +1,96 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Time since last sample": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "距上次采样" } }
+      }
+    },
+    "Connected duration": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本次连接时长" } }
+      }
+    },
+    "Battery peak this run": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本次监测电池最高温" } }
+      }
+    },
+    "Battery temperature change rate": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "电池温度变化速度" } }
+      }
+    },
+    "SoC temperature change rate": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "SoC 温度变化速度" } }
+      }
+    },
+    "Hottest temperature change rate": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "最高部件温度变化速度" } }
+      }
+    },
+    "Charge IC temperature change rate": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "充电器温度变化速度" } }
+      }
+    },
+    "Wireless coil temperature change rate": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无线线圈温度变化速度" } }
+      }
+    },
+    "Sample age": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "采样间隔" } }
+      }
+    },
+    "Connected": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已连接" } }
+      }
+    },
+    "Battery peak": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "电池最高温" } }
+      }
+    },
+    "Battery change": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "电池变化" } }
+      }
+    },
+    "SoC change": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "SoC 变化" } }
+      }
+    },
+    "Hottest change": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "最高温变化" } }
+      }
+    },
+    "Charge IC change": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "充电器变化" } }
+      }
+    },
+    "Coil change": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "线圈变化" } }
+      }
+    },
+    "Sample age counts from the last received sensor sample, not from the last screen update. Connected duration starts when the app observes a connection; unobserved gaps may conceal a disconnection. It does not mean charging was continuous. If the connection is unknown or the reading is stale, its duration is unavailable.": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "采样间隔从最后一次接收传感器样本开始计算，不是从屏幕刷新时开始。本次连接时长从 App 观察到连接时开始计算，未采样期间可能发生过断开，也不代表期间一直在充电。连接状态未知或数据过期时，时长不可用。" } }
+      }
+    },
+    "Battery peak is the highest reading observed since this app run began, while connected or unplugged. It resets when the app restarts and can miss peaks during sampling gaps. Change rates use at least one minute of continuous readings; the numeric rate remains available when trend arrows are off.": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本次监测电池最高温是 App 本次运行以来实际采到的最高读数，充电和未充电时均可记录；App 重启后重置，采样中断期间可能错过峰值。温度变化速度至少需要连续采样一分钟；关闭趋势箭头不影响数值显示。" } }
+      }
+    },
     "Dynamic Island color levels": {
       "localizations": {
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "灵动岛颜色分级" } }

@@ -4,6 +4,7 @@ import Foundation
 /// This owns no timer, sensor client, energy estimator or background execution.
 nonisolated struct IslandTelemetryTracker {
     private var windows: [LiveActivityMetric: TemperatureTrendWindow] = [:]
+    private var batteryPeak: Double?
 
     mutating func breakContinuity() { windows.removeAll(keepingCapacity: true) }
 
@@ -28,6 +29,10 @@ nonisolated struct IslandTelemetryTracker {
         let connected = snapshot.externalConnectionObservation == true
         var result = LiveActivityTelemetry()
         result.sampledAt = snapshot.date
+        if let value = snapshot.batteryTemperature, value.isFinite, (-40...150).contains(value) {
+            batteryPeak = max(batteryPeak ?? value, value)
+        }
+        result.batteryTemperaturePeak = batteryPeak
         if connected, let watts = snapshot.batteryWatts, watts.isFinite, watts >= 0 {
             result.batteryChargingWatts = watts
         }

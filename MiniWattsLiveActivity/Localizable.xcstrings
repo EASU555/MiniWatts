@@ -1,6 +1,86 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Time since last sample": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "距上次采样" } }
+      }
+    },
+    "Connected duration": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本次连接时长" } }
+      }
+    },
+    "Battery peak this run": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本次监测电池最高温" } }
+      }
+    },
+    "Battery temperature change rate": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "电池温度变化速度" } }
+      }
+    },
+    "SoC temperature change rate": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "SoC 温度变化速度" } }
+      }
+    },
+    "Hottest temperature change rate": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "最高部件温度变化速度" } }
+      }
+    },
+    "Charge IC temperature change rate": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "充电器温度变化速度" } }
+      }
+    },
+    "Wireless coil temperature change rate": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无线线圈温度变化速度" } }
+      }
+    },
+    "Sample age": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "采样间隔" } }
+      }
+    },
+    "Connected": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已连接" } }
+      }
+    },
+    "Battery peak": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "电池最高温" } }
+      }
+    },
+    "Battery change": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "电池变化" } }
+      }
+    },
+    "SoC change": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "SoC 变化" } }
+      }
+    },
+    "Hottest change": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "最高温变化" } }
+      }
+    },
+    "Charge IC change": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "充电器变化" } }
+      }
+    },
+    "Coil change": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "线圈变化" } }
+      }
+    },
     "Power into battery": {
       "localizations": {
         "zh-Hans": {

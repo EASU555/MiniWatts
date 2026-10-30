@@ -141,6 +141,12 @@ struct LiveActivityControlPanel: View {
             }
             Toggle("Show temperature trends", isOn: $monitor.liveActivityShowsTemperatureTrend)
                 .tint(.mwAccent)
+            Text("Sample age counts from the last received sensor sample, not from the last screen update. Connected duration starts when the app observes a connection; unobserved gaps may conceal a disconnection. It does not mean charging was continuous. If the connection is unknown or the reading is stale, its duration is unavailable.")
+                .font(.caption).foregroundStyle(Color.mwMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Battery peak is the highest reading observed since this app run began, while connected or unplugged. It resets when the app restarts and can miss peaks during sampling gaps. Change rates use at least one minute of continuous readings; the numeric rate remains available when trend arrows are off.")
+                .font(.caption).foregroundStyle(Color.mwMuted)
+                .fixedSize(horizontal: false, vertical: true)
             Text("Trends need at least one minute of continuous readings from the same source. Arrows show warming, cooling or stable; expand the island for °C/min. This is a sensor trend, not a temperature accuracy check.")
                 .font(.caption).foregroundStyle(Color.mwMuted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -172,8 +178,8 @@ struct LiveActivityControlPanel: View {
             return true
         }
         switch metric {
-        case .chargerTemperature: return monitor.snapshot.chargerTemperature != nil
-        case .wirelessCoilTemperature: return monitor.snapshot.temperature(in: .wirelessCoil) != nil
+        case .chargerTemperature, .chargerTemperatureRate: return monitor.snapshot.chargerTemperature != nil
+        case .wirelessCoilTemperature, .wirelessCoilTemperatureRate: return monitor.snapshot.temperature(in: .wirelessCoil) != nil
         default: return true
         }
     }

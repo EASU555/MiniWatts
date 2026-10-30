@@ -73,6 +73,13 @@ by several entries.
   Island temperature colors use iOS system thermal state (nominal/fair green,
   serious yellow, critical red), not sensor-specific Celsius limits. Power and
   network colors are magnitude bands, not health alarms; nil or stale data is gray.
+  Sample age uses the last actual sample timestamp and remains visible while stale;
+  connection duration uses the observed plugged-in session start and becomes
+  unavailable on stale/unknown connection. Both use system-rendered timer text.
+  Battery peak is the maximum observed since this app process started, even when
+  unplugged; sampling gaps may hide a higher peak, and a new process resets it.
+  Numeric per-component temperature rates reuse source-stable continuous trend
+  windows and remain selectable independently of the optional trend arrows.
 - `Features/PictureInPicture/` — converts the current snapshot to a 640×360 SwiftUI
   instrument frame, then enqueues it on `AVSampleBufferDisplayLayer` for a user-started
   `AVPictureInPictureController`. Power and temperatures are independently selectable;
