@@ -23,7 +23,26 @@ fi
 echo "Checking Simplified Chinese coverage for user-facing strings"
 python3 - <<'PY'
 import json
+import struct
 from pathlib import Path
+
+icon_dir = Path("MiniWatts/Assets.xcassets/AppIcon.appiconset")
+icon_manifest = json.loads((icon_dir / "Contents.json").read_text(encoding="utf-8"))
+primary = next((entry for entry in icon_manifest["images"]
+                if entry.get("idiom") == "universal" and not entry.get("appearances")), None)
+if not primary or not primary.get("filename"):
+    raise SystemExit("Default app icon is not assigned")
+icon_path = icon_dir / primary["filename"]
+if not icon_path.is_file():
+    raise SystemExit("Default app icon file is missing")
+header = icon_path.read_bytes()[:29]
+if (header[:8] != b"\x89PNG\r\n\x1a\n" or header[12:16] != b"IHDR"
+        or len(header) < 29):
+    raise SystemExit("Default app icon is not a valid PNG")
+width, height, depth, color, *_ = struct.unpack(">IIBBBBB", header[16:29])
+if (width, height, depth, color) != (1024, 1024, 8, 2):
+    raise SystemExit("Default app icon must be an opaque 1024×1024 RGB PNG")
+print("Default app icon: opaque 1024×1024 PNG")
 
 for path in [Path("MiniWatts/Localizable.xcstrings"),
              Path("MiniWattsLiveActivity/Localizable.xcstrings")]:
