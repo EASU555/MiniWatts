@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct DevicesView: View {
     @Environment(PowerMonitor.self) private var monitor
@@ -33,7 +34,7 @@ struct DevicesView: View {
                      trailing: Text(verbatim: monitor.deviceModelIdentifier)) {
             VStack(spacing: 12) {
                 HStack(alignment: .center, spacing: 14) {
-                    Image(systemName: "iphone.gen3")
+                    Image(systemName: UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone.gen3")
                         .font(.system(size: 30, weight: .light))
                         .foregroundStyle(Color.mwAccent)
                     VStack(alignment: .leading, spacing: 2) {

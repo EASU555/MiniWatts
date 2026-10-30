@@ -1,6 +1,26 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Changing these options automatically restarts the Live Activity. An active floating monitor briefly stops and then attempts to resume. Keep MiniWatts open until recovery finishes.": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "修改这些选项后会自动重新启动实时活动。运行中的悬浮监视器会短暂停止，然后尝试恢复。请保持 MiniWatts 打开，直到恢复完成。" } }
+      }
+    },
+    "The Live Activity restarts to apply the change. iOS decides the final position.": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "实时活动会重新启动以应用更改，最终位置由 iOS 决定。" } }
+      }
+    },
+    "MiniWatts applies the new score when the Live Activity restarts. Apple documents this score for ranking multiple activities from the same app; it does not guarantee a change in position next to other apps. When MiniWatts is alone, its display stays the same.": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "实时活动重新启动时会应用新分值。苹果将此分值用于同一 App 多个实时活动之间的排序；它不能保证与其他 App 并存时的位置发生改变。MiniWatts 单独显示时的布局不变。" } }
+      }
+    },
+    "Sensor locations are unavailable on iPad. Read the measurements below; the iPhone schematic is not used for this device.": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "iPad 无法获取传感器的具体位置，请查看下方读数。此设备不使用 iPhone 示意图。" } }
+      }
+    },
     "Time since last sample": {
       "localizations": {
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "距上次采样" } }

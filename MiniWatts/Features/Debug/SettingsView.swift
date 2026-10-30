@@ -23,6 +23,8 @@ struct SettingsView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 24)
+                    .frame(maxWidth: 720)
+                    .frame(maxWidth: .infinity)
                     // Pinned to the container's width so nothing inside can widen the
                     // scroll content. A paragraph inside an HStack reports an enormous
                     // ideal width — the text unwrapped onto one line — and
@@ -112,7 +114,7 @@ struct SettingsView: View {
         Panel("Device", systemImage: "iphone") {
             VStack(spacing: 0) {
                 DetailRow(label: "Model identifier", value: monitor.deviceModelIdentifier)
-                DetailRow(label: "System", value: "iOS \(UIDevice.current.systemVersion)")
+                DetailRow(label: "System", value: "\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)")
                 DetailRow(label: "Charge level",
                           value: monitor.snapshot.percent.map { "\($0)% · \(monitor.batteryLevelSource)" })
                 DetailRow(label: "Battery sources", value: monitor.batteryLevelCandidates)

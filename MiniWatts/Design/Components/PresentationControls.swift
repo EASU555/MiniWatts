@@ -35,10 +35,16 @@ struct PresentationPickerRow<Content: View>: View {
             if typeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 4) { Text(title); selection }
             } else {
-                HStack(spacing: 8) {
-                    Text(title).fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 8)
-                    selection
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        Text(title).fixedSize(horizontal: true, vertical: false)
+                        Spacer(minLength: 8)
+                        selection.fixedSize(horizontal: true, vertical: false)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title).fixedSize(horizontal: false, vertical: true)
+                        selection
+                    }
                 }
             }
         }

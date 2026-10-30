@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ThermalView: View {
     @Environment(PowerMonitor.self) private var monitor
@@ -148,9 +149,19 @@ struct ThermalView: View {
         Panel("Heat map · schematic", systemImage: "iphone.gen3",
               trailing: Text("\(snapshot.temperatures.count) sensors")) {
             VStack(spacing: 12) {
-                PhoneHeatMap(readings: zoneReadings)
-                    .frame(maxWidth: .infinity)
-                TemperatureScale()
+                if UIDevice.current.userInterfaceIdiom == .pad {
+                    Image(systemName: "ipad")
+                        .font(.system(size: 88, weight: .ultraLight))
+                        .foregroundStyle(Color.mwMuted)
+                        .frame(maxWidth: .infinity)
+                    Text("Sensor locations are unavailable on iPad. Read the measurements below; the iPhone schematic is not used for this device.")
+                        .font(.caption).foregroundStyle(Color.mwMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    PhoneHeatMap(readings: zoneReadings)
+                        .frame(maxWidth: .infinity)
+                    TemperatureScale()
+                }
                 if let hottest = snapshot.hottestSensor {
                     // All three carry the name of the sensor they came from, and the
                     // row is top-aligned. Only "Hottest" used to have that line, which
@@ -207,10 +218,12 @@ struct ThermalView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityElement(children: .combine)
                 }
-                Text("The temperatures are measured; the positions are not. iOS reports sensor names and values and no coordinates at all, so each zone is drawn at a fixed spot that follows the usual layout of a recent iPhone — logic board up top behind the cameras, battery through the middle, charge IC by the port. Real layouts differ by model. Read this as a legend for the list below, not as a map of your phone.")
-                    .font(.caption2)
-                    .foregroundStyle(Color.mwMuted)
-                    .fixedSize(horizontal: false, vertical: true)
+                if UIDevice.current.userInterfaceIdiom != .pad {
+                    Text("The temperatures are measured; the positions are not. iOS reports sensor names and values and no coordinates at all, so each zone is drawn at a fixed spot that follows the usual layout of a recent iPhone — logic board up top behind the cameras, battery through the middle, charge IC by the port. Real layouts differ by model. Read this as a legend for the list below, not as a map of your phone.")
+                        .font(.caption2)
+                        .foregroundStyle(Color.mwMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }

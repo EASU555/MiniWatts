@@ -91,6 +91,7 @@ final class PowerMonitor {
 
     var liveActivityLeadingItem: LiveActivityLeadingItem {
         didSet {
+            guard liveActivityLeadingItem != oldValue else { return }
             appendDiagnosticEvent("action: left metric=\(liveActivityLeadingItem.rawValue)")
             UserDefaults.standard.set(liveActivityLeadingItem.rawValue,
                                       forKey: Self.liveActivityLeadingItemKey)
@@ -100,11 +101,13 @@ final class PowerMonitor {
                                              minimalMetric: liveActivityMinimalSelection.resolvedMetric(primary: liveActivityMetric),
                                              enabled: liveActivityEnabled,
                                              forceUpdate: true)
+            liveActivityController.restartAfterDisplayPreferenceChange()
         }
     }
 
     var liveActivityMetric: LiveActivityMetric {
         didSet {
+            guard liveActivityMetric != oldValue else { return }
             appendDiagnosticEvent("action: right metric=\(liveActivityMetric.rawValue)")
             UserDefaults.standard.set(liveActivityMetric.rawValue, forKey: Self.liveActivityMetricKey)
             liveActivityController.reconcile(snapshot: snapshot,
@@ -113,11 +116,13 @@ final class PowerMonitor {
                                              minimalMetric: liveActivityMinimalSelection.resolvedMetric(primary: liveActivityMetric),
                                              enabled: liveActivityEnabled,
                                              forceUpdate: true)
+            liveActivityController.restartAfterDisplayPreferenceChange()
         }
     }
 
     var liveActivityMinimalSelection: LiveActivityMinimalSelection {
         didSet {
+            guard liveActivityMinimalSelection != oldValue else { return }
             appendDiagnosticEvent("action: minimal metric=\(liveActivityMinimalSelection.rawValue)")
             UserDefaults.standard.set(liveActivityMinimalSelection.rawValue,
                                       forKey: Self.liveActivityMinimalSelectionKey)
@@ -127,6 +132,7 @@ final class PowerMonitor {
                                              minimalMetric: liveActivityMinimalSelection.resolvedMetric(primary: liveActivityMetric),
                                              enabled: liveActivityEnabled,
                                              forceUpdate: true)
+            liveActivityController.restartAfterDisplayPreferenceChange()
         }
     }
 
@@ -145,6 +151,7 @@ final class PowerMonitor {
                                              minimalMetric: liveActivityMinimalSelection.resolvedMetric(primary: liveActivityMetric),
                                              enabled: liveActivityEnabled,
                                              forceUpdate: true)
+            liveActivityController.restartAfterDisplayPreferenceChange()
         }
     }
 
@@ -162,6 +169,7 @@ final class PowerMonitor {
                                              selectedMetric: liveActivityMetric,
                                              minimalMetric: liveActivityMinimalSelection.resolvedMetric(primary: liveActivityMetric),
                                              enabled: liveActivityEnabled, forceUpdate: true)
+            liveActivityController.restartAfterDisplayPreferenceChange()
         }
     }
 

@@ -70,6 +70,10 @@ by several entries.
   does not interrupt PiP. A stale activity is updated in place unless an update
   actually timed out; that timeout still uses the existing recovery path.
   ActivityKit acceptance is not proof of island visibility.
+  User changes to island display options are coalesced for 800 ms, then trigger
+  the coordinated presentation restart with the latest selections. Disabling the
+  activity cancels that pending restart; if the app is backgrounded, recovery is
+  deferred until foreground. A running PiP is briefly released and restored.
   Island temperature colors use iOS system thermal state (nominal/fair green,
   serious yellow, critical red), not sensor-specific Celsius limits. Power and
   network colors are magnitude bands, not health alarms; nil or stale data is gray.
@@ -96,6 +100,11 @@ by several entries.
   does not prove why the process stopped receiving execution time.
 - `Design/` — palette (`Color.mw(light:dark:)`, no asset catalog entries), `Panel`/
   `Metric`/`Pill`/`BarRow`, `PowerRing`, Swift Charts wrappers, `PhoneHeatMap`.
+- App and extension target iPhone and iPad; phone/tablet orientations and regular
+  versus compact width can change while the app runs. Wide dashboard controls use
+  the same view identities in an adaptive layout; iPad never displays the iPhone
+  heat-map silhouette as a physical sensor map. Full native Duo behavior requires
+  an iOS 27.1 SDK and should be tested on Duo hardware or a current simulator.
 - `Features/` — one folder per tab, plus Settings. `DebugView` (Raw data) is
   `#if DEBUG` only and reached from the bottom of Settings, not the main toolbar.
 

@@ -32,11 +32,10 @@ import UIKit
         let median = ordered[ordered.count / 2]
         let p95 = ordered[min(Int(Double(ordered.count) * 0.95), ordered.count - 1)]
         let over16 = intervals.filter { $0 > 1.0 / 60.0 }.count
-        let maximum = UIScreen.main.maximumFramesPerSecond
         let summary = String(
-            format: "Dashboard scroll CADisplayLink callbacks (not rendered FPS): duration=%.2fs callbacks=%d median=%.1fms p95=%.1fms over16.7ms=%d maxScreenHz=%d lowPower=%@ thermal=%ld",
+            format: "Dashboard scroll CADisplayLink callbacks (not rendered FPS): duration=%.2fs callbacks=%d median=%.1fms p95=%.1fms over16.7ms=%d lowPower=%@ thermal=%ld",
             duration, intervals.count, median * 1_000, p95 * 1_000,
-            over16, maximum,
+            over16,
             ProcessInfo.processInfo.isLowPowerModeEnabled ? "yes" : "no",
             ProcessInfo.processInfo.thermalState.rawValue
         )

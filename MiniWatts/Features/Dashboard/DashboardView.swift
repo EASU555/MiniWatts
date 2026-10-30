@@ -3,6 +3,8 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(PowerMonitor.self) private var monitor
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showingSettings = false
     @State private var showingProblemReport = false
     @State private var scrollProbe = DashboardScrollProbe()
@@ -19,8 +21,10 @@ struct DashboardView: View {
             heroPanel
             if monitor.thermal.state.isThrottling { throttleBanner }
             batteryPanel
-            LiveActivityControlPanel()
-            FloatingMonitorControlPanel()
+            presentationControlsLayout {
+                LiveActivityControlPanel()
+                FloatingMonitorControlPanel()
+            }
             breakdownPanel
             livePanel
             sessionPanel
@@ -41,6 +45,17 @@ struct DashboardView: View {
         return plugged ? .mwAccent : .mwLoss
     }
 
+    /// Keep the two high-use controls together while allowing wide windows to
+    /// show them side by side. AnyLayout preserves their disclosure state across
+    /// an iPad resize or a Duo fold/unfold transition.
+    private var presentationControlsLayout: AnyLayout {
+        if horizontalSizeClass == .regular && !dynamicTypeSize.isAccessibilitySize {
+            AnyLayout(HStackLayout(alignment: .top, spacing: 14))
+        } else {
+            AnyLayout(VStackLayout(alignment: .leading, spacing: 14))
+        }
+    }
+
     private var toolbarButtons: some View {
         HStack {
             Button { showingProblemReport = true } label: {
@@ -58,11 +73,11 @@ struct DashboardView: View {
     private var heroPanel: some View {
         Panel {
             VStack(spacing: 14) {
-                PowerRing(inputWatts: monitor.headline?.watts,
-                          batteryWatts: plugged && snapshot.inputWatts != nil ? snapshot.batteryWatts : nil,
-                          fullScale: fullScale,
-                          caption: monitor.headline?.caption,
-                          tint: glowColor)
+                ViewThatFits(in: .horizontal) {
+                    powerRing(size: 232)
+                    powerRing(size: 180)
+                }
+                    .frame(maxWidth: .infinity)
                     .padding(.top, 4)
 
                 FlowRow(spacing: 6) {
@@ -85,6 +100,13 @@ struct DashboardView: View {
                 SampleFreshnessView(sampledAt: snapshot.date, hasSample: !monitor.live.isEmpty)
             }
         }
+    }
+
+    private func powerRing(size: CGFloat) -> some View {
+        PowerRing(inputWatts: monitor.headline?.watts,
+                  batteryWatts: plugged && snapshot.inputWatts != nil ? snapshot.batteryWatts : nil,
+                  fullScale: fullScale, caption: monitor.headline?.caption,
+                  tint: glowColor, size: size)
     }
 
     /// True while charging wirelessly with no way to measure what comes in.

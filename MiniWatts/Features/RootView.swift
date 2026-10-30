@@ -214,6 +214,8 @@ struct PageScaffold<Content: View>: View {
             .padding(.horizontal, 16)
             .padding(.top, 4)
             .padding(.bottom, 24)
+            .frame(maxWidth: 900)
+            .frame(maxWidth: .infinity)
             // Clamp long labels to the page width instead of widening the scroll.
             .containerRelativeFrame(.horizontal)
         }

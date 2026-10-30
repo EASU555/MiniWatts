@@ -101,6 +101,7 @@ final class ChargingLiveActivityController {
     /// the replacement.
     private var lifecycleTask: Task<Void, Never>?
     private var lifecycleGeneration = 0
+    private var preferenceRestartTask: Task<Void, Never>?
     private(set) var recoveryStatus = LiveActivityRecoveryStatus.idle {
         didSet {
             guard recoveryStatus != oldValue else { return }
@@ -221,13 +222,36 @@ final class ChargingLiveActivityController {
                  selectedMetric: LiveActivityMetric,
                  minimalMetric: LiveActivityMetric,
                  repairsPresentation: Bool = true) {
+        preferenceRestartTask?.cancel()
+        preferenceRestartTask = nil
         enabled = true
-        automaticRecoveryCount = 0
-        if repairsPresentation { pendingPresentationRepair = true }
         let state = contentState(from: snapshot,
                                       leadingItem: leadingItem,
                                       selectedMetric: selectedMetric,
                                       minimalMetric: minimalMetric)
+        restart(using: state, repairsPresentation: repairsPresentation)
+    }
+
+    /// Coalesce rapid picker changes into one presentation restart. Keep the
+    /// latest state, rather than the snapshot from the first selection. The user
+    /// explicitly wants changes to take effect without a separate restart tap.
+    func restartAfterDisplayPreferenceChange() {
+        guard enabled else { return }
+        preferenceRestartTask?.cancel()
+        preferenceRestartTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(800))
+            guard !Task.isCancelled, let self, self.enabled,
+                  let state = self.latestState else { return }
+            self.preferenceRestartTask = nil
+            self.record("Display preferences changed; restarting presentation")
+            self.restart(using: state, repairsPresentation: true)
+        }
+    }
+
+    private func restart(using state: MiniWattsActivityAttributes.ContentState,
+                         repairsPresentation: Bool) {
+        automaticRecoveryCount = 0
+        if repairsPresentation { pendingPresentationRepair = true }
         latestState = state
         // A previous restart may be waiting for ActivityKit to release an old
         // presentation. A second user request must replace that attempt, rather
@@ -239,9 +263,9 @@ final class ChargingLiveActivityController {
             record("Superseding unfinished restart")
         }
         beginRestart(state: state,
-                     leadingItem: leadingItem,
-                     selectedMetric: selectedMetric,
-                     at: snapshot.date,
+                     leadingItem: state.leadingItem ?? .statusIcon,
+                     selectedMetric: state.selectedMetric,
+                     at: state.sampledAt ?? .now,
                      repairsPresentation: repairsPresentation)
     }
 
@@ -381,6 +405,8 @@ final class ChargingLiveActivityController {
     }
 
     func endIfNeeded() {
+        preferenceRestartTask?.cancel()
+        preferenceRestartTask = nil
         // The disabled sensor tick must not repeatedly cancel an in-progress stop.
         guard enabled || activity != nil || lifecycleTask != nil else { return }
         enabled = false

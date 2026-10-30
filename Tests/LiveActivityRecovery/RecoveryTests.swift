@@ -130,6 +130,65 @@ struct PowerSnapshot {
         try? await Task.sleep(for: .milliseconds(100))
         print("PASS: new telemetry, immediate options, unchanged lifecycle and sample-identity guard")
 
+        // Rapid display choices coalesce into one coordinated presentation
+        // restart, and the replacement must carry the last selected values.
+        TestSystem.reset()
+        let preferences = ChargingLiveActivityController()
+        var preparations = 0
+        var restorations = 0
+        preferences.preparePresentationForRestart = { preparations += 1; return true }
+        preferences.finishPresentationRestart = { restorations += 1 }
+        tick(preferences)
+        try? await Task.sleep(for: .milliseconds(100))
+        preferences.reconcile(snapshot: PowerSnapshot(), leadingItem: .batteryTemperature,
+                              selectedMetric: .sampleAge, minimalMetric: .sampleAge,
+                              enabled: true, forceUpdate: true)
+        preferences.restartAfterDisplayPreferenceChange()
+        try? await Task.sleep(for: .milliseconds(150))
+        preferences.reconcile(snapshot: PowerSnapshot(), leadingItem: .cpuUsage,
+                              selectedMetric: .batteryTemperatureRate, minimalMetric: .sampleAge,
+                              enabled: true, forceUpdate: true)
+        preferences.restartAfterDisplayPreferenceChange()
+        try? await Task.sleep(for: .seconds(2))
+        let selected = Activity<MiniWattsActivityAttributes>.activities.first?.content.state
+        check(TestSystem.requests == 2 && TestSystem.endings.count == 1,
+              "Rapid preference changes were not combined into one restart")
+        check(selected?.leadingItem == .cpuUsage && selected?.selectedMetric == .batteryTemperatureRate
+              && selected?.minimalMetric == .sampleAge,
+              "Preference restart used an outdated display selection")
+        check(preparations == 1 && restorations == 1,
+              "Preference restart did not coordinate the floating monitor")
+        preferences.endIfNeeded()
+        try? await Task.sleep(for: .milliseconds(300))
+
+        TestSystem.reset()
+        let disabledPreference = ChargingLiveActivityController()
+        tick(disabledPreference)
+        disabledPreference.restartAfterDisplayPreferenceChange()
+        disabledPreference.endIfNeeded()
+        try? await Task.sleep(for: .seconds(1))
+        check(TestSystem.requests == 1 && !disabledPreference.isRunning,
+              "A queued preference restart reopened an explicitly disabled activity")
+        print("PASS: display preference restart coalesces, preserves latest selection and respects disable")
+
+        TestSystem.reset()
+        let deferredPreference = ChargingLiveActivityController()
+        tick(deferredPreference)
+        try? await Task.sleep(for: .milliseconds(100))
+        deferredPreference.restartAfterDisplayPreferenceChange()
+        UIApplication.shared.applicationState = .background
+        try? await Task.sleep(for: .seconds(1))
+        check(TestSystem.requests == 1 && TestSystem.endings.isEmpty,
+              "A background preference restart destroyed the visible activity")
+        UIApplication.shared.applicationState = .active
+        deferredPreference.recoverAfterEnteringForeground(snapshot: PowerSnapshot(), leadingItem: .statusIcon,
+                                                          selectedMetric: .chargingPower, minimalMetric: .chargingPower)
+        try? await Task.sleep(for: .seconds(2))
+        check(TestSystem.requests == 2, "Deferred preference restart did not resume in the foreground")
+        deferredPreference.endIfNeeded()
+        try? await Task.sleep(for: .milliseconds(300))
+        print("PASS: display preference restart waits for foreground")
+
         // A failed connection observation must not turn a positive charging
         // battery rail into an apparent discharge-power readout on the island.
         TestSystem.reset()

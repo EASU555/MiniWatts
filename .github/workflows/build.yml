@@ -23,7 +23,7 @@ permissions:
 jobs:
   ipa:
     name: Unsigned ipa
-    runs-on: macos-latest
+    runs-on: xcode-27
     permissions:
       # Only the release step at the bottom uses this, and only on a tag.
       contents: write
@@ -35,12 +35,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Select newest Xcode
+      - name: Select Xcode 27.1 for iOS 27 and iPhone Duo
         run: |
           ls -d /Applications/Xcode*.app || true
-          newest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
-          sudo xcode-select -s "$newest"
+          test -d /Applications/Xcode_27.1.app
+          sudo xcode-select -s /Applications/Xcode_27.1.app
           xcodebuild -version
+          xcodebuild -showsdks
           swift --version
 
       # MiniWatts uses `nonisolated` on type and extension declarations and
@@ -177,3 +178,51 @@ jobs:
           body: |
             Unsigned build — sign it with your own Apple ID before installing.
             ${{ github.server_url }}/${{ github.repository }}#install
+
+  layout-preview:
+    name: iPad and iPhone Duo simulator preview
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: xcode-27
+    timeout-minutes: 15
+    # Simulator infrastructure may be unavailable even when the device build is
+    # healthy. Keep the IPA available, and inspect this separate job's outcome.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build simulator app using iOS 27.1 SDK
+        run: |
+          sudo xcode-select -s /Applications/Xcode_27.1.app
+          version=$(git describe --tags --abbrev=0 --match 'v*')
+          build=$(git rev-list --count HEAD)
+          xcodebuild build -quiet -project MiniWatts.xcodeproj -scheme MiniWatts \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/SimulatorDerived CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION="${version#v}" CURRENT_PROJECT_VERSION="$build"
+      - name: Launch on iPhone Duo and iPad
+        run: |
+          mkdir -p build/layout-previews
+          devices=$(xcrun simctl list devices available --json)
+          duo=$(echo "$devices" | jq -r '.devices | to_entries[] | select(.key | contains("iOS-27-1")) | .value[] | select(.name == "iPhone Duo") | .udid' | head -n 1)
+          ipad=$(echo "$devices" | jq -r '.devices | to_entries[] | select(.key | contains("iOS-27-0")) | .value[] | select(.name == "iPad Pro 13-inch (M5)") | .udid' | head -n 1)
+          test -n "$duo" && test -n "$ipad"
+          app=build/SimulatorDerived/Build/Products/Debug-iphonesimulator/MiniWatts.app
+          for entry in "duo:$duo" "ipad:$ipad"; do
+            label=${entry%%:*}
+            device=${entry#*:}
+            xcrun simctl boot "$device"
+            xcrun simctl bootstatus "$device" -b
+            xcrun simctl install "$device" "$app"
+            xcrun simctl launch "$device" org.zhaohe.MiniWatts -AppleLanguages '(zh-Hans)' -AppleLocale zh_CN
+            sleep 8
+            xcrun simctl io "$device" screenshot "build/layout-previews/$label.png"
+            xcrun simctl shutdown "$device"
+          done
+      - name: Upload simulator previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiniWatts-simulator-previews
+          path: build/layout-previews/*.png
+          if-no-files-found: warn
