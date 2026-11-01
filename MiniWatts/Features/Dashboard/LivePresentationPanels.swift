@@ -47,7 +47,7 @@ struct LiveActivityControlPanel: View {
                 DisclosureGroup("Help and recovery details") {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Choose the compact Dynamic Island's left and right contents independently. For example, use status icon + power, or power + temperature. The right-side choice is also the primary readout when expanded.")
-                        Text("When two or three activities share the Dynamic Island, MiniWatts shows one short reading chosen above. iOS decides its position; the left and right choices apply when MiniWatts is alone.")
+                        Text("When activities share the Dynamic Island or iOS limits its width, MiniWatts shows the multiple-activity choice alone. iOS decides its position; left and right choices apply when there is enough space.")
                         Text("Upload and download speeds count traffic from the whole device over the latest sample, including other apps. The first sample, a network change, or a long pause shows no reading until two adjacent samples are available. K and M mean KB/s and MB/s in the compact island.")
                         Text("Widgets read the sensors themselves whenever iOS refreshes them — usually every 15 to 60 minutes — and straight away when you plug in or unplug with MiniWatts open. Each one says when its numbers were taken.")
                         Text(verbatim: monitor.liveActivityRecoveryDetail)

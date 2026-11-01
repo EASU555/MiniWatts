@@ -315,8 +315,8 @@ final class PowerMonitor {
             .flatMap(LiveActivityLeadingItem.init(rawValue:)) ?? .statusIcon
         liveActivityMetric = defaults.string(forKey: Self.liveActivityMetricKey)
             .flatMap(LiveActivityMetric.init(rawValue:)) ?? .chargingPower
-        liveActivityMinimalSelection = defaults.string(forKey: Self.liveActivityMinimalSelectionKey)
-            .flatMap(LiveActivityMinimalSelection.init(rawValue:)) ?? .followRightSide
+        liveActivityMinimalSelection = LiveActivityMinimalSelection.loadWithTemperaturePriority(
+            from: defaults, selectionKey: Self.liveActivityMinimalSelectionKey)
         let savedRelevanceScore = defaults.object(forKey: Self.liveActivityRelevanceScoreKey) as? Int
         liveActivityRelevanceScore = savedRelevanceScore == 0 ? 0 : 1
         liveActivityShowsTemperatureTrend = defaults.object(forKey: Self.liveActivityTrendKey) as? Bool ?? true

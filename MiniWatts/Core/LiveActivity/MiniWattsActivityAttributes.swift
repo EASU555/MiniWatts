@@ -68,8 +68,7 @@ nonisolated enum LiveActivityMetric: String, Codable, CaseIterable, Identifiable
     }
 }
 
-/// The minimal island is used when other activities compete for space. Keep its
-/// choice separate from the compact right side, with the old choice as default.
+/// The minimal or width-limited island uses one separately configurable reading.
 nonisolated enum LiveActivityMinimalSelection: String, CaseIterable, Identifiable, Sendable {
     case followRightSide
     case chargingPower
@@ -89,6 +88,18 @@ nonisolated enum LiveActivityMinimalSelection: String, CaseIterable, Identifiabl
     case chargerTemperatureRate, wirelessCoilTemperatureRate
 
     var id: Self { self }
+
+    /// Apply the requested temperature priority once, then retain future choices.
+    /// The marker must be separate from the choice because a later explicit
+    /// "follow right side" selection is also a valid saved preference.
+    static func loadWithTemperaturePriority(from defaults: UserDefaults, selectionKey: String) -> Self {
+        let migrationKey = selectionKey + ".temperaturePriority.v1"
+        if !defaults.bool(forKey: migrationKey) {
+            defaults.set(Self.batteryTemperature.rawValue, forKey: selectionKey)
+            defaults.set(true, forKey: migrationKey)
+        }
+        return defaults.string(forKey: selectionKey).flatMap(Self.init(rawValue:)) ?? .batteryTemperature
+    }
 
     func resolvedMetric(primary: LiveActivityMetric) -> LiveActivityMetric {
         switch self {
@@ -118,6 +129,14 @@ nonisolated enum LiveActivityMinimalSelection: String, CaseIterable, Identifiabl
 
     var title: LocalizedStringResource {
         self == .followRightSide ? "Follow right side" : resolvedMetric(primary: .chargingPower).title
+    }
+}
+
+/// Keep the entire temperature and its unit when the system grants only 28 pt.
+nonisolated enum LimitedIslandReading {
+    static func batteryTemperature(_ value: Double?, locale: Locale = .current) -> String? {
+        guard let value, value.isFinite, (-40...150).contains(value) else { return nil }
+        return value.formatted(.number.locale(locale).precision(.fractionLength(1))) + "°"
     }
 }
 

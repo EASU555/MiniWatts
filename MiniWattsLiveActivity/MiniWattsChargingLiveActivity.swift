@@ -53,61 +53,22 @@ struct MiniWattsChargingLiveActivity: Widget {
                         .padding(.top, 4)
                 }
             } compactLeading: {
-                CompactLeadingContent(state: context.state, isStale: context.isStale)
-            } compactTrailing: {
-                CompactMetricValue(state: context.state, isStale: context.isStale)
-                    .foregroundStyle(context.isStale
-                                     ? Color.secondary : color(for: context.state.selectedMetric, state: context.state))
-                    .accessibilityLabel(label(for: context.state.selectedMetric))
-                    .accessibilityValue(metricAccessibilityValue(for: context.state.selectedMetric,
-                                                                state: context.state, isStale: context.isStale))
-            } minimal: {
-                let metric = context.state.minimalMetric ?? context.state.selectedMetric
-                if metric == .sampleAge || (metric == .connectionDuration && !context.isStale) {
-                    metricText(for: metric, state: context.state, isStale: context.isStale)
-                        .font(.caption2.monospacedDigit().weight(.heavy))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.65)
-                        .foregroundStyle(context.isStale ? Color.secondary : color(for: metric, state: context.state))
-                        .accessibilityLabel(label(for: metric))
-                        .accessibilityValue(metricText(for: metric, state: context.state, isStale: context.isStale))
-                        .accessibilityAddTraits(.updatesFrequently)
-                } else if context.isStale {
-                    Image(systemName: "pause.fill")
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("Reading paused")
-                } else if metric == .thermalPressure,
-                          let pressure = context.state.telemetry?.thermalPressure {
-                    ViewThatFits(in: .horizontal) {
-                        Text(pressure.title).fixedSize()
-                        Image(systemName: pressureSymbol(pressure))
-                    }
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(pressureColor(pressure))
-                    .accessibilityLabel("System thermal pressure")
-                    .accessibilityValue(Text(pressure.title))
-                } else if let values = minimalValueVariants(for: metric, state: context.state) {
-                    ViewThatFits(in: .horizontal) {
-                        Text(verbatim: values.preferredWithUnit)
-                            .fixedSize(horizontal: true, vertical: false)
-                        Text(verbatim: values.precise)
-                            .fixedSize(horizontal: true, vertical: false)
-                        Text(verbatim: values.roundedWithUnit)
-                            .fixedSize(horizontal: true, vertical: false)
-                        Text(verbatim: values.rounded)
-                            .fixedSize(horizontal: true, vertical: false)
-                    }
-                        .font(.caption2.monospacedDigit().weight(.heavy))
-                        .foregroundStyle(color(for: metric, state: context.state))
-                        .accessibilityLabel(label(for: metric))
-                        .accessibilityValue(Text(verbatim: formattedValue(for: metric,
-                                                                          state: context.state)))
-                        .accessibilityAddTraits(.updatesFrequently)
+                if #available(iOS 27.0, *) {
+                    WidthAwareIslandSlot(state: context.state, isStale: context.isStale, slot: .leading)
                 } else {
-                    Text(verbatim: "—")
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel(label(for: metric))
-                        .accessibilityValue(Text("No reading"))
+                    CompactLeadingContent(state: context.state, isStale: context.isStale)
+                }
+            } compactTrailing: {
+                if #available(iOS 27.0, *) {
+                    WidthAwareIslandSlot(state: context.state, isStale: context.isStale, slot: .trailing)
+                } else {
+                    CompactTrailingContent(state: context.state, isStale: context.isStale)
+                }
+            } minimal: {
+                if #available(iOS 27.0, *) {
+                    WidthAwareIslandSlot(state: context.state, isStale: context.isStale, slot: .minimal)
+                } else {
+                    MinimalMetricContent(state: context.state, isStale: context.isStale, limitedWidth: false)
                 }
             }
             .keylineTint(context.isStale ? .secondary : color(for: context.state.minimalMetric ?? context.state.selectedMetric, state: context.state))
@@ -349,6 +310,130 @@ private struct SmallMetric: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label(for: metric))
         .accessibilityValue(Text(verbatim: formattedValue(for: metric, state: state)))
+    }
+}
+
+/// iOS 27 can place both compact slots in a 28-point space when activities
+/// compete. In that presentation, use the user's multiple-activity reading
+/// in the leading slot and let the system hide the empty trailing slot.
+@available(iOS 27.0, *)
+private struct WidthAwareIslandSlot: View {
+    enum Slot { case leading, trailing, minimal }
+
+    @Environment(\.isDynamicIslandLimitedInWidth) private var limitedWidth
+    let state: MiniWattsActivityAttributes.ContentState
+    let isStale: Bool
+    let slot: Slot
+
+    @ViewBuilder var body: some View {
+        switch slot {
+        case .leading:
+            if limitedWidth {
+                MinimalMetricContent(state: state, isStale: isStale, limitedWidth: true)
+            } else {
+                CompactLeadingContent(state: state, isStale: isStale)
+            }
+        case .trailing:
+            if limitedWidth {
+                EmptyView()
+            } else {
+                CompactTrailingContent(state: state, isStale: isStale)
+            }
+        case .minimal:
+            MinimalMetricContent(state: state, isStale: isStale, limitedWidth: limitedWidth)
+        }
+    }
+}
+
+private struct CompactTrailingContent: View {
+    let state: MiniWattsActivityAttributes.ContentState
+    let isStale: Bool
+
+    var body: some View {
+        CompactMetricValue(state: state, isStale: isStale)
+            .padding(.leading, 3)
+            .foregroundStyle(isStale ? Color.secondary : color(for: state.selectedMetric, state: state))
+            .accessibilityLabel(label(for: state.selectedMetric))
+            .accessibilityValue(metricAccessibilityValue(for: state.selectedMetric,
+                                                          state: state, isStale: isStale))
+    }
+}
+
+private struct MinimalMetricContent: View {
+    let state: MiniWattsActivityAttributes.ContentState
+    let isStale: Bool
+    let limitedWidth: Bool
+    private var metric: LiveActivityMetric { state.minimalMetric ?? state.selectedMetric }
+
+    @ViewBuilder var body: some View {
+        Group {
+            if metric == .sampleAge || (metric == .connectionDuration && !isStale) {
+                metricText(for: metric, state: state, isStale: isStale)
+                    .font(.caption2.monospacedDigit().weight(.heavy))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .foregroundStyle(isStale ? Color.secondary : color(for: metric, state: state))
+                    .accessibilityLabel(label(for: metric))
+                    .accessibilityValue(metricText(for: metric, state: state, isStale: isStale))
+                    .accessibilityAddTraits(.updatesFrequently)
+            } else if isStale {
+                Image(systemName: "pause.fill")
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Reading paused")
+            } else if limitedWidth && metric == .batteryTemperature {
+                if let reading = LimitedIslandReading.batteryTemperature(state.batteryTemperature) {
+                    // Preserve the decimal and degree symbol before trend arrows
+                    // or secondary metrics; shrink only as much as needed.
+                    Text(verbatim: reading)
+                        .font(.system(size: 12, weight: .heavy, design: .rounded).monospacedDigit())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                        .frame(width: 28)
+                        .foregroundStyle(color(for: metric, state: state))
+                        .accessibilityLabel(label(for: metric))
+                        .accessibilityValue(Text(verbatim: formattedValue(for: metric, state: state)))
+                        .accessibilityAddTraits(.updatesFrequently)
+                } else {
+                    unavailable
+                }
+            } else if metric == .thermalPressure, let pressure = state.telemetry?.thermalPressure {
+                ViewThatFits(in: .horizontal) {
+                    Text(pressure.title).fixedSize()
+                    Image(systemName: pressureSymbol(pressure))
+                }
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(pressureColor(pressure))
+                .accessibilityLabel("System thermal pressure")
+                .accessibilityValue(Text(pressure.title))
+            } else if let values = minimalValueVariants(for: metric, state: state) {
+                ViewThatFits(in: .horizontal) {
+                    Text(verbatim: values.preferredWithUnit)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Text(verbatim: values.precise)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Text(verbatim: values.roundedWithUnit)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Text(verbatim: values.rounded)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                }
+                .font(.caption2.monospacedDigit().weight(.heavy))
+                .foregroundStyle(color(for: metric, state: state))
+                .accessibilityLabel(label(for: metric))
+                .accessibilityValue(Text(verbatim: formattedValue(for: metric, state: state)))
+                .accessibilityAddTraits(.updatesFrequently)
+            } else {
+                unavailable
+            }
+        }
+        .frame(maxWidth: limitedWidth ? 28 : nil)
+    }
+
+    private var unavailable: some View {
+        Text(verbatim: "—")
+            .foregroundStyle(.secondary)
+            .accessibilityLabel(label(for: metric))
+            .accessibilityValue(Text("No reading"))
     }
 }
 
@@ -691,7 +776,7 @@ private func minimalValueVariants(
     let preferred = abs(value) < 100 ? precise : rounded
     let trend = state.telemetry?.trendSymbol(for: metric) ?? ""
     return MinimalValueVariants(preferredWithUnit: preferred + suffix + trend,
-                                precise: rounded + suffix + trend,
+                                precise: preferred + suffix,
                                 roundedWithUnit: rounded + suffix,
                                 rounded: rounded)
 }

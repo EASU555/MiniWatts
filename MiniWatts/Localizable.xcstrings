@@ -4385,12 +4385,12 @@
         }
       }
     },
-    "When two or three activities share the Dynamic Island, MiniWatts shows one short reading chosen above. iOS decides its position; the left and right choices apply when MiniWatts is alone." : {
+    "When activities share the Dynamic Island or iOS limits its width, MiniWatts shows the multiple-activity choice alone. iOS decides its position; left and right choices apply when there is enough space." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "当两个或三个实时活动共用灵动岛时，MiniWatts 会显示这里选择的一项简短读数。显示位置由 iOS 决定；只有 MiniWatts 单独显示时，才使用上方的左右两侧设置。"
+            "value" : "当多个实时活动共用灵动岛，或 iOS 限制灵动岛宽度时，MiniWatts 只显示“多活动显示”中选择的一项读数。位置由 iOS 决定；空间充足时使用左右两侧设置。"
           }
         }
       }

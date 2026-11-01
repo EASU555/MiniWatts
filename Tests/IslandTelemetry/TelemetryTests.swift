@@ -37,6 +37,34 @@ import Foundation
     }
 
     static func main() throws {
+        let suiteName = "MiniWatts.IslandPriorityTests." + UUID().uuidString
+        guard let preferences = UserDefaults(suiteName: suiteName) else {
+            preconditionFailure("Could not create isolated preferences")
+        }
+        defer { preferences.removePersistentDomain(forName: suiteName) }
+        let selectionKey = "minimalSelection"
+        preferences.set(LiveActivityMinimalSelection.downloadSpeed.rawValue, forKey: selectionKey)
+        check(LiveActivityMinimalSelection.loadWithTemperaturePriority(from: preferences, selectionKey: selectionKey)
+              == .batteryTemperature, "Upgrade should give battery temperature priority once")
+        preferences.set(LiveActivityMinimalSelection.uploadSpeed.rawValue, forKey: selectionKey)
+        check(LiveActivityMinimalSelection.loadWithTemperaturePriority(from: preferences, selectionKey: selectionKey)
+              == .uploadSpeed, "A later explicit multiple-activity choice must persist")
+        preferences.set(LiveActivityMinimalSelection.followRightSide.rawValue, forKey: selectionKey)
+        check(LiveActivityMinimalSelection.loadWithTemperaturePriority(from: preferences, selectionKey: selectionKey)
+              .resolvedMetric(primary: .chargingPower) == .chargingPower,
+              "Following the right side must remain an available explicit choice")
+        let english = Locale(identifier: "en_US")
+        check(LimitedIslandReading.batteryTemperature(40.8, locale: english) == "40.8°",
+              "Limited island must retain the decimal and degree symbol")
+        check(LimitedIslandReading.batteryTemperature(9.0, locale: english) == "9.0°",
+              "Limited island should retain a trailing fractional digit")
+        check(LimitedIslandReading.batteryTemperature(nil, locale: english) == nil &&
+              LimitedIslandReading.batteryTemperature(.nan, locale: english) == nil &&
+              LimitedIslandReading.batteryTemperature(.infinity, locale: english) == nil &&
+              LimitedIslandReading.batteryTemperature(151, locale: english) == nil,
+              "Missing or invalid temperature must not become a plausible reading")
+        print("PASS: limited-island temperature priority, saved choices and complete formatting")
+
         check(IslandColorLevel.thermal(.nominal) == .green && IslandColorLevel.thermal(.fair) == .green,
               "Normal and slightly elevated iOS states should be green")
         check(IslandColorLevel.thermal(.serious) == .yellow && IslandColorLevel.thermal(.critical) == .red,
