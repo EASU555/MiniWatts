@@ -92,6 +92,7 @@ final class TelemetryPictureInPictureController: NSObject {
     private static let layoutKey = "pictureInPictureLayout"
     private static let temperatureSelectionKey = "pictureInPictureTemperatureSelection"
     private static let contentModeKey = "pictureInPictureContentMode"
+    private static let automaticallyHideKey = "pictureInPictureAutomaticallyHideOnStart"
     private static let frameSize = CGSize(width: 640, height: 360)
     private static let visibleVideoCallSize = CGSize(width: 300, height: 168.75)
     private static let hiddenVideoCallSize = CGSize(width: 300, height: 0.1)
@@ -134,6 +135,7 @@ final class TelemetryPictureInPictureController: NSObject {
     var contentMode: TelemetryPictureInPictureContentMode {
         didSet {
             guard contentMode != oldValue else { return }
+            cancelPendingAutomaticHide()
             ProblemReportRecorder.shared.record("pip", "mode=\(contentMode.rawValue)")
             UserDefaults.standard.set(contentMode.rawValue, forKey: Self.contentModeKey)
             if keepsSensorSamplingActive {
@@ -142,6 +144,15 @@ final class TelemetryPictureInPictureController: NSObject {
             } else {
                 rebuildRenderingPipeline()
             }
+        }
+    }
+
+    var automaticallyHideOnStart: Bool {
+        didSet {
+            guard automaticallyHideOnStart != oldValue else { return }
+            UserDefaults.standard.set(automaticallyHideOnStart, forKey: Self.automaticallyHideKey)
+            recordState("automatic hide enabled=\(automaticallyHideOnStart)")
+            if !automaticallyHideOnStart { cancelPendingAutomaticHide() }
         }
     }
 
@@ -157,6 +168,7 @@ final class TelemetryPictureInPictureController: NSObject {
     private(set) var isPossible = false {
         didSet { if oldValue != isPossible { recordState("possible=\(isPossible)") } }
     }
+    /// Records the requested content geometry, not an OS-confirmed visibility.
     private(set) var isVisuallyHidden = false {
         didSet { if oldValue != isVisuallyHidden { recordState("hidden=\(isVisuallyHidden)") } }
     }
@@ -171,6 +183,7 @@ final class TelemetryPictureInPictureController: NSObject {
     var diagnosticSummary: String {
         "mode=\(contentMode.rawValue) active=\(isActive) starting=\(isStarting) "
             + "stopping=\(isStopping) possible=\(isPossible) hidden=\(isVisuallyHidden) "
+            + "autoHide=\(automaticallyHideOnStart) autoHidePending=\(automaticHideIntent.isPending) "
             + "systemActive=\(pictureInPictureController?.isPictureInPictureActive.description ?? "none") "
             + "systemSuspended=\(pictureInPictureController?.isPictureInPictureSuspended.description ?? "none") "
             + "activityRepair=\(activityRecoveryResume != nil) resumePending=\(resumeAfterActivityRecoveryPending) "
@@ -200,6 +213,8 @@ final class TelemetryPictureInPictureController: NSObject {
     @ObservationIgnored private var stopAttempt = 0
     @ObservationIgnored private var pendingStartAfterStop = false
     @ObservationIgnored private var deferredStartGeneration = 0
+    @ObservationIgnored private var automaticHideTask: Task<Void, Never>?
+    @ObservationIgnored private var automaticHideIntent = PictureInPictureAutoHideIntent()
     private struct ActivityRecoveryResume {
         var shouldResume: Bool
         let hidden: Bool
@@ -242,6 +257,7 @@ final class TelemetryPictureInPictureController: NSObject {
             ? .hiddenCarrier
             : storedContentMode.flatMap(TelemetryPictureInPictureContentMode.init(rawValue:))
                 ?? .liveReadings
+        automaticallyHideOnStart = defaults.object(forKey: Self.automaticallyHideKey) as? Bool ?? true
         super.init()
 
         configure(displayLayer)
@@ -327,6 +343,7 @@ final class TelemetryPictureInPictureController: NSObject {
         recordState("action: start requested; \(diagnosticSummary)")
         guard isSupported, hasSelectedContent, !keepsSensorSamplingActive,
               activityRecoveryResume == nil else { return }
+        cancelPendingAutomaticHide()
         deferredStartGeneration &+= 1
         if pictureInPictureController?.isPictureInPictureActive == true {
             // AVKit still owns a window even though the local active flag was
@@ -373,6 +390,7 @@ final class TelemetryPictureInPictureController: NSObject {
 
     func stop() {
         recordState("action: stop requested")
+        cancelPendingAutomaticHide()
         isRestoringPresentation = false
         if activityRecoveryResume != nil {
             activityRecoveryResume?.shouldResume = false
@@ -438,6 +456,7 @@ final class TelemetryPictureInPictureController: NSObject {
     /// callbacks. This remains available even while the primary button spins.
     func resetAndRestart() {
         recordState("action: reset and restart requested; \(diagnosticSummary)")
+        cancelPendingAutomaticHide()
         if isActive && pictureInPictureController?.isPictureInPictureActive != true {
             recoverUnexpectedStop()
         }
@@ -501,9 +520,10 @@ final class TelemetryPictureInPictureController: NSObject {
                 shouldResume: keepsSensorSamplingActive
                     || pictureInPictureController?.isPictureInPictureActive == true
                     || resumeAfterActivityRecoveryPending,
-                hidden: isVisuallyHidden || hideAfterRecoveryStart
+                hidden: isVisuallyHidden || hideAfterRecoveryStart || automaticHideIntent.isPending
             )
         }
+        cancelPendingAutomaticHide()
         recordState("activity recovery: releasing PiP; \(diagnosticSummary)")
         deferredStartGeneration &+= 1
         pendingStartAfterStop = false
@@ -661,12 +681,15 @@ final class TelemetryPictureInPictureController: NSObject {
         isStarting = false
         isActive = true
         errorMessage = nil
+        let preservingRecovery = resumeAfterActivityRecoveryPending
         restoreHiddenAfterRecoveryStart()
         startBackgroundPulseDriver()
+        scheduleAutomaticHideAfterStart(preservingRecovery: preservingRecovery)
     }
 
     private func failStartAttempt(_ attempt: Int, message: LocalizedStringResource) {
         guard startAttempt == attempt else { return }
+        cancelPendingAutomaticHide()
         invalidateStartAttempt()
         isStarting = false
         isActive = false
@@ -724,6 +747,7 @@ final class TelemetryPictureInPictureController: NSObject {
     }
 
     private func completeStopAttempt() {
+        cancelPendingAutomaticHide()
         let restart = pendingStartAfterStop
         pendingStartAfterStop = false
         invalidateStopAttempt()
@@ -751,6 +775,7 @@ final class TelemetryPictureInPictureController: NSObject {
     /// user explicitly asked to stop, so discard the wedged controller and build a
     /// clean source instead of leaving the app permanently unable to start again.
     private func forceResetAfterStopTimeout() {
+        cancelPendingAutomaticHide()
         pendingStartAfterStop = false
         invalidateStopAttempt()
         isStarting = false
@@ -784,11 +809,56 @@ final class TelemetryPictureInPictureController: NSObject {
     func setVisuallyHidden(_ hidden: Bool) {
         recordState("action: hide requested=\(hidden)")
         guard contentMode == .hiddenCarrier else { return }
+        cancelPendingAutomaticHide()
         guard isActive else {
             errorMessage = "Start Picture in Picture before changing its hidden state."
             return
         }
         applyVideoCallGeometry(hidden: hidden)
+    }
+
+    private func cancelPendingAutomaticHide() {
+        automaticHideTask?.cancel()
+        automaticHideTask = nil
+        automaticHideIntent.cancel()
+    }
+
+    private func scheduleAutomaticHideAfterStart(preservingRecovery: Bool) {
+        automaticHideTask?.cancel()
+        automaticHideTask = nil
+        guard let controller = pictureInPictureController else {
+            automaticHideIntent.cancel()
+            return
+        }
+        guard let token = automaticHideIntent.schedule(
+            enabled: automaticallyHideOnStart,
+            isHiddenMode: contentMode == .hiddenCarrier,
+            preservingRecovery: preservingRecovery
+        ) else { return }
+
+        let controllerID = ObjectIdentifier(controller)
+        recordState("automatic hide scheduled after PiP start")
+        automaticHideTask = Task { @MainActor [weak self] in
+            // The active-state observation can arrive before the system finishes
+            // presenting its window. Give that transition a moment to settle.
+            try? await Task.sleep(for: .milliseconds(700))
+            guard !Task.isCancelled, let self,
+                  self.automaticHideIntent.consume(token) else { return }
+            self.automaticHideTask = nil
+            guard self.automaticallyHideOnStart,
+                  self.contentMode == .hiddenCarrier,
+                  self.isActive, !self.isStarting, !self.isStopping,
+                  !self.isRepairingLiveActivity,
+                  let current = self.pictureInPictureController,
+                  ObjectIdentifier(current) == controllerID,
+                  current.isPictureInPictureActive,
+                  !self.isVisuallyHidden else {
+                self.recordState("automatic hide skipped after state change")
+                return
+            }
+            self.recordState("automatic hide: requesting 0.1 pt")
+            self.applyVideoCallGeometry(hidden: true)
+        }
     }
 
     private func ensurePictureInPictureController() {
@@ -897,6 +967,7 @@ final class TelemetryPictureInPictureController: NSObject {
     }
 
     private func discardPictureInPictureController() {
+        cancelPendingAutomaticHide()
         pictureInPicturePossibleObservation = nil
         pictureInPictureActiveObservation = nil
         pictureInPictureSuspendedObservation = nil
@@ -1263,6 +1334,7 @@ extension TelemetryPictureInPictureController: AVPictureInPictureControllerDeleg
         } else if isStarting {
             failStartAttempt(startAttempt, message: "Picture in Picture could not start.")
         } else {
+            cancelPendingAutomaticHide()
             isActive = false
             stopBackgroundPulseDriver()
             deactivateAudioSession()

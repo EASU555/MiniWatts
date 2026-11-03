@@ -49,5 +49,30 @@ struct PolicyTests {
                                                      pipStopping: true),
               "PiP stop transition lost background sampling")
         print("PASS: PiP active and both transitions preserve the sampling contract")
+
+        var hide = PictureInPictureAutoHideIntent()
+        check(hide.schedule(enabled: true, isHiddenMode: false, preservingRecovery: false) == nil,
+              "Live-readings mode must stay visible")
+        check(hide.schedule(enabled: false, isHiddenMode: true, preservingRecovery: false) == nil,
+              "Disabling automatic hiding must preserve the visible carrier")
+        guard let first = hide.schedule(enabled: true, isHiddenMode: true, preservingRecovery: false) else {
+            fatalError("Hidden mode should schedule automatic hiding after start")
+        }
+        check(hide.isPending, "Scheduled hiding must be visible to recovery")
+        check(hide.consume(first) && !hide.isPending, "A valid hide request must run once")
+        check(!hide.consume(first), "A repeated start callback must not hide again")
+        guard let cancelled = hide.schedule(enabled: true, isHiddenMode: true, preservingRecovery: false) else {
+            fatalError("Failed to schedule a subsequent hide request")
+        }
+        hide.cancel()
+        check(!hide.consume(cancelled), "Stop or manual restore must cancel the delayed hide")
+        guard let later = hide.schedule(enabled: true, isHiddenMode: true, preservingRecovery: false) else {
+            fatalError("Failed to schedule a replacement request")
+        }
+        check(!hide.consume(cancelled) && hide.consume(later),
+              "A prior session must not hide a newly started window")
+        check(hide.schedule(enabled: true, isHiddenMode: true, preservingRecovery: true) == nil,
+              "Live Activity recovery must preserve the user's previous visible state")
+        print("PASS: PiP auto-hide respects mode, cancellation, replacement and recovery")
     }
 }

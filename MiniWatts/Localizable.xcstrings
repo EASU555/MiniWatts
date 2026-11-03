@@ -1,6 +1,26 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Hide automatically after opening": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开后自动隐藏" } }
+      }
+    },
+    "After Picture in Picture starts, MiniWatts requests hiding to 0.1 pt. The session stays active; use Restore or Stop here.": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "画中画启动后会自动请求缩小到 0.1 pt，悬浮监视器继续运行。可在这里恢复或停止。" } }
+      }
+    },
+    "Automatic hiding is requested after the window starts. If it remains visible, use Restore and then Hide here. iOS controls the actual presentation.": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "小窗启动后会自动请求隐藏。如果仍然可见，可在这里先点恢复，再点隐藏；实际显示由 iOS 控制。" } }
+      }
+    },
+    "Hide requested; floating monitor is running": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已请求隐藏，悬浮监视器运行中" } }
+      }
+    },
     "Changing these options automatically restarts the Live Activity. An active floating monitor briefly stops and then attempts to resume. Keep MiniWatts open until recovery finishes.": {
       "localizations": {
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "修改这些选项后会自动重新启动实时活动。运行中的悬浮监视器会短暂停止，然后尝试恢复。请保持 MiniWatts 打开，直到恢复完成。" } }

@@ -210,6 +210,15 @@ struct FloatingMonitorControlPanel: View {
                           || !pictureInPicture.isSupported
                           || (!pictureInPicture.isActive && !pictureInPicture.isStarting && !pictureInPicture.hasSelectedContent))
 
+                if pictureInPicture.contentMode == .hiddenCarrier {
+                    Toggle("Hide automatically after opening", isOn: Binding(
+                        get: { pictureInPicture.automaticallyHideOnStart },
+                        set: { pictureInPicture.automaticallyHideOnStart = $0 }
+                    ))
+                    .font(.subheadline)
+                    .tint(.mwAccent)
+                }
+
                 if pictureInPicture.contentMode == .hiddenCarrier, pictureInPicture.isActive,
                    !pictureInPicture.isRepairingLiveActivity && !pictureInPicture.isStopping {
                     Button { pictureInPicture.setVisuallyHidden(!pictureInPicture.isVisuallyHidden) } label: {
@@ -266,15 +275,23 @@ struct FloatingMonitorControlPanel: View {
     }
 
     private var modeDescription: LocalizedStringResource {
-        pictureInPicture.contentMode == .liveReadings
-            ? "Leave MiniWatts after the floating window opens. Close it to stop background sampling."
-            : "Hidden mode keeps the floating session running. Use Restore or Stop here when you need it."
+        if pictureInPicture.contentMode == .liveReadings {
+            return "Leave MiniWatts after the floating window opens. Close it to stop background sampling."
+        }
+        if pictureInPicture.automaticallyHideOnStart {
+            return "After Picture in Picture starts, MiniWatts requests hiding to 0.1 pt. The session stays active; use Restore or Stop here."
+        }
+        return "Hidden mode keeps the floating session running. Use Restore or Stop here when you need it."
     }
 
     private var parkingHelp: LocalizedStringResource {
-        pictureInPicture.contentMode == .liveReadings
-            ? "Stop Picture in Picture before changing modes. Swipe the floating monitor to either screen edge when you want to park it."
-            : "Start Picture in Picture, then swipe it to either screen edge. MiniWatts hides it automatically when iOS reports that it is parked; if iOS does not report that state, return here and tap Hide floating window to 0.1 pt. Open MiniWatts again to restore or stop it."
+        if pictureInPicture.contentMode == .liveReadings {
+            return "Stop Picture in Picture before changing modes. Swipe the floating monitor to either screen edge when you want to park it."
+        }
+        if pictureInPicture.automaticallyHideOnStart {
+            return "Automatic hiding is requested after the window starts. If it remains visible, use Restore and then Hide here. iOS controls the actual presentation."
+        }
+        return "Start Picture in Picture, then swipe it to either screen edge. MiniWatts hides it automatically when iOS reports that it is parked; if iOS does not report that state, return here and tap Hide floating window to 0.1 pt. Open MiniWatts again to restore or stop it."
     }
 
     @ViewBuilder private var status: some View {
@@ -289,7 +306,7 @@ struct FloatingMonitorControlPanel: View {
             PresentationStatusRow(title: "Opening floating monitor", symbol: "hourglass", tint: .mwAccent,
                                   detail: "Wait for the window to appear before leaving MiniWatts. You can cancel this attempt below.")
         } else if pictureInPicture.isActive {
-            PresentationStatusRow(title: pictureInPicture.isVisuallyHidden ? "Floating monitor is hidden" : "Floating monitor is running",
+            PresentationStatusRow(title: pictureInPicture.isVisuallyHidden ? "Hide requested; floating monitor is running" : "Floating monitor is running",
                                   symbol: pictureInPicture.isVisuallyHidden ? "eye.slash" : "pip", tint: .mwBattery)
         } else {
             PresentationStatusRow(title: pictureInPicture.errorMessage == nil ? "Floating monitor is off" : "Floating monitor needs attention",
