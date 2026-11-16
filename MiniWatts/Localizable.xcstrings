@@ -1,6 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Sensor read delayed": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "传感器读取延迟" } }
+      }
+    },
+    "Waiting for the main sensor read to recover. Limited system readings may continue; power and temperatures can be unavailable.": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在等待主要传感器恢复。部分系统数据可能继续更新，功率和温度可能暂时无法读取。" } }
+      }
+    },
     "The iPad heat map is a schematic based on an iPad Pro 11-inch. iOS does not report sensor locations, and other models can differ.": {
       "localizations": {
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "iPad 热力图参考 11 英寸 iPad Pro 的布局绘制，仅供示意。iOS 不提供传感器位置，其他机型的内部布局可能不同。" } }

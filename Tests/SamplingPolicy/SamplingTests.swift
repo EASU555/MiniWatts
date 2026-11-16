@@ -50,6 +50,51 @@ nonisolated struct SamplingHarness {
         check(harness.publications == 2, "An adjacent restarted read was lost")
         print("PASS: paused callbacks, discarded reads, overlap prevention and restart")
 
+        var coordinator = SensorSamplingCoordinator()
+        coordinator.start(at: 0)
+        let stalledPrimary = coordinator.poll(at: 0).first!
+        check(stalledPrimary.source == .primary, "The first read did not use the primary probe")
+        check(coordinator.poll(at: 9).isEmpty && !coordinator.isDegraded,
+              "A normal slow read started a fallback too early")
+        let firstFallback = coordinator.poll(at: 10).first!
+        check(coordinator.isDegraded && firstFallback.source == .fallback,
+              "A stalled primary did not start the HID-free fallback")
+        check(coordinator.poll(at: 11).isEmpty, "Two fallback reads overlapped")
+        check(coordinator.finish(firstFallback, at: 11) == .publish,
+              "A live fallback reading was lost")
+        let olderFallback = coordinator.poll(at: 12).first!
+        check(olderFallback.source == .fallback, "Fallback did not continue while primary was stuck")
+        check(coordinator.finish(stalledPrimary, at: 12) == .discard && coordinator.isDegraded,
+              "A long-delayed primary sample was incorrectly published as fresh")
+        let freshPrimary = coordinator.poll(at: 13).first!
+        check(freshPrimary.source == .primary, "The original primary probe was not retried")
+        check(coordinator.finish(freshPrimary, at: 13.2) == .recovered && !coordinator.isDegraded,
+              "A timely primary read did not restore normal sampling")
+        check(coordinator.finish(olderFallback, at: 13.3) == .discard,
+              "A late fallback overwrote recovered primary measurements")
+
+        var pausedCoordinator = SensorSamplingCoordinator()
+        pausedCoordinator.start(at: 0)
+        let oldPrimary = pausedCoordinator.poll(at: 0).first!
+        let oldFallback = pausedCoordinator.poll(at: 10).first!
+        pausedCoordinator.pause()
+        pausedCoordinator.start(at: 11)
+        check(pausedCoordinator.poll(at: 12).isEmpty,
+              "Resume overlapped the still-running primary read")
+        check(pausedCoordinator.finish(oldFallback, at: 12) == .discard,
+              "A fallback from before pause was published")
+        check(pausedCoordinator.finish(oldPrimary, at: 12) == .discard,
+              "A primary read from before pause was published")
+        let newPrimary = pausedCoordinator.poll(at: 13).first!
+        check(newPrimary.source == .primary && pausedCoordinator.finish(newPrimary, at: 13.1) == .publish,
+              "Normal sampling failed to resume after the old reads returned")
+        let fallbackSnapshot = PowerSnapshot(systemBatteryPercent: 55,
+                                             registry: ["ExternalConnected": true], sensors: [])
+        check(fallbackSnapshot.percent == 55 && fallbackSnapshot.inputWatts == nil
+              && fallbackSnapshot.batteryTemperature == nil && fallbackSnapshot.socTemperature == nil,
+              "The HID-free fallback invented sensor values or lost the system battery level")
+        print("PASS: bounded fallback, long-read rejection, recovery ordering and pause/resume")
+
         let missing = PowerSnapshot()
         check(missing.externalConnectionObservation == nil,
               "No source data was reported as an unplug")

@@ -49,6 +49,9 @@ final class PowerMonitor {
     private(set) var batteryLevelChangedAt: Date?
     private(set) var batteryLevelCandidates = "—"
     private(set) var sensorsAvailable = false
+    /// The primary private-sensor read has stalled. The independent fallback
+    /// never creates a second HID client and may have fewer measurements.
+    private(set) var isUsingFallbackSampling = false
     private(set) var liveActivityRecoveryStatus = LiveActivityRecoveryStatus.idle
     private(set) var liveActivityRecoveryDetail = ""
     /// Every power source powerd reports, not just the internal battery.
@@ -265,6 +268,7 @@ final class PowerMonitor {
     private static let rateEstimateMaximumAge: TimeInterval = 30 * 60
 
     private let probe = SensorProbe()
+    private let fallbackProbe = SensorProbe(readsHID: false)
     private let systemBatteryLevel = SystemBatteryLevelReader()
     private let batteryCenter = BatteryCenterBridge()
     private let energy = EnergyAccumulator()
@@ -274,11 +278,12 @@ final class PowerMonitor {
     private static let liveActivityTrendKey = "liveActivityShowsTemperatureTrend"
 
     private var task: Task<Void, Never>?
-    private var samplingGate = SensorSamplingGate()
+    private var samplingCoordinator = SensorSamplingCoordinator()
     private var ioKitAvailable = false
     private var hidServiceCount: Int?
     private var lastRefreshStartedAt = Date.distantPast
     private var tick = 0
+    private var rescanWhenPrimaryReturns = false
     private var lastSampleWrite: Date = .distantPast
     private var lastPersist: Date = .distantPast
     private var lastExternalConnected: Bool?
@@ -405,7 +410,7 @@ final class PowerMonitor {
     func start() {
         systemBatteryLevel.prepareForForeground()
         guard task == nil else { return }
-        samplingGate.start()
+        samplingCoordinator.start(at: ProcessInfo.processInfo.systemUptime)
         appendDiagnosticEvent("sampling started")
         refresh()
         task = Task { [weak self] in
@@ -433,7 +438,8 @@ final class PowerMonitor {
         task = nil
         // A blocking probe cannot be cancelled midway. Discard its result if it
         // arrives after sampling was stopped, without ever blocking the UI actor.
-        samplingGate.pause()
+        samplingCoordinator.pause()
+        isUsingFallbackSampling = false
         breakSampleContinuity()
         appendDiagnosticEvent("sampling paused")
         persist()
@@ -443,7 +449,7 @@ final class PowerMonitor {
     /// than a sleeping task in the background. Coalesce both drivers here so they
     /// never perform the relatively expensive IOKit/HID read twice in one second.
     func refreshIfDue(minimumInterval: TimeInterval = 0.8) {
-        guard samplingGate.isSampling else { return }
+        guard samplingCoordinator.isSampling else { return }
         guard Date.now.timeIntervalSince(lastRefreshStartedAt) >= minimumInterval else { return }
         refresh()
     }
@@ -451,17 +457,42 @@ final class PowerMonitor {
     // MARK: Refresh
 
     func refresh() {
-        // The HID and powerd calls may take longer than one frame. Never queue
-        // overlapping probes when PiP and the regular timer pulse together.
-        guard let generation = samplingGate.beginRead() else { return }
+        // The normal HID client is never duplicated or called concurrently. If
+        // its actor stalls, a separate HID-free probe can keep available system
+        // information moving without presenting old temperatures as current.
+        let previousMode = samplingCoordinator.isDegraded
+        let requests = samplingCoordinator.poll(at: ProcessInfo.processInfo.systemUptime)
+        updateSamplingMode(previouslyDegraded: previousMode)
+        guard !requests.isEmpty else { return }
         lastRefreshStartedAt = .now
-        tick += 1
-        let rescanAfterward = tick % 15 == 0
-        Task { [weak self, probe] in
-            let raw = await probe.read(rescanAfterward: rescanAfterward)
-            guard let self else { return }
-            guard self.samplingGate.finishRead(generation: generation) else { return }
-            self.apply(raw)
+        for ticket in requests {
+            tick += 1
+            let primary = ticket.source == .primary
+            let selectedProbe = primary ? probe : fallbackProbe
+            let rescanAfterward = primary && (tick % 15 == 0 || rescanWhenPrimaryReturns)
+            if primary { rescanWhenPrimaryReturns = false }
+            Task { [weak self, selectedProbe] in
+                let raw = await selectedProbe.read(rescanAfterward: rescanAfterward)
+                guard let self else { return }
+                let previousMode = self.samplingCoordinator.isDegraded
+                let completion = self.samplingCoordinator.finish(
+                    ticket, at: ProcessInfo.processInfo.systemUptime)
+                self.updateSamplingMode(previouslyDegraded: previousMode)
+                guard completion != .discard else { return }
+                self.apply(raw)
+            }
+        }
+    }
+
+    private func updateSamplingMode(previouslyDegraded: Bool) {
+        let degraded = samplingCoordinator.isDegraded
+        guard degraded != previouslyDegraded else { return }
+        isUsingFallbackSampling = degraded
+        breakSampleContinuity()
+        if degraded {
+            appendDiagnosticEvent("primary sensor read timed out; HID-free fallback active; \(probe.progress.diagnostic)")
+        } else {
+            appendDiagnosticEvent("primary sensor reads recovered; fallback stopped")
         }
     }
 
@@ -525,7 +556,11 @@ final class PowerMonitor {
            lastExternalConnected != connected {
             // The next sample sees newly enumerated charger sensors. The scan
             // itself stays on the probe actor instead of stalling scrolling.
-            Task { [probe] in await probe.rescan() }
+            if samplingCoordinator.isDegraded {
+                rescanWhenPrimaryReturns = true
+            } else {
+                Task { [probe] in await probe.rescan() }
+            }
         }
         if tick % 5 == 1 {
             devices = batteryCenter.read()
@@ -1020,6 +1055,9 @@ final class PowerMonitor {
             "Battery gauge: \(gaugeDescription) (display uses registry temperature or live battery-zone median; raw maximum retained)",
             "Thermal state: \(thermal.state.rawValue)",
             "Sampling task: \(task == nil ? "not scheduled" : "scheduled (not proof of execution)")",
+            "Sampling fallback: \(isUsingFallbackSampling); primaryInFlight=\(samplingCoordinator.primaryReadInFlight) fallbackInFlight=\(samplingCoordinator.fallbackReadInFlight)",
+            "Primary probe: \(probe.progress.diagnostic)",
+            "Fallback probe: \(fallbackProbe.progress.diagnostic)",
             "",
             "# Recent electrical evidence (alternate rails are unvalidated; indices identify duplicate sensors)"
         ]

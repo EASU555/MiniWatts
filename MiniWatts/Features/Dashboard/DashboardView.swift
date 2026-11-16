@@ -19,6 +19,7 @@ struct DashboardView: View {
                          else { scrollProbe.stop() }
                      }, isolateContent: true, allowsWideColumns: false) {
             heroPanel
+            if monitor.isUsingFallbackSampling { sensorRecoveryBanner }
             if monitor.thermal.state.isThrottling { throttleBanner }
             batteryPanel
             presentationControlsLayout {
@@ -158,6 +159,19 @@ struct DashboardView: View {
         .overlay(
             RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
                 .strokeBorder(Color.mwDanger.opacity(0.45), lineWidth: 1)
+        )
+    }
+
+    private var sensorRecoveryBanner: some View {
+        Panel("Sensor read delayed", systemImage: "exclamationmark.triangle") {
+            Text("Waiting for the main sensor read to recover. Limited system readings may continue; power and temperatures can be unavailable.")
+                .font(.caption)
+                .foregroundStyle(Color.mwMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
+                .strokeBorder(Color.mwLoss.opacity(0.45), lineWidth: 1)
         )
     }
 

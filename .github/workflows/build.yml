@@ -97,6 +97,9 @@ jobs:
       - name: Test Live Activity recovery under delayed system responses
         run: bash ./scripts/test-live-activity-recovery.sh
 
+      - name: Test PiP reconciliation during startup and system suspension
+        run: bash ./scripts/test-pip-reconciliation.sh
+
       - name: Test persistent problem reports
         run: bash ./scripts/test-problem-reports.sh
 

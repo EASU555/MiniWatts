@@ -428,18 +428,28 @@ final class TelemetryPictureInPictureController: NSObject {
             return
         }
 
-        if isStarting {
-            if pictureInPictureController?.isPictureInPictureActive == true {
-                completeStartAttempt(startAttempt)
-            } else {
-                failStartAttempt(startAttempt, message: "Picture in Picture could not start.")
-            }
-            retryActivityRecoveryInForeground()
-            return
-        }
-
-        if isActive, pictureInPictureController?.isPictureInPictureActive != true {
-            recoverUnexpectedStop()
+        let controller = pictureInPictureController
+        switch PictureInPictureReconciliationPolicy.foreground(
+            isStarting: isStarting, startTaskExists: startTask != nil,
+            localActive: isActive,
+            systemActive: controller?.isPictureInPictureActive == true,
+            systemSuspended: controller?.isPictureInPictureSuspended == true
+        ) {
+        case .completeStart:
+            completeStartAttempt(startAttempt)
+        case .failOrphanedStart:
+            failStartAttempt(startAttempt, message: "Picture in Picture could not start.")
+        case .adoptActive:
+            recordState("foreground: adopted active system PiP")
+            isActive = true
+            errorMessage = nil
+            restoreHiddenAfterRecoveryStart()
+            startBackgroundPulseDriver()
+        case .checkStopped:
+            if let controller { scheduleUnexpectedStopCheck(for: controller) }
+        case .wait:
+            // The existing start watchdog remains in charge of a pending start.
+            break
         }
         retryActivityRecoveryInForeground()
     }
@@ -509,6 +519,28 @@ final class TelemetryPictureInPictureController: NSObject {
         if contentMode == .liveReadings { renderLatest() }
         ensurePictureInPictureController()
         attachToPendingPreviewIfNeeded()
+    }
+
+    /// KVO can report an old inactive value during AVKit's presentation or
+    /// suspension hand-off. Recheck the same controller after the transition
+    /// settles before destroying its source; a real didStop callback is still
+    /// handled immediately by the delegate.
+    private func scheduleUnexpectedStopCheck(for controller: AVPictureInPictureController) {
+        let controllerID = ObjectIdentifier(controller)
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled, let self,
+                  let current = self.pictureInPictureController,
+                  ObjectIdentifier(current) == controllerID,
+                  PictureInPictureReconciliationPolicy.shouldRecoverStopped(
+                    localActive: self.isActive, isStarting: self.isStarting,
+                    isStopping: self.isStopping,
+                    systemActive: current.isPictureInPictureActive,
+                    systemSuspended: current.isPictureInPictureSuspended
+                  ) else { return }
+            self.recordState("system PiP remained inactive after transition check")
+            self.recoverUnexpectedStop()
+        }
     }
 
     /// Keep the resume intent across superseded ActivityKit retries. We must
@@ -912,11 +944,22 @@ final class TelemetryPictureInPictureController: NSObject {
                       let current = self.pictureInPictureController,
                       ObjectIdentifier(current) == controllerID else { return }
                 if active {
-                    if self.isStarting { self.completeStartAttempt(self.startAttempt) }
+                    guard current.isPictureInPictureActive else { return }
+                    if self.isStarting {
+                        self.completeStartAttempt(self.startAttempt)
+                    } else if !self.isStopping && !self.isActive {
+                        self.recordState("adopted active system PiP from observation")
+                        self.isActive = true
+                        self.errorMessage = nil
+                        self.restoreHiddenAfterRecoveryStart()
+                        self.startBackgroundPulseDriver()
+                    }
                 } else if self.isStopping {
-                    self.completeStopAttempt()
+                    if !current.isPictureInPictureActive && !current.isPictureInPictureSuspended {
+                        self.completeStopAttempt()
+                    }
                 } else if self.isActive {
-                    self.recoverUnexpectedStop()
+                    self.scheduleUnexpectedStopCheck(for: current)
                 }
             }
         }
@@ -924,11 +967,14 @@ final class TelemetryPictureInPictureController: NSObject {
             \.isPictureInPictureSuspended,
             options: [.new]
         ) { [weak self] _, change in
-            guard change.newValue == true else { return }
+            let suspended = change.newValue ?? false
             Task { @MainActor [weak self] in
                 guard let self,
                       let current = self.pictureInPictureController,
                       ObjectIdentifier(current) == controllerID,
+                      current.isPictureInPictureSuspended == suspended else { return }
+                self.recordState("system suspended=\(suspended) active=\(current.isPictureInPictureActive)")
+                guard suspended, self.automaticallyHideOnStart,
                       self.contentMode == .hiddenCarrier,
                       self.isActive,
                       !self.isVisuallyHidden else { return }

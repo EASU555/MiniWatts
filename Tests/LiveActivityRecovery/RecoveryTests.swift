@@ -235,6 +235,12 @@ struct PowerSnapshot {
         await sample(pending, seconds: 9.5)
         check(TestSystem.requests >= 2, "Pending deadline was postponed by sampling")
         check(TestSystem.requests <= 3, "Recovery is creating an activity storm")
+        check(pending.diagnosticSummary.contains("automaticRetries=1"),
+              "The pending failure was not counted")
+        Activity<MiniWattsActivityAttributes>.activities.first?.setTestState(.active)
+        try? await Task.sleep(for: .milliseconds(150))
+        check(pending.diagnosticSummary.contains("automaticRetries=0"),
+              "A successfully active activity did not clear old failure counts")
         pending.endIfNeeded()
         try? await Task.sleep(for: .milliseconds(300))
         print("PASS: pending deadline fires while samples continue")
@@ -327,6 +333,28 @@ struct PowerSnapshot {
         preparationFailed.endIfNeeded()
         try? await Task.sleep(for: .milliseconds(300))
         print("PASS: failed PiP release preserves the existing activity")
+
+        // If there was no existing activity, repeated sensor ticks used to
+        // retry a failed AVKit release immediately and disturb PiP indefinitely.
+        TestSystem.reset()
+        let failedWithoutActivity = ChargingLiveActivityController()
+        var releaseAttempts = 0
+        failedWithoutActivity.preparePresentationForRestart = {
+            releaseAttempts += 1
+            return false
+        }
+        restart(failedWithoutActivity)
+        await sample(failedWithoutActivity, seconds: 1.2)
+        check(releaseAttempts == 1 && TestSystem.requests == 0,
+              "A failed PiP release was retried on every sensor tick")
+        failedWithoutActivity.preparePresentationForRestart = { true }
+        restart(failedWithoutActivity)
+        await sample(failedWithoutActivity, seconds: 1.5)
+        check(TestSystem.requests == 1 && failedWithoutActivity.isRunning,
+              "A fresh explicit restart did not clear the failed-release block")
+        failedWithoutActivity.endIfNeeded()
+        try? await Task.sleep(for: .milliseconds(300))
+        print("PASS: failed PiP release is bounded and an explicit retry can recover")
 
         // A second tap during a slow end/replacement must supersede the old
         // lifecycle attempt. The old behavior silently ignored every tap until

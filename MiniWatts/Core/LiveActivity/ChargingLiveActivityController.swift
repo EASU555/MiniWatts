@@ -77,6 +77,9 @@ final class ChargingLiveActivityController {
     private var retiredActivityIDs: Set<String> = []
     private var blockedActivityIDs: Set<String> = []
     private var pendingPresentationRepair = false
+    /// If AVKit refused to release PiP, do not tear it down again every tick.
+    /// A fresh explicit restart may try once more.
+    private var presentationRepairFailed = false
     /// End calls may never return. Retry an ID only after its lease expires and
     /// never await the worker. A late worker can only end its captured old ID.
     private var endingActivityTokens: [String: UUID] = [:]
@@ -126,6 +129,8 @@ final class ChargingLiveActivityController {
             .map { "\($0.id):\($0.activityState)" }.sorted().joined(separator: ",")
         return "cached=\(activity?.id ?? "none") system=[\(system)] "
             + "blocked=\(ongoingActivityIDs(in: blockedActivityIDs).count) "
+            + "pipReleaseFailed=\(presentationRepairFailed) "
+            + "automaticRetries=\(automaticRecoveryCount) "
             + "restarting=\(lifecycleTask != nil) relevance=\(relevanceScore) "
             + "appState=\(UIApplication.shared.applicationState)"
     }
@@ -178,6 +183,7 @@ final class ChargingLiveActivityController {
                 return
             }
             blockedActivityIDs.removeAll()
+            guard !presentationRepairFailed else { return }
             if pendingPresentationRepair, UIApplication.shared.applicationState == .active {
                 guard Self.areActivitiesEnabled,
                       now.timeIntervalSince(lastRequestAt) >= Self.requestRetryInterval else { return }
@@ -251,6 +257,7 @@ final class ChargingLiveActivityController {
     private func restart(using state: MiniWattsActivityAttributes.ContentState,
                          repairsPresentation: Bool) {
         automaticRecoveryCount = 0
+        presentationRepairFailed = false
         if repairsPresentation { pendingPresentationRepair = true }
         latestState = state
         // A previous restart may be waiting for ActivityKit to release an old
@@ -308,6 +315,8 @@ final class ChargingLiveActivityController {
                 let prepared = await prepare()
                 guard !Task.isCancelled, self.lifecycleGeneration == generation else { return }
                 guard prepared else {
+                    self.pendingPresentationRepair = false
+                    self.presentationRepairFailed = true
                     self.recoveryStatus = .failed("Picture in Picture did not release its system presentation.")
                     self.record("PiP release failed; existing activity retained")
                     return
@@ -411,6 +420,7 @@ final class ChargingLiveActivityController {
         guard enabled || activity != nil || lifecycleTask != nil else { return }
         enabled = false
         pendingPresentationRepair = false
+        presentationRepairFailed = false
         needsForegroundRecovery = false
         // Capture every ID before clearing local state. Older recovery races could
         // leave more than one activity behind, and ending only `.first` allowed the
@@ -705,6 +715,9 @@ final class ChargingLiveActivityController {
                       self.activity?.id == activityID else { return }
                 switch state {
                 case .active:
+                    // The limit applies to consecutive failed pending starts,
+                    // not to unrelated incidents over the whole app lifetime.
+                    self.automaticRecoveryCount = 0
                     self.pendingStateTimeoutTask?.cancel()
                     self.pendingStateTimeoutTask = nil
                     self.pendingStateActivityID = nil
