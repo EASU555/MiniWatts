@@ -35,13 +35,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Select Xcode 27.1 for iOS 27 and iPhone Duo
+      - name: Select Xcode 27.2 and verify the iOS 27.2 SDK
         run: |
           ls -d /Applications/Xcode*.app || true
-          test -d /Applications/Xcode_27.1.app
-          sudo xcode-select -s /Applications/Xcode_27.1.app
+          test -d /Applications/Xcode_27.2.app
+          sudo xcode-select -s /Applications/Xcode_27.2.app
           xcodebuild -version
           xcodebuild -showsdks
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = "27.2"
           swift --version
 
       # MiniWatts uses `nonisolated` on type and extension declarations and
@@ -197,9 +198,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Build simulator app using iOS 27.1 SDK
+      - name: Build simulator app using iOS 27.2 SDK
         run: |
-          sudo xcode-select -s /Applications/Xcode_27.1.app
+          sudo xcode-select -s /Applications/Xcode_27.2.app
           version=$(git describe --tags --abbrev=0 --match 'v*')
           build=$(git rev-list --count HEAD)
           xcodebuild build -quiet -project MiniWatts.xcodeproj -scheme MiniWatts \
@@ -210,8 +211,16 @@ jobs:
         run: |
           mkdir -p build/layout-previews
           devices=$(xcrun simctl list devices available --json)
-          duo=$(echo "$devices" | jq -r '.devices | to_entries[] | select(.key | contains("iOS-27-1")) | .value[] | select(.name == "iPhone Duo") | .udid' | head -n 1)
-          ipad=$(echo "$devices" | jq -r '.devices | to_entries[] | select(.key | contains("iOS-27-0")) | .value[] | select(.name == "iPad Pro 13-inch (M5)") | .udid' | head -n 1)
+          duo=$(echo "$devices" | jq -r '.devices | to_entries[] | select(.key | contains("iOS-27-2")) | .value[] | select(.name == "iPhone Duo") | .udid' | head -n 1)
+          ipad=$(echo "$devices" | jq -r '.devices | to_entries[] | select(.key | contains("iOS-27-2")) | .value[] | select(.name == "iPad Pro 13-inch (M5)") | .udid' | head -n 1)
+          if [ -z "$duo" ]; then
+            echo "iOS 27.2 Duo runtime unavailable; using iOS 27.1 simulator"
+            duo=$(echo "$devices" | jq -r '.devices | to_entries[] | select(.key | contains("iOS-27-1")) | .value[] | select(.name == "iPhone Duo") | .udid' | head -n 1)
+          fi
+          if [ -z "$ipad" ]; then
+            echo "iOS 27.2 iPad runtime unavailable; using iOS 27.0 simulator"
+            ipad=$(echo "$devices" | jq -r '.devices | to_entries[] | select(.key | contains("iOS-27-0")) | .value[] | select(.name == "iPad Pro 13-inch (M5)") | .udid' | head -n 1)
+          fi
           test -n "$duo" && test -n "$ipad"
           app=build/SimulatorDerived/Build/Products/Debug-iphonesimulator/MiniWatts.app
           for entry in "duo:$duo" "ipad:$ipad"; do
