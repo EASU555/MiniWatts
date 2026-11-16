@@ -231,13 +231,20 @@ nonisolated struct PowerSnapshot {
             partialInputWatts = nil
         }
 
-        // One pass over the temperature sensors: `SensorCatalog.zone(for:)` lowercases
-        // and splits the name, so it is called exactly once per sensor per snapshot.
+        // Split each unique name only once per snapshot; iOS may report the same
+        // sensor name through multiple services and classification is on the UI path.
         var grouped: [ThermalZone: [HIDSensors.Reading]] = [:]
         var hottestByZone: [ThermalZone: HIDSensors.Reading] = [:]
         var hottestOverall: HIDSensors.Reading?
+        var zonesByName: [String: ThermalZone] = [:]
         for reading in temperatures {
-            let zone = SensorCatalog.zone(for: reading.name)
+            let zone: ThermalZone
+            if let cached = zonesByName[reading.name] {
+                zone = cached
+            } else {
+                zone = SensorCatalog.zone(for: reading.name)
+                zonesByName[reading.name] = zone
+            }
             grouped[zone, default: []].append(reading)
             guard Self.isLiveTemperature(reading) else { continue }
             if reading.value > (hottestByZone[zone]?.value ?? -.greatestFiniteMagnitude) {

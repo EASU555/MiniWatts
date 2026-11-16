@@ -1,6 +1,36 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "The iPad heat map is a schematic based on an iPad Pro 11-inch. iOS does not report sensor locations, and other models can differ.": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "iPad 热力图参考 11 英寸 iPad Pro 的布局绘制，仅供示意。iOS 不提供传感器位置，其他机型的内部布局可能不同。" } }
+      }
+    },
+    "Charge forecast": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "充电时间预估" } }
+      }
+    },
+    "Until 80%": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "充至 80%" } }
+      }
+    },
+    "Until 100%": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "充至 100%" } }
+      }
+    },
+    "Waiting for two battery-level changes to estimate the remaining time.": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在等待电量变化两次，以估算剩余时间。" } }
+      }
+    },
+    "Based on observed battery-level changes. Times after 80% use a typical taper and are approximate. Charging limits and optimized charging may prevent reaching 100%.": {
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "根据观测到的电量变化估算；80% 后按典型充电曲线估算，仅供参考。充电上限和优化电池充电可能使电量停在 100% 之前。" } }
+      }
+    },
     "Hide automatically after opening": {
       "localizations": {
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开后自动隐藏" } }

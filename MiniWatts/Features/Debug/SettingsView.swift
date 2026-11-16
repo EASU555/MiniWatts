@@ -111,7 +111,7 @@ struct SettingsView: View {
     }
 
     private var devicePanel: some View {
-        Panel("Device", systemImage: "iphone") {
+        Panel("Device", systemImage: UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone") {
             VStack(spacing: 0) {
                 DetailRow(label: "Model identifier", value: monitor.deviceModelIdentifier)
                 DetailRow(label: "System", value: "\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)")

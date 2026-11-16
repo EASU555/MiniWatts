@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A rough thermal map of the phone: each sensor zone glows at its own colour
+/// A rough thermal map of the device: each sensor zone glows at its own colour
 /// and position, so charging heat can be seen moving from the charge IC at the
 /// bottom up through the battery and the SoC.
 ///
@@ -10,31 +10,47 @@ import SwiftUI
 struct PhoneHeatMap: View {
     /// Representative battery temperature, hottest live reading for other zones.
     let readings: [(zone: ThermalZone, celsius: Double)]
+    var isTablet = false
     var height: CGFloat = 250
 
-    private var width: CGFloat { height * 0.49 }
+    private var width: CGFloat { height * (isTablet ? 0.71 : 0.49) }
+    private var cornerRadius: CGFloat { width * (isTablet ? 0.075 : 0.16) }
+    private var glowDiameter: CGFloat { width * (isTablet ? 0.6 : 0.85) }
+    private func position(for zone: ThermalZone) -> CGPoint {
+        isTablet ? zone.tabletPosition : zone.position
+    }
 
     var body: some View {
         ZStack {
-            let shape = RoundedRectangle(cornerRadius: width * 0.16, style: .continuous)
+            let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
             shape
                 .fill(Color.mwMuted.opacity(0.08))
                 .overlay(shape.strokeBorder(Color.mwCardStroke, lineWidth: 1))
 
+            if isTablet {
+                RoundedRectangle(cornerRadius: cornerRadius * 0.6, style: .continuous)
+                    .strokeBorder(Color.mwCardStroke.opacity(0.8), lineWidth: 0.5)
+                    .padding(width * 0.045)
+            }
+
             // Heat blobs, clipped to the body so the glow does not spill outside.
             ZStack {
                 ForEach(readings, id: \.zone) { reading in
-                    Circle()
-                        .fill(
-                            RadialGradient(colors: [Color.mwTemperature(reading.celsius).opacity(0.85), .clear],
-                                           center: .center,
-                                           startRadius: 0,
-                                           endRadius: width * 0.42)
-                        )
-                        .frame(width: width * 0.85, height: width * 0.85)
-                        .position(x: width * reading.zone.position.x,
-                                  y: height * reading.zone.position.y)
+                    let primary = position(for: reading.zone)
+                    let points = isTablet && reading.zone == .battery
+                        ? [primary, CGPoint(x: 1 - primary.x, y: primary.y)] : [primary]
+                    ForEach(Array(points.enumerated()), id: \.offset) { _, point in
+                        Circle()
+                            .fill(
+                                RadialGradient(colors: [Color.mwTemperature(reading.celsius).opacity(0.85), .clear],
+                                               center: .center,
+                                               startRadius: 0,
+                                               endRadius: glowDiameter / 2)
+                            )
+                            .frame(width: glowDiameter, height: glowDiameter)
+                            .position(x: width * point.x, y: height * point.y)
+                    }
                 }
             }
             .frame(width: width, height: height)
@@ -46,7 +62,7 @@ struct PhoneHeatMap: View {
             ZStack {
                 ForEach(readings, id: \.zone) { reading in
                     VStack(spacing: 2) {
-                        Image(systemName: reading.zone.symbol)
+                        Image(systemName: isTablet && reading.zone == .surface ? "ipad" : reading.zone.symbol)
                             .font(.system(size: 9, weight: .bold))
                         Text(String(format: "%.0f°", reading.celsius))
                             .mwMono(size: 9, weight: .semibold)
@@ -56,17 +72,23 @@ struct PhoneHeatMap: View {
                     .padding(.vertical, 3)
                     .background(Capsule().fill(Color.mwCard.opacity(0.82)))
                     .overlay(Capsule().strokeBorder(Color.mwTemperature(reading.celsius).opacity(0.5), lineWidth: 0.5))
-                    .position(x: width * reading.zone.position.x,
-                              y: height * reading.zone.position.y)
+                    .position(x: width * position(for: reading.zone).x,
+                              y: height * position(for: reading.zone).y)
                 }
             }
             .frame(width: width, height: height)
 
-            // Dynamic Island, purely so the silhouette reads as a phone.
-            Capsule()
-                .fill(Color.mwCanvas)
-                .frame(width: width * 0.3, height: height * 0.035)
-                .position(x: width / 2, y: height * 0.055)
+            if isTablet {
+                Circle()
+                    .fill(Color.mwMuted.opacity(0.45))
+                    .frame(width: 4, height: 4)
+                    .position(x: width / 2, y: width * 0.0225)
+            } else {
+                Capsule()
+                    .fill(Color.mwCanvas)
+                    .frame(width: width * 0.3, height: height * 0.035)
+                    .position(x: width / 2, y: height * 0.055)
+            }
         }
         .frame(width: width, height: height)
         .clipped()

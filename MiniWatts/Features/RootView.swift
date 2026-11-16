@@ -157,6 +157,7 @@ struct PageScaffold<Content: View>: View {
     var toolbar: AnyView?
     var onScrollingChanged: ((Bool) -> Void)?
     var isolateContent: Bool
+    var allowsWideColumns: Bool
     @ViewBuilder var content: () -> Content
 
     init(_ title: LocalizedStringResource,
@@ -164,12 +165,14 @@ struct PageScaffold<Content: View>: View {
          toolbar: AnyView? = nil,
          onScrollingChanged: ((Bool) -> Void)? = nil,
          isolateContent: Bool = false,
+         allowsWideColumns: Bool = true,
          @ViewBuilder content: @escaping () -> Content) {
         self.title = title
         self.glow = glow
         self.toolbar = toolbar
         self.onScrollingChanged = onScrollingChanged
         self.isolateContent = isolateContent
+        self.allowsWideColumns = allowsWideColumns
         self.content = content
     }
 
@@ -177,7 +180,11 @@ struct PageScaffold<Content: View>: View {
         NavigationStack {
             ZStack {
                 PageBackdrop(glow: glow)
-                scrollView
+                AdaptivePanelScroll(allowsWideColumns: allowsWideColumns,
+                                    onScrollingChanged: onScrollingChanged) {
+                    if isolateContent { PageObservedContent(content: content) }
+                    else { content() }
+                }
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.large)
@@ -193,31 +200,59 @@ struct PageScaffold<Content: View>: View {
         }
     }
 
-    @ViewBuilder private var scrollView: some View {
-        if #available(iOS 18.0, *), onScrollingChanged != nil {
-            scrollContent.onScrollPhaseChange { _, phase in
-                onScrollingChanged?(phase.isScrolling)
-            }
-        } else {
-            scrollContent
+}
+
+/// The parent provides the width outside the scroll view, so rotating an iPad
+/// or resizing a foldable cannot make the content hold the old wide geometry.
+/// A lazy grid keeps long history lists and frequently updated panels responsive.
+struct AdaptivePanelScroll<Content: View>: View {
+    var allowsWideColumns = true
+    var onScrollingChanged: ((Bool) -> Void)? = nil
+    @ViewBuilder var content: () -> Content
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    init(allowsWideColumns: Bool = true,
+         onScrollingChanged: ((Bool) -> Void)? = nil,
+         @ViewBuilder content: @escaping () -> Content) {
+        self.allowsWideColumns = allowsWideColumns
+        self.onScrollingChanged = onScrollingChanged
+        self.content = content
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let wide = allowsWideColumns && proxy.size.width >= 960 && !dynamicTypeSize.isAccessibilitySize
+            scrollView(width: proxy.size.width, wide: wide)
         }
     }
 
-    private var scrollContent: some View {
+    @ViewBuilder private func scrollView(width: CGFloat, wide: Bool) -> some View {
+        if #available(iOS 18.0, *), onScrollingChanged != nil {
+            scrollContent(width: width, wide: wide)
+                .onScrollPhaseChange { _, phase in onScrollingChanged?(phase.isScrolling) }
+        } else {
+            scrollContent(width: width, wide: wide)
+        }
+    }
+
+    private func scrollContent(width: CGFloat, wide: Bool) -> some View {
         ScrollView {
-            // History can hold sixty session panels. Keep layout lazy so only
-            // visible rows are measured during the one-second sensor tick.
-            LazyVStack(spacing: 14) {
-                if isolateContent { PageObservedContent(content: content) }
-                else { content() }
+            Group {
+                if wide {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 14, alignment: .top),
+                                        GridItem(.flexible(), spacing: 14, alignment: .top)],
+                              alignment: .center, spacing: 14) {
+                        content()
+                    }
+                } else {
+                    LazyVStack(spacing: 14) { content() }
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 4)
             .padding(.bottom, 24)
-            .frame(maxWidth: 900)
+            .frame(width: max(0, min(width, wide ? 1280 : 900)))
             .frame(maxWidth: .infinity)
-            // Clamp long labels to the page width instead of widening the scroll.
-            .containerRelativeFrame(.horizontal)
         }
     }
 }

@@ -35,6 +35,8 @@ final class PowerMonitor {
     /// Watts estimated from how fast the percentage moves. The only way to see
     /// discharge power: no discharge-current sensor is exposed to a sandboxed app.
     private(set) var rateEstimateWatts: Double?
+    private(set) var chargeForecast: ChargeForecast?
+    @ObservationIgnored private var chargeForecastTracker = ChargeForecastTracker()
     private(set) var levelRateCheck: LevelRateCheck?
     @ObservationIgnored private var levelRateTracker = LevelRateTracker()
     private(set) var cpuSampledAt: Date?
@@ -475,8 +477,13 @@ final class PowerMonitor {
         powerSources = sources
         #endif
         let internalBattery = sources.first { ($0["Type"] as? String) == "InternalBattery" } ?? sources.first
+        let previousBatteryLevelSource = batteryLevelSource
         let levelReading = systemBatteryLevel.read(powerSource: internalBattery)
         updateBatteryLevelDiagnostics(levelReading)
+        if previousBatteryLevelSource != batteryLevelSource {
+            chargeForecastTracker.reset()
+            if chargeForecast != nil { chargeForecast = nil }
+        }
 
         let publishedAt = Date.now
         cpuSampledAt = raw.cpuSampledAt
@@ -526,6 +533,7 @@ final class PowerMonitor {
 
         appendLive(current)
         updateRateEstimate(current)
+        updateChargeForecast(current)
         updateSession(current)
         liveActivityController.telemetry = islandTelemetryTracker.update(
             snapshot: current, session: currentSession, thermalState: thermal.state.rawValue)
@@ -735,6 +743,8 @@ final class PowerMonitor {
     // MARK: Rate estimate
 
     private func breakSampleContinuity() {
+        chargeForecastTracker.reset()
+        if chargeForecast != nil { chargeForecast = nil }
         levelRateTracker.reset()
         levelRateCheck = nil
         islandTelemetryTracker.breakContinuity()
@@ -744,6 +754,15 @@ final class PowerMonitor {
         percentLog.removeAll()
         lastChargingFlag = nil
         rateEstimateWatts = nil
+    }
+
+    private func updateChargeForecast(_ snapshot: PowerSnapshot) {
+        let next = chargeForecastTracker.observe(
+            date: snapshot.date, percent: snapshot.percent,
+            connected: snapshot.externalConnectionObservation,
+            charging: snapshot.isCharging && !snapshot.isChargingOnHold
+        )
+        if next != chargeForecast { chargeForecast = next }
     }
 
     /// Tracks 1 % transitions and converts the slope into watts. Two transitions
@@ -1021,6 +1040,19 @@ final class PowerMonitor {
         lines.append("# Live sensors")
         lines.append(contentsOf: snapshot.sensors.sorted { ($0.name, $0.index) < ($1.name, $1.index) }
             .map { "[\($0.index)] \($0.name) key=\($0.key.isEmpty ? "—" : $0.key) = \($0.formatted)" })
+        lines.append("")
+        lines.append("# Same-key sensor comparison (experimental; displayed values are unchanged)")
+        let copyAudit = SensorCopyAudit(readings: snapshot.sensors)
+        if copyAudit.comparisons.isEmpty {
+            lines.append("No duplicate nonempty keys of the same sensor type in this snapshot")
+        } else {
+            for group in copyAudit.comparisons {
+                let copies = group.copies.map { "[\($0.index)]=\(String(format: "%.3f", $0.value))" }
+                    .joined(separator: ", ")
+                lines.append("key=\(group.key) kind=\(group.kind.rawValue) copies=\(copies) mean=\(String(format: "%.3f", group.average))")
+            }
+        }
+        lines.append("USB power from candidate averaged copies: \(copyAudit.candidateUSBWatts.map { String(format: "%.3f W", $0) } ?? "unavailable"); not a calibrated measurement")
         lines.append("")
         lines.append("# Interpretation (heuristics, not calibration)")
         if let partial = snapshot.partialInputWatts {

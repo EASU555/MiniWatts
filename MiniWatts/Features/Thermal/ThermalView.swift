@@ -146,22 +146,12 @@ struct ThermalView: View {
     // MARK: Map
 
     private var mapPanel: some View {
-        Panel("Heat map · schematic", systemImage: "iphone.gen3",
+        Panel("Heat map · schematic", systemImage: UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone.gen3",
               trailing: Text("\(snapshot.temperatures.count) sensors")) {
             VStack(spacing: 12) {
-                if UIDevice.current.userInterfaceIdiom == .pad {
-                    Image(systemName: "ipad")
-                        .font(.system(size: 88, weight: .ultraLight))
-                        .foregroundStyle(Color.mwMuted)
-                        .frame(maxWidth: .infinity)
-                    Text("Sensor locations are unavailable on iPad. Read the measurements below; the iPhone schematic is not used for this device.")
-                        .font(.caption).foregroundStyle(Color.mwMuted)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    PhoneHeatMap(readings: zoneReadings)
-                        .frame(maxWidth: .infinity)
-                    TemperatureScale()
-                }
+                PhoneHeatMap(readings: zoneReadings, isTablet: UIDevice.current.userInterfaceIdiom == .pad)
+                    .frame(maxWidth: .infinity)
+                TemperatureScale()
                 if let hottest = snapshot.hottestSensor {
                     // All three carry the name of the sensor they came from, and the
                     // row is top-aligned. Only "Hottest" used to have that line, which
@@ -218,7 +208,12 @@ struct ThermalView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityElement(children: .combine)
                 }
-                if UIDevice.current.userInterfaceIdiom != .pad {
+                if UIDevice.current.userInterfaceIdiom == .pad {
+                    Text("The iPad heat map is a schematic based on an iPad Pro 11-inch. iOS does not report sensor locations, and other models can differ.")
+                        .font(.caption2)
+                        .foregroundStyle(Color.mwMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
                     Text("The temperatures are measured; the positions are not. iOS reports sensor names and values and no coordinates at all, so each zone is drawn at a fixed spot that follows the usual layout of a recent iPhone — logic board up top behind the cameras, battery through the middle, charge IC by the port. Real layouts differ by model. Read this as a legend for the list below, not as a map of your phone.")
                         .font(.caption2)
                         .foregroundStyle(Color.mwMuted)

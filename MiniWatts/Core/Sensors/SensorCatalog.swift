@@ -78,6 +78,23 @@ nonisolated enum ThermalZone: String, CaseIterable, Identifiable {
         }
     }
 
+    /// An illustrative iPad Pro 11-inch layout, adapted from upstream v1.7.
+    /// The readings themselves do not contain physical sensor coordinates.
+    var tabletPosition: CGPoint {
+        switch self {
+        case .camera: CGPoint(x: 0.18, y: 0.08)
+        case .radio: CGPoint(x: 0.66, y: 0.08)
+        case .soc: CGPoint(x: 0.50, y: 0.27)
+        case .display: CGPoint(x: 0.82, y: 0.22)
+        case .storage: CGPoint(x: 0.50, y: 0.45)
+        case .wirelessCoil: CGPoint(x: 0.50, y: 0.62)
+        case .battery: CGPoint(x: 0.21, y: 0.56)
+        case .surface: CGPoint(x: 0.80, y: 0.78)
+        case .charger: CGPoint(x: 0.50, y: 0.89)
+        case .other: CGPoint(x: 0.20, y: 0.86)
+        }
+    }
+
     /// Display order, hottest-interest first.
     var order: Int { ThermalZone.allCases.firstIndex(of: self) ?? 99 }
 }
@@ -111,22 +128,51 @@ nonisolated enum SensorCatalog {
     /// would have been filed as the battery. Names are split into words and a word
     /// has to start with the keyword, which keeps "tdie1" matching "tdie" without
     /// letting "surface" match "rf".
+    /// Upstream v1.7 also recognizes CPU-cluster and image-processor names, and
+    /// splits run-together sensor names at case boundaries without losing acronyms.
     static func zone(for name: String) -> ThermalZone {
-        let words = name.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        let words = Self.words(in: name)
         func has(_ keywords: String...) -> Bool {
             keywords.contains { keyword in words.contains { $0.hasPrefix(keyword) } }
         }
         // Order matters: the first zone that matches wins, so the specific names
         // are tested before the ones that would also match something generic.
-        if has("modem", "baseband", "wifi", "antenna", "cellular", "nfc", "uwb", "bt") { return .radio }
+        if has("modem", "baseband", "wifi", "antenna", "cellular", "nfc", "uwb", "bt", "radio") { return .radio }
         if has("cam") { return .camera }
         if has("wlc", "coil", "magsafe", "wireless", "qi") { return .wirelessCoil }
         if has("charger", "chg", "tcpm", "usb", "vbus") { return .charger }
         if has("battery", "batt", "gauge", "gas", "cell", "pack") { return .battery }
         if has("nand", "ssd", "flash", "nvme") { return .storage }
         if has("display", "lcd", "oled", "backlight") { return .display }
-        if has("tdie", "tcal", "soc", "cpu", "gpu", "ane", "pmu", "die") { return .soc }
+        if has("tdie", "tcal", "soc", "cpu", "gpu", "ane", "pmu", "die",
+               "pacc", "eacc", "isp", "mtr", "pmgr", "amc", "odts") { return .soc }
         if has("skin", "chassis", "enclosure", "front", "back", "rear", "case") { return .surface }
         return .other
+    }
+
+    /// Keep the whole token as well as its camel-case parts: "pACC" must still
+    /// match pacc, while "FrontCameraDie" needs a separate camera word.
+    static func words(in name: String) -> [String] {
+        var words: [String] = []
+        for token in name.split(whereSeparator: { !$0.isLetter && !$0.isNumber }) {
+            let characters = Array(token)
+            var parts: [String] = []
+            var current = ""
+            for (index, character) in characters.enumerated() {
+                if character.isUppercase, !current.isEmpty, index > 0 {
+                    let previous = characters[index - 1]
+                    let next = index + 1 < characters.count ? characters[index + 1] : nil
+                    if previous.isLowercase || (previous.isUppercase && next?.isLowercase == true) {
+                        parts.append(current)
+                        current = ""
+                    }
+                }
+                current.append(character)
+            }
+            if !current.isEmpty { parts.append(current) }
+            words.append(token.lowercased())
+            if parts.count > 1 { words.append(contentsOf: parts.map { $0.lowercased() }) }
+        }
+        return words
     }
 }

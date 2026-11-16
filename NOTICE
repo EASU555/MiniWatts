@@ -22,6 +22,12 @@ battery representative medians, incomplete-input checks, temperature evidence
 filters and invalid PD-profile rejection. Original attribution and Apache 2.0
 licensing are retained. See docs/upstream-v1.5.1-adaptation.md for local changes.
 
+This personal version also adapts the charge-forecast taper, sensor-name
+classification, and illustrative iPad thermal layout from upstream MiniWatts
+v1.7.0, commit 0b519fda61dfd7b766d4be05fdaa2114f295d5e4, Copyright 2026
+ZhaoHe Studio, Apache License 2.0. Continuity handling and the wide-screen
+layout are adapted to this fork; see docs/upstream-v1.7-adaptation.md.
+
 
 ================================================================================
 ios-charging-monitor (ChargeSpeed) — MIT License

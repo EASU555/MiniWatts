@@ -76,6 +76,9 @@ jobs:
       - name: Test island temperature trends and system charge percentage gains
         run: bash ./scripts/test-island-telemetry.sh
 
+      - name: Test charge forecast and interrupted observations
+        run: bash ./scripts/test-charge-forecast.sh
+
       - name: Test persistent temperature curves and chart reduction
         run: bash ./scripts/test-temperature-history.sh
 

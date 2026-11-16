@@ -30,7 +30,7 @@ struct DevicesView: View {
 
     private var thisPhonePanel: some View {
         let snapshot = monitor.snapshot
-        return Panel("This device", systemImage: "iphone",
+        return Panel("This device", systemImage: UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone",
                      trailing: Text(verbatim: monitor.deviceModelIdentifier)) {
             VStack(spacing: 12) {
                 HStack(alignment: .center, spacing: 14) {

@@ -17,7 +17,7 @@ struct DashboardView: View {
                      onScrollingChanged: { scrolling in
                          if scrolling { scrollProbe.start() }
                          else { scrollProbe.stop() }
-                     }, isolateContent: true) {
+                     }, isolateContent: true, allowsWideColumns: false) {
             heroPanel
             if monitor.thermal.state.isThrottling { throttleBanner }
             batteryPanel
@@ -25,6 +25,7 @@ struct DashboardView: View {
                 LiveActivityControlPanel()
                 FloatingMonitorControlPanel()
             }
+            forecastPanel
             breakdownPanel
             livePanel
             sessionPanel
@@ -161,6 +162,47 @@ struct DashboardView: View {
     }
 
     // MARK: Battery
+
+    @ViewBuilder private var forecastPanel: some View {
+        if snapshot.externalConnectionObservation == true, snapshot.isCharging,
+           !snapshot.isChargingOnHold, let percent = snapshot.percent, percent < 100 {
+            Panel("Charge forecast", systemImage: "clock") {
+                if let forecast = monitor.chargeForecast {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .top, spacing: 10) {
+                            if percent < 80 {
+                                let seconds = forecast.secondsRemaining(to: 80, from: percent, at: snapshot.date)
+                                Metric(caption: "Until 80%", value: Self.forecastDuration(seconds),
+                                       tint: .mwBattery, footnote: Self.forecastArrival(seconds, from: snapshot.date),
+                                       size: 22)
+                            }
+                            let seconds = forecast.secondsRemaining(to: 100, from: percent, at: snapshot.date)
+                            Metric(caption: "Until 100%", value: Self.forecastDuration(seconds),
+                                   tint: .mwBattery, footnote: Self.forecastArrival(seconds, from: snapshot.date),
+                                   size: 22)
+                        }
+                        Text("Based on observed battery-level changes. Times after 80% use a typical taper and are approximate. Charging limits and optimized charging may prevent reaching 100%.")
+                            .font(.caption2).foregroundStyle(Color.mwMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else {
+                    EmptyNote(text: "Waiting for two battery-level changes to estimate the remaining time.",
+                              systemImage: "clock")
+                }
+            }
+        }
+    }
+
+    private static func forecastDuration(_ seconds: TimeInterval?) -> String {
+        guard let seconds, seconds.isFinite, seconds >= 0, seconds < 7 * 24 * 3600 else { return "—" }
+        let minutes = max((seconds / 60).rounded(.up), 1)
+        return Duration.seconds(minutes * 60).formatted(.units(allowed: [.hours, .minutes], width: .narrow))
+    }
+
+    private static func forecastArrival(_ seconds: TimeInterval?, from date: Date) -> Text? {
+        guard let seconds, seconds.isFinite, seconds >= 0, seconds < 7 * 24 * 3600 else { return nil }
+        return Text(verbatim: "≈ " + date.addingTimeInterval(seconds).formatted(date: .omitted, time: .shortened))
+    }
 
     private var batteryPanel: some View {
         Panel("Battery", systemImage: "battery.100") {

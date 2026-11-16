@@ -31,6 +31,41 @@ import Foundation
     }
 
     static func main() throws {
+        for name in ["pACC MTR Temp Sensor2", "eACC MTR Temp Sensor9",
+                     "ISP MTR Temp Sensor5", "PMGR die", "AMC ODTS"] {
+            check(SensorCatalog.zone(for: name) == .soc, "\(name) should be classified as SoC")
+        }
+        check(SensorCatalog.zone(for: "FrontCameraDie") == .camera, "Front camera was filed as chassis")
+        check(SensorCatalog.zone(for: "BCMLBSkin") == .surface, "Joined skin name was not recognized")
+        check(SensorCatalog.zone(for: "cellular modem") == .radio, "Cellular was filed as a battery")
+        check(SensorCatalog.zone(for: "gas gauge battery") == .battery, "Battery classification changed")
+        let socSensors = [temperature("pACC MTR Temp Sensor2", 53, 1),
+                          temperature("ISP MTR Temp Sensor5", 47, 2),
+                          temperature("PMU tcal", 60, 3)]
+        let socSnapshot = PowerSnapshot(sensors: socSensors)
+        near(socSnapshot.socTemperature, 53, "SoC must include the live CPU cluster, not tcal")
+        check(socSnapshot.hottestSensor(in: .soc)?.name == "pACC MTR Temp Sensor2",
+              "SoC history must retain its actual source")
+        print("PASS: SoC cluster classification, joined names and live source selection")
+
+        let copies: [HIDSensors.Reading] = [
+            .init(name: "Charger VQ0u", kind: .voltage, value: 14.935, key: "VQ0u", index: 31),
+            .init(name: "Charger VQ0u", kind: .voltage, value: 14.930, key: "VQ0u", index: 45),
+            .init(name: "Charger IQ0u", kind: .current, value: 0.793, key: "IQ0u", index: 56),
+            .init(name: "Charger IQ0u", kind: .current, value: 0.749, key: "IQ0u", index: 71),
+            .init(name: "gas gauge battery", kind: .temperature, value: 35.6, key: "TG0H", index: 91),
+            .init(name: "gas gauge battery", kind: .temperature, value: 37.5, key: "TG0B", index: 102),
+            .init(name: "unknown", kind: .current, value: 5, index: 1),
+            .init(name: "unknown", kind: .current, value: 7, index: 2)
+        ]
+        let audit = SensorCopyAudit(readings: copies)
+        check(audit.comparisons.count == 2, "Different keys or missing keys were treated as copies")
+        near(audit.candidateUSBWatts, 11.5129575, "Same-key candidate average changed")
+        let unchanged = PowerSnapshot(registry: ["ExternalConnected": true], sensors: copies)
+        near(unchanged.inputWatts, 14.935 * 0.793, "Diagnostic comparison changed the displayed power")
+        check(unchanged.sensors == copies, "Diagnostic comparison changed raw sensor evidence")
+        print("PASS: same-key shadow comparison preserves distinct battery sensors and displayed power")
+
         check(HIDSensors.smcKey(0x54473042) == "TG0B", "SMC key decoding changed")
         check(HIDSensors.smcKey(1).isEmpty, "Invalid location became an SMC key")
         var level = LevelRateTracker()
